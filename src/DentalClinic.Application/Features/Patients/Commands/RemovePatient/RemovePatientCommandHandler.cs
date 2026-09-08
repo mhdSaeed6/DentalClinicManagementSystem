@@ -42,7 +42,7 @@ public class RemovePatientCommandHandler(
         await context.SaveChangesAsync(cancellationToken);
 
         await cache.RemoveAsync($"patient-{request.PatientId}", cancellationToken);
-        await cache.RemoveByTagAsync("patients", cancellationToken);
+        await cache.RemoveByTagAsync("patient", cancellationToken);
 
         logger.LogInformation("Patient {PatientId} soft-deleted by User {UserId}.", request.PatientId, currentUser.Id);
 

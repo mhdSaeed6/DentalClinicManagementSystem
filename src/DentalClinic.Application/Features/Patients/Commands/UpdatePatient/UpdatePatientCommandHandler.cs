@@ -46,12 +46,10 @@ IRequestHandler<UpdatePatientCommand, Result<PatientDto>>
             return updateResult.Errors;
         }
 
-        // الحفظ يتم أوتوماتيكياً بفضل Change Tracking الخاص بـ EF Core
         await context.SaveChangesAsync(cancellationToken);
 
-        // إبطال كاش المريض المحدد وكاش القوائم
         await cache.RemoveAsync($"patient-{patient.Id}", cancellationToken);
-        await cache.RemoveByTagAsync("patients", cancellationToken);
+        await cache.RemoveByTagAsync("patient", cancellationToken);
 
         logger.LogInformation("Patient updated successfully with ID: {PatientId}", patient.Id);
 
