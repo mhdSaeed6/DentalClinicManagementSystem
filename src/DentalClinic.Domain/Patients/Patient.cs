@@ -2,6 +2,7 @@ using System.Text.RegularExpressions;
 
 using DentalClinic.Domain.Common.Enums;
 using DentalClinic.Domain.Common.Results;
+using DentalClinic.Domain.Common.ValueObjects;
 
 namespace DentalClinic.Domain.Patients;
 
@@ -11,7 +12,7 @@ public class Patient : AuditableEntity
 
     public string FirstName { get; private set; } = default!;
     public string LastName { get; private set; } = default!;
-    public string PhoneNumber { get; private set; } = default!;
+    public ContactInfo ContactInfo { get; private set; } = default!;
     public DateTime DateOfBirth { get; private set; }
     public Gender Gender { get; private set; }
     public MedicalHistory MedicalHistory { get; private set; } = default!;
@@ -22,7 +23,7 @@ public class Patient : AuditableEntity
         Guid id,
         string firstName,
         string lastName,
-        string phoneNumber,
+        ContactInfo contactInfo,
         DateTime dateOfBirth,
         Gender gender,
         MedicalHistory medicalHistory)
@@ -30,7 +31,7 @@ public class Patient : AuditableEntity
     {
         FirstName = firstName;
         LastName = lastName;
-        PhoneNumber = phoneNumber;
+        ContactInfo = contactInfo;
         DateOfBirth = dateOfBirth;
         Gender = gender;
         MedicalHistory = medicalHistory;
@@ -39,7 +40,7 @@ public class Patient : AuditableEntity
     public static Result<Patient> Create(
         string firstName,
         string lastName,
-        string phoneNumber,
+        ContactInfo contactInfo,
         DateTime dateOfBirth,
         Gender gender,
         MedicalHistory? medicalHistory = null)
@@ -54,9 +55,9 @@ public class Patient : AuditableEntity
             return PatientErrors.LastNameRequired;
         }
 
-        if (string.IsNullOrWhiteSpace(phoneNumber) || !PhoneRegex.IsMatch(phoneNumber))
+        if (contactInfo is null)
         {
-            return PatientErrors.InvalidPhoneNumber;
+            return PatientErrors.ContactInfoRequired;
         }
 
         if (DateOfBirthValid(dateOfBirth) == false)
@@ -73,7 +74,7 @@ public class Patient : AuditableEntity
             Guid.NewGuid(),
             firstName.Trim(),
             lastName.Trim(),
-            phoneNumber.Trim(),
+            contactInfo,
             dateOfBirth,
             gender,
             medicalHistory ?? new MedicalHistory());
@@ -82,7 +83,7 @@ public class Patient : AuditableEntity
     public Result<Updated> Update(
         string firstName,
         string lastName,
-        string phoneNumber,
+        ContactInfo contactInfo,
         DateTime dateOfBirth,
         Gender gender,
         MedicalHistory? medicalHistory = null)
@@ -97,9 +98,9 @@ public class Patient : AuditableEntity
             return PatientErrors.LastNameRequired;
         }
 
-        if (string.IsNullOrWhiteSpace(phoneNumber) || !PhoneRegex.IsMatch(phoneNumber))
+        if (contactInfo is null)
         {
-            return PatientErrors.InvalidPhoneNumber;
+            return PatientErrors.ContactInfoRequired;
         }
 
         if (DateOfBirthValid(dateOfBirth) == false)
@@ -114,7 +115,7 @@ public class Patient : AuditableEntity
 
         FirstName = firstName.Trim();
         LastName = lastName.Trim();
-        PhoneNumber = phoneNumber.Trim();
+        ContactInfo = contactInfo;
         DateOfBirth = dateOfBirth;
         Gender = gender;
         MedicalHistory = medicalHistory ?? new MedicalHistory();
