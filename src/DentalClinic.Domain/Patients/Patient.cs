@@ -1,21 +1,31 @@
 using System.Text.RegularExpressions;
 
 using DentalClinic.Domain.Common.Enums;
+using DentalClinic.Domain.Common.Interfaces;
 using DentalClinic.Domain.Common.Results;
 using DentalClinic.Domain.Common.ValueObjects;
 
 namespace DentalClinic.Domain.Patients;
 
-public class Patient : AuditableEntity
+public class Patient : AuditableEntity, ISoftDeletable
 {
-    private static readonly Regex PhoneRegex = new(@"^\+?\d{7,15}$", RegexOptions.Compiled);
-
     public string FirstName { get; private set; } = default!;
     public string LastName { get; private set; } = default!;
     public ContactInfo ContactInfo { get; private set; } = default!;
     public DateTime DateOfBirth { get; private set; }
     public Gender Gender { get; private set; }
     public MedicalHistory MedicalHistory { get; private set; } = default!;
+
+    public bool IsDeleted { get; private set; }
+    public DateTimeOffset? DeletedAtUtc { get; private set; }
+    public string? DeletedBy { get; private set; }
+
+    public void Delete(string? deletedBy = null)
+    {
+        IsDeleted = true;
+        DeletedAtUtc = DateTimeOffset.UtcNow;
+        DeletedBy = deletedBy?.Trim();
+    }
 
     private Patient() { }
 
