@@ -1,5 +1,8 @@
 using DentalClinic.Domain.Appointments.Enums;
 using DentalClinic.Domain.Common.Results;
+using DentalClinic.Domain.Doctors;
+using DentalClinic.Domain.Patients;
+using DentalClinic.Domain.Services;
 
 namespace DentalClinic.Domain.Appointments;
 
@@ -8,6 +11,9 @@ public class Appointment : AuditableEntity
     public Guid PatientId { get; private set; }
     public Guid DoctorId { get; private set; }
     public Guid ServiceId { get; private set; }
+    public Patient? Patient { get; set; }
+    public Doctor? Doctor { get; set; }
+    public DentalService? Service { get; set; }
     public DateTime ScheduledDateTime { get; private set; }
     public int DurationInMinutes { get; private set; }
     public AppointmentStatus Status { get; private set; }
