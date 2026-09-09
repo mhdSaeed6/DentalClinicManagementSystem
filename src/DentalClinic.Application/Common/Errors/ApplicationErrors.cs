@@ -13,6 +13,35 @@ public static class ApplicationErrors
             code: "Patient.HasAppointments",
             description: "Patient has associated appointments.");
 
+    public static Error DoctorInactive =>
+        Error.Conflict(
+            code: "Doctor.Inactive",
+            description: "Doctor is inactive.");
+    public static Error DoctorNotFound =>
+        Error.NotFound(
+            code: "Doctor.NotFound",
+            description: "Doctor not found.");
+
+    public static Error ServiceNotFound =>
+        Error.NotFound(
+            code: "Service.NotFound",
+            description: "Service not found.");
+
+    public static Error AppointmentNotFound =>
+        Error.NotFound(
+            code: "Appointment.NotFound",
+            description: "Appointment not found.");
+
+    public static Error InvoiceNotFound =>
+        Error.NotFound(
+            code: "Invoice.NotFound",
+            description: "Invoice not found.");
+
+    public static Error TreatmentRecordNotFound =>
+        Error.NotFound(
+            code: "TreatmentRecord.NotFound",
+            description: "Treatment record not found.");
+
     public static Error InvalidRefreshToken =>
     Error.Validation(
         "RefreshToken.Expiry.Invalid",

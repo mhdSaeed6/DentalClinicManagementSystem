@@ -54,6 +54,11 @@ public class Doctor : AuditableEntity
             return DoctorErrors.SpecializationRequired;
         }
 
+        if (contactInfo is null)
+        {
+            return DoctorErrors.ContactInfoRequired;
+        }
+
         if (!Enum.IsDefined(gender))
         {
             return DoctorErrors.GenderRequired;

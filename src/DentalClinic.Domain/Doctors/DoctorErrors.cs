@@ -17,4 +17,7 @@ public static class DoctorErrors
 
     public static readonly Error GenderRequired = Error.Validation(
         "Doctor.GenderRequired", "Valid gender is required.");
+
+    public static readonly Error DoctorInactive = Error.Validation(
+        "Doctor.Inactive", "Cannot perform operations on an inactive doctor.");
 }
