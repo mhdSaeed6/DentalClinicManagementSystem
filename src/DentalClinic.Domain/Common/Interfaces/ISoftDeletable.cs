@@ -1,6 +1,6 @@
 namespace DentalClinic.Domain.Common.Interfaces;
 
-internal interface ISoftDeletable
+public interface ISoftDeletable
 {
     bool IsDeleted { get; }
     DateTimeOffset? DeletedAtUtc { get; }

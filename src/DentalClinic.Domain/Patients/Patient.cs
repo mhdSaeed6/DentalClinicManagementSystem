@@ -7,7 +7,7 @@ using DentalClinic.Domain.Common.ValueObjects;
 
 namespace DentalClinic.Domain.Patients;
 
-public class Patient : AuditableEntity, ISoftDeletable
+public class Patient : AuditableEntity
 {
     public string FirstName { get; private set; } = default!;
     public string LastName { get; private set; } = default!;
@@ -15,17 +15,6 @@ public class Patient : AuditableEntity, ISoftDeletable
     public DateTime DateOfBirth { get; private set; }
     public Gender Gender { get; private set; }
     public MedicalHistory MedicalHistory { get; private set; } = default!;
-
-    public bool IsDeleted { get; private set; }
-    public DateTimeOffset? DeletedAtUtc { get; private set; }
-    public string? DeletedBy { get; private set; }
-
-    public void Delete(string? deletedBy = null)
-    {
-        IsDeleted = true;
-        DeletedAtUtc = DateTimeOffset.UtcNow;
-        DeletedBy = deletedBy?.Trim();
-    }
 
     private Patient() { }
 

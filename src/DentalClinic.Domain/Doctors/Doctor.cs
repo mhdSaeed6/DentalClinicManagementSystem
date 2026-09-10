@@ -1,4 +1,5 @@
 using DentalClinic.Domain.Common.Enums;
+using DentalClinic.Domain.Common.Interfaces;
 using DentalClinic.Domain.Common.Results;
 using DentalClinic.Domain.Common.ValueObjects;
 
