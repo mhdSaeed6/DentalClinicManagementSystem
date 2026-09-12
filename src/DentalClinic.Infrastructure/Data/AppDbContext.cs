@@ -15,7 +15,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace DentalClinic.Infrastructure.Data;
 
-public class AppDbContext(DbContextOptions contextOptions) : IdentityDbContext<AppUser>(contextOptions), IAppDbContext
+public class AppDbContext(DbContextOptions<AppDbContext> contextOptions) : IdentityDbContext<AppUser>(contextOptions), IAppDbContext
 {
     public DbSet<Doctor> Doctors => Set<Doctor>();
 

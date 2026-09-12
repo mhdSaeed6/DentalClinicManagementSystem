@@ -37,26 +37,23 @@ public class DoctorConfiguration : IEntityTypeConfiguration<Doctor>
             .HasDefaultValue(true)
             .IsRequired();
 
-// 4. Value Object: ContactInfo
-        builder.OwnsOne(d => d.ContactInfo, contactInfo =>
+        // ضبط الـ Value Object الخاص بـ ContactInfo
+        builder.OwnsOne(d => d.ContactInfo, contact =>
         {
-            contactInfo.Property(c => c.PrimaryPhone)
-                .HasColumnName("PrimaryPhone")
+            contact.Property(c => c.PrimaryPhone)
                 .HasMaxLength(20)
                 .IsRequired();
 
-            contactInfo.Property(c => c.SecondaryPhone)
-                .HasColumnName("SecondaryPhone")
-                .HasMaxLength(20);
+            contact.Property(c => c.SecondaryPhone)
+                .HasMaxLength(20)
+                .IsRequired(false);
 
-            contactInfo.Property(c => c.HasWhatsAppOnPrimary)
-                .HasColumnName("HasWhatsAppOnPrimary")
-                .HasDefaultValue(true)
+            contact.Property(c => c.HasWhatsAppOnPrimary)
                 .IsRequired();
 
-            contactInfo.Property(c => c.SocialMediaLink)
-                .HasColumnName("SocialMediaLink")
-                .HasMaxLength(300);
+            contact.Property(c => c.SocialMediaLink)
+                .HasMaxLength(256)
+                .IsRequired(false);
         });
 
         // 5. Performance Indexes

@@ -40,7 +40,7 @@ public class InvoiceConfiguration : IEntityTypeConfiguration<Invoice>
             .HasForeignKey(i => i.PatientId)
             .OnDelete(DeleteBehavior.Restrict);
 
-        // Navigation to Payments (Backing Field Configuration)
+        // Navigation to Payments
         builder.HasMany(i => i.Payments)
             .WithOne()
             .HasForeignKey(p => p.InvoiceId)

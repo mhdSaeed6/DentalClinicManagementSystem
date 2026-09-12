@@ -114,15 +114,26 @@ public class ApplicationDbContextInitialiser(
         }
 
         // 4. Seed Doctors
-        if (!_context.Doctors.Any())
+        if (!await _context.Doctors.AnyAsync())
         {
-            var contact1 = ContactInfo.Create("dr.smith@dentalclinic.com", "1234567890").Value;
-            var contact2 = ContactInfo.Create("dr.sara@dentalclinic.com", "0987654321").Value;
+            var contact1Res = ContactInfo.Create("+963911111111");
+            var contact2Res = ContactInfo.Create("+963922222222");
 
-            _context.Doctors.AddRange([
-                Doctor.Create("John", "Smith", "Orthodontics", contact1, Gender.Male).Value,
-                Doctor.Create("Sara", "Johnson", "Endodontics", contact2, Gender.Female).Value
-            ]);
+            if (contact1Res.IsError || contact2Res.IsError)
+            {
+                throw new Exception("ContactInfo Seeding Failed.");
+            }
+
+            var doc1Res = Doctor.Create("John", "Smith", "Orthodontics", contact1Res.Value, Gender.Male);
+            var doc2Res = Doctor.Create("Sara", "Johnson", "Endodontics", contact2Res.Value, Gender.Female);
+
+            if (doc1Res.IsError || doc2Res.IsError)
+            {
+                throw new Exception("Doctor Seeding Failed.");
+            }
+
+            // <-- هذا السطر كان مفقوداً لديكم
+            _context.Doctors.AddRange([doc1Res.Value, doc2Res.Value]);
         }
 
         // 5. Seed Dental Services
@@ -139,13 +150,18 @@ public class ApplicationDbContextInitialiser(
 
         // 6. Patients Seed
         if (!_context.Patients.Any())
-        {
-            var patientContact1 = ContactInfo.Create("michael@localhost", "123456789").Value;
-            var patientContact2 = ContactInfo.Create("emma@localhost", "987654321").Value;
+        { // 1. إنشاء ContactInfo
+            var contact1Res = ContactInfo.Create("+963911111222");
+            var contact2Res = ContactInfo.Create("+963922222333");
+
+            if (contact1Res.IsError || contact2Res.IsError)
+            {
+                throw new Exception($"ContactInfo Seeding Failed: {contact1Res.Errors} | {contact2Res.Errors}");
+            }
 
             _context.Patients.AddRange([
-                Patient.Create("Michael", "Brown", patientContact1, DateTime.UtcNow.AddYears(-30), Gender.Male).Value,
-                Patient.Create("Emma", "Wilson", patientContact2, DateTime.UtcNow.AddYears(-25), Gender.Female).Value
+                Patient.Create("Michael", "Brown", contact1Res.Value, DateTime.UtcNow.AddYears(-30), Gender.Male).Value,
+                Patient.Create("Emma", "Wilson", contact2Res.Value, DateTime.UtcNow.AddYears(-25), Gender.Female).Value
             ]);
         }
 
