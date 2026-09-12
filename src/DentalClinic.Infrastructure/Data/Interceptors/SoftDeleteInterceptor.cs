@@ -1,4 +1,4 @@
-using DentalClinic.Domain.Common;
+using DentalClinic.Application.Common.Interfaces;
 using DentalClinic.Domain.Common.Interfaces;
 
 using Microsoft.EntityFrameworkCore;
@@ -7,9 +7,10 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 
 namespace DentalClinic.Infrastructure.Data.Interceptors;
 
-public class SoftDeleteInterceptor(TimeProvider dateTime) : SaveChangesInterceptor
+public class SoftDeleteInterceptor(TimeProvider dateTime, IUser user) : SaveChangesInterceptor
 {
     private readonly TimeProvider _dateTime = dateTime;
+    private readonly IUser _user = user;
 
     public override InterceptionResult<int> SavingChanges(DbContextEventData eventData, InterceptionResult<int> result)
     {
@@ -30,7 +31,7 @@ public class SoftDeleteInterceptor(TimeProvider dateTime) : SaveChangesIntercept
             return;
         }
 
-        var utcNow = _dateTime.GetUtcNow();
+        var userId = _user.Id;
 
         // 1. معالجة الكيانات الرئيسية التي تم حذفها
         foreach (var entry in context.ChangeTracker.Entries<ISoftDeletable>())
@@ -38,8 +39,7 @@ public class SoftDeleteInterceptor(TimeProvider dateTime) : SaveChangesIntercept
             if (entry.State == EntityState.Deleted)
             {
                 entry.State = EntityState.Modified;
-                entry.Entity.IsDeleted = true;
-                entry.Entity.DeletedAtUtc = utcNow;
+                entry.Entity.Delete(userId);
             }
         }
 
@@ -56,8 +56,7 @@ public class SoftDeleteInterceptor(TimeProvider dateTime) : SaveChangesIntercept
                 if (reference.TargetEntry is { Entity: ISoftDeletable ownedEntity } && reference.TargetEntry.State == EntityState.Deleted)
                 {
                     reference.TargetEntry.State = EntityState.Modified;
-                    ownedEntity.IsDeleted = true;
-                    ownedEntity.DeletedAtUtc = utcNow;
+                    ownedEntity.Delete(userId);
                 }
             }
         }

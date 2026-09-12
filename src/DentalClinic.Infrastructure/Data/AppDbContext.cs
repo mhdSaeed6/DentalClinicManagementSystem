@@ -6,6 +6,7 @@ using DentalClinic.Domain.Invoices;
 using DentalClinic.Domain.Patients;
 using DentalClinic.Domain.Services;
 using DentalClinic.Domain.TreatmentRecords;
+using DentalClinic.Infrastructure.Identity;
 
 using MediatR;
 
