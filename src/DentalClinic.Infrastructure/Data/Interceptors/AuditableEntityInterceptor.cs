@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 
-namespace MechanicShop.Infrastructure.Data.Interceptors;
+namespace DentalClinic.Infrastructure.Data.Interceptors;
 
 public class AuditableEntityInterceptor(IUser user, TimeProvider dateTime) : SaveChangesInterceptor
 {
