@@ -12,7 +12,7 @@ namespace DentalClinic.Application.Features.Doctors.Commands.RemoveDoctor;
 public class RemoveDoctorCommandHandler(
     ILogger<RemoveDoctorCommandHandler> logger,
     IAppDbContext context,
-    HybridCache cache)
+    HybridCache cache, IUser user)
     : IRequestHandler<RemoveDoctorCommand, Result<Deleted>>
 {
     public async Task<Result<Deleted>> Handle(RemoveDoctorCommand request, CancellationToken cancellationToken)
@@ -25,7 +25,7 @@ public class RemoveDoctorCommandHandler(
             return ApplicationErrors.DoctorNotFound;
         }
 
-        doctor.Deactivate();
+        doctor.Delete(user.Id);
 
         await context.SaveChangesAsync(cancellationToken);
 

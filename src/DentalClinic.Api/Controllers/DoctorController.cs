@@ -82,15 +82,17 @@ public class DoctorController(ISender sender) : ApiController
     {
         var genderEnum = Enum.Parse<Gender>(request.Gender, ignoreCase: true);
 
+        var contactInfo = ContactInfo.Create(
+                request.ContactInfo.PrimaryPhone,
+                request.ContactInfo.SecondaryPhone,
+                request.ContactInfo.HasWhatsAppOnPrimary,
+                request.ContactInfo.SocialMediaLink).Value;
+
         var command = new CreateDoctorCommand(
             request.FirstName,
             request.LastName,
             request.Specialization,
-            ContactInfo.Create(
-                request.ContactInfo.PrimaryPhone,
-                request.ContactInfo.SecondaryPhone,
-                request.ContactInfo.HasWhatsAppOnPrimary,
-                request.ContactInfo.SocialMediaLink).Value,
+            contactInfo,
             genderEnum);
 
         var result = await sender.Send(command, ct);
@@ -136,15 +138,18 @@ public class DoctorController(ISender sender) : ApiController
     {
         var genderEnum = Enum.Parse<Gender>(request.Gender, ignoreCase: true);
 
+        var contactInfo = ContactInfo.Create(
+            request.ContactInfo.PrimaryPhone,
+            request.ContactInfo.SecondaryPhone,
+            request.ContactInfo.HasWhatsAppOnPrimary,
+            request.ContactInfo.SocialMediaLink).Value;
+
         var command = new UpdateDoctorCommand(
             id,
             request.FirstName,
             request.LastName,
             request.Specialization,
-            ContactInfo.Create(request.ContactInfo.PrimaryPhone, 
-                                request.ContactInfo.SecondaryPhone,
-                                request.ContactInfo.HasWhatsAppOnPrimary,
-                                request.ContactInfo.SocialMediaLink).Value,
+            contactInfo,
             genderEnum);
 
         var result = await sender.Send(command, ct);

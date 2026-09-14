@@ -94,14 +94,16 @@ public class PatientController(ISender sender) : ApiController
             }
             : new MedicalHistory();
 
-        var command = new CreatePatientCommand(
-            request.FirstName,
-            request.LastName,
-            ContactInfo.Create(
+        var contactInfo = ContactInfo.Create(
                 request.ContactInfo.PrimaryPhone,
                 request.ContactInfo.SecondaryPhone,
                 request.ContactInfo.HasWhatsAppOnPrimary,
-                request.ContactInfo.SocialMediaLink).Value,
+                request.ContactInfo.SocialMediaLink).Value;
+
+        var command = new CreatePatientCommand(
+            request.FirstName,
+            request.LastName,
+            contactInfo,
             request.DateOfBirth,
             genderEnum,
             medicalHistory);
@@ -141,14 +143,17 @@ public class PatientController(ISender sender) : ApiController
             }
             : new MedicalHistory();
 
+        var contactInfo = ContactInfo.Create(
+                request.ContactInfo.PrimaryPhone,
+                request.ContactInfo.SecondaryPhone,
+                request.ContactInfo.HasWhatsAppOnPrimary,
+                request.ContactInfo.SocialMediaLink).Value;
+
         var command = new UpdatePatientCommand(
             id,
             request.FirstName,
             request.LastName,
-            ContactInfo.Create(request.ContactInfo.PrimaryPhone,
-                               request.ContactInfo.SecondaryPhone,
-                               request.ContactInfo.HasWhatsAppOnPrimary,
-                               request.ContactInfo.SocialMediaLink).Value,
+            contactInfo,
             request.DateOfBirth,
             genderEnum,
             medicalHistory);

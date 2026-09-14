@@ -1,4 +1,5 @@
 using DentalClinic.Application.Features.Patients.Dtos;
+using DentalClinic.Domain.Common.Enums;
 using DentalClinic.Domain.Common.Results;
 using DentalClinic.Domain.Common.ValueObjects;
 using DentalClinic.Domain.Patients;
@@ -13,5 +14,5 @@ public sealed record UpdatePatientCommand(
     string LastName,
     ContactInfo ContactInfo,
     DateTime DateOfBirth,
-    int Gender,
+    Gender Gender,
     MedicalHistory MedicalHistory) : IRequest<Result<PatientDto>>;

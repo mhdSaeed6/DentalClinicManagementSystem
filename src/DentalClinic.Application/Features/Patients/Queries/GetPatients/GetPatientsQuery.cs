@@ -10,7 +10,6 @@ public sealed record GetPatientsQuery(
     int PageSize = 10,
     string? SearchTerm = null) : ICachedQuery<Result<PaginatedList<PatientDto>>>
 {
-    // تضمين متغيرات البحث والصفحة داخل الكاش لضمان عدم تداخل الصفحات
     public string CacheKey => $"patients-page-{PageNumber}-size-{PageSize}-search-{SearchTerm ?? "all"}";
 
     public string[] Tags => ["patients"];
