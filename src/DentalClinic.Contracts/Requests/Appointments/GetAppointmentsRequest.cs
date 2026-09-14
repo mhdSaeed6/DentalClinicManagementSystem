@@ -7,5 +7,4 @@ public class GetAppointmentsRequest
     public Guid? PatientId { get; set; }
     public Guid? DoctorId { get; set; }
     public Guid? ServiceId { get; set; }
-
 }

@@ -21,7 +21,7 @@ namespace DentalClinic.Api.Controllers;
 
 [Route("api/v{version:apiVersion}/doctors")]
 [ApiVersion("1.0")]
-// [Authorize]
+[Authorize]
 public class DoctorController(ISender sender) : ApiController
 {
     [HttpGet]
