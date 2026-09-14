@@ -20,6 +20,6 @@ public class CreateTreatmentRecordRequest
     [StringLength(1000, ErrorMessage = "Procedure details cannot exceed 1000 characters.")]
     public string ProcedureDetails { get; set; } = string.Empty;
 
-    [Range(0, 100000, ErrorMessage = "Cost cannot be negative.")]
+    [Range(0, 10000000, ErrorMessage = "Cost cannot be negative.")]
     public decimal Cost { get; set; }
 }

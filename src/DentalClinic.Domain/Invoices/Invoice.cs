@@ -49,7 +49,7 @@ public class Invoice : AuditableEntity
             totalAmount);
     }
 
-    public Result<Updated> AddPayment(decimal amount, string? notes = null)
+    public Result<Updated> RegisterPayment(decimal amount)
     {
         if (amount <= 0)
         {
@@ -66,9 +66,7 @@ public class Invoice : AuditableEntity
             return InvoiceErrors.PaymentExceedsRemainingAmount;
         }
 
-        var payment = new Payment(Guid.NewGuid(), Id, amount, notes?.Trim());
-        _payments.Add(payment);
-
+        // تحديث المبالغ والحالة فقط داخل الفاتورة
         PaidAmount += amount;
         Status = (PaidAmount == TotalAmount) ? PaymentStatus.Paid : PaymentStatus.PartiallyPaid;
 

@@ -9,7 +9,9 @@ public class Payment : AuditableEntity
     public DateTime PaidAtUtc { get; private set; }
     public string? TransactionNotes { get; private set; }
 
-    internal Payment(Guid id, Guid invoiceId, decimal amount, string? transactionNotes)
+    private Payment() { }
+
+    private Payment(Guid id, Guid invoiceId, decimal amount, string? transactionNotes)
         : base(id)
     {
         InvoiceId = invoiceId;
@@ -18,5 +20,18 @@ public class Payment : AuditableEntity
         TransactionNotes = transactionNotes;
     }
 
-    private Payment() { }
+    // 💡 Factory Method لإنشاء دفعة مستقلة
+    public static Result<Payment> Create(Guid invoiceId, decimal amount, string? notes = null)
+    {
+        if (amount <= 0)
+        {
+            return InvoiceErrors.InvalidPaymentAmount;
+        }
+
+        return new Payment(
+            Guid.NewGuid(),
+            invoiceId,
+            amount,
+            notes?.Trim());
+    }
 }
