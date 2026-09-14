@@ -12,7 +12,8 @@ namespace DentalClinic.Application.Features.DentalServices.Commands.RemoveDental
 public class RemoveDentalServiceCommandHandler(
     ILogger<RemoveDentalServiceCommandHandler> logger,
     IAppDbContext context,
-    HybridCache cache)
+    HybridCache cache,
+    IUser user)
     : IRequestHandler<RemoveDentalServiceCommand, Result<Deleted>>
 {
     public async Task<Result<Deleted>> Handle(RemoveDentalServiceCommand request, CancellationToken cancellationToken)
@@ -25,7 +26,7 @@ public class RemoveDentalServiceCommandHandler(
             return ApplicationErrors.ServiceNotFound;
         }
 
-        service.Deactivate();
+        service.Delete(user.Id);
 
         await context.SaveChangesAsync(cancellationToken);
 
