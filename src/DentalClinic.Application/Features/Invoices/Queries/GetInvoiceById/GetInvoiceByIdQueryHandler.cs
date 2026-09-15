@@ -18,7 +18,7 @@ public class GetInvoiceByIdQueryHandler(
 {
     public async Task<Result<InvoiceDto>> Handle(GetInvoiceByIdQuery request, CancellationToken cancellationToken)
     {
-        var invoice = await context.Invoices.AsNoTracking().FirstOrDefaultAsync(i => i.Id == request.InvoiceId, cancellationToken);
+        var invoice = await context.Invoices.Include(i => i.Payments).AsNoTracking().FirstOrDefaultAsync(i => i.Id == request.InvoiceId, cancellationToken);
 
         if (invoice is null)
         {

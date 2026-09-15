@@ -31,8 +31,14 @@ public class InvoiceController(ISender sender) : ApiController
     [MapToApiVersion("1.0")]
     [ProducesDefaultResponseType]
     [OutputCache(Duration = 60)]
-    public async Task<IActionResult> GetInvoices([FromQuery] GetInvoicesQuery query, CancellationToken ct)
+    public async Task<IActionResult> GetInvoices([FromQuery] GetInvoicesRequest request, CancellationToken ct)
     {
+        var query = new GetInvoicesQuery(
+            PageNumber: request.PageNumber,
+            PageSize: request.PageSize,
+            PatientId: request.PatientId,
+            AppointmentId: request.AppointmentId);
+
         var result = await sender.Send(query, ct);
 
         return result.Match(

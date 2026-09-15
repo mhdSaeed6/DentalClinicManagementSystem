@@ -30,8 +30,15 @@ public class TreatmentRecordController(ISender sender) : ApiController
     [MapToApiVersion("1.0")]
     [ProducesDefaultResponseType]
     [OutputCache(Duration = 60)]
-    public async Task<IActionResult> GetTreatmentRecords([FromQuery] GetTreatmentRecordsQuery query, CancellationToken ct)
+    public async Task<IActionResult> GetTreatmentRecords([FromQuery] GetTreatmentRecordsRequest request, CancellationToken ct)
     {
+        var query = new GetTreatmentRecordsQuery(
+            PageNumber: request.PageNumber,
+            PageSize: request.PageSize,
+            PatientId: request.PatientId,
+            DoctorId: request.DoctorId,
+            AppointmentId: request.AppointmentId);
+
         var result = await sender.Send(query, ct);
 
         return result.Match(
