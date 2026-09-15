@@ -2,6 +2,7 @@ using Asp.Versioning;
 
 using DentalClinic.Application.Common.Models;
 using DentalClinic.Application.Features.TreatmentRecords.Commands.CreateTreatmentRecord;
+using DentalClinic.Application.Features.TreatmentRecords.Commands.UpdateTreatmentRecord;
 using DentalClinic.Application.Features.TreatmentRecords.Dtos;
 using DentalClinic.Application.Features.TreatmentRecords.Queries.GetTreatmentRecordById;
 using DentalClinic.Application.Features.TreatmentRecords.Queries.GetTreatmentRecords;
@@ -90,6 +91,36 @@ public class TreatmentRecordController(ISender sender) : ApiController
 
         return result.Match(
             response => CreatedAtAction(nameof(GetTreatmentRecordById), new { id = response.Id }, response),
+            Problem);
+    }
+
+    [HttpPut("{id:guid}")]
+    [ProducesResponseType(typeof(TreatmentRecordDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
+    [EndpointSummary("Updates an existing treatment record.")]
+    [EndpointDescription("Updates a treatment record for a patient with FDI tooth validation.")]
+    [EndpointName("UpdateTreatmentRecord")]
+    [MapToApiVersion("1.0")]
+    [ProducesDefaultResponseType]
+    public async Task<IActionResult> UpdateTreatmentRecord(
+        Guid id,
+        [FromBody] UpdateTreatmentRecordRequest request,
+        CancellationToken ct)
+    {
+        var command = new UpdateTreatmentRecordCommand(
+            id,
+            request.PatientId,
+            request.DoctorId,
+            request.AppointmentId,
+            request.ToothNumber,
+            request.ProcedureDetails,
+            request.Cost);
+
+        var result = await sender.Send(command, ct);
+
+        return result.Match(
+            response => Ok(response),
             Problem);
     }
 }

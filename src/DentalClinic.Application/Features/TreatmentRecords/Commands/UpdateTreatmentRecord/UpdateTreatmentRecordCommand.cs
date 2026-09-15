@@ -1,0 +1,15 @@
+using DentalClinic.Application.Features.TreatmentRecords.Dtos;
+using DentalClinic.Domain.Common.Results;
+
+using MediatR;
+
+namespace DentalClinic.Application.Features.TreatmentRecords.Commands.UpdateTreatmentRecord;
+
+public sealed record UpdateTreatmentRecordCommand(
+    Guid TreatmentRecordId,
+    Guid PatientId,
+    Guid DoctorId,
+    Guid? AppointmentId,
+    int ToothNumber,
+    string ProcedureDetails,
+    decimal Cost) : IRequest<Result<TreatmentRecordDto>>;
