@@ -2,7 +2,12 @@
   <Folder Name="/src/">
     <Project Path="src/DentalClinic.Api/DentalClinic.Api.csproj" />
     <Project Path="src/DentalClinic.Application/DentalClinic.Application.csproj" />
+    <Project Path="src/DentalClinic.Contracts/DentalClinic.Contracts.csproj" />
     <Project Path="src/DentalClinic.Domain/DentalClinic.Domain.csproj" />
     <Project Path="src/DentalClinic.Infrastructure/DentalClinic.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/DentalClinic.Domain.UnitTests/DentalClinic.Domain.UnitTests.csproj" />
+    <Project Path="tests/DentalClinic.Tests.Common/DentalClinic.Tests.Common.csproj" />
   </Folder>
 </Solution>
