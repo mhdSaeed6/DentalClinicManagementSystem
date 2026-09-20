@@ -27,4 +27,4 @@ jobs:
       run: dotnet build --configuration Release --no-restore
 
     - name: Run tests
-      run: dotnet test --configuration Release --no-build --verbosity normal
+      run: dotnet test tests/DentalClinic.Domain.UnitTests/DentalClinic.Domain.UnitTests.csproj --configuration Release --no-build --verbosity normal
