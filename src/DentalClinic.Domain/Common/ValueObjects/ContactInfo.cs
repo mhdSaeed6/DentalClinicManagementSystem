@@ -20,10 +20,10 @@ public record ContactInfo
         bool hasWhatsAppOnPrimary,
         string? socialMediaLink)
     {
-        PrimaryPhone = primaryPhone;
-        SecondaryPhone = secondaryPhone;
+        PrimaryPhone = primaryPhone.Trim();
+        SecondaryPhone = secondaryPhone?.Trim();
         HasWhatsAppOnPrimary = hasWhatsAppOnPrimary;
-        SocialMediaLink = socialMediaLink;
+        SocialMediaLink = socialMediaLink?.Trim();
     }
 
     public static Result<ContactInfo> Create(
@@ -32,21 +32,25 @@ public record ContactInfo
         bool hasWhatsAppOnPrimary = true,
         string? socialMediaLink = null)
     {
-        if (string.IsNullOrWhiteSpace(primaryPhone) || !PhoneRegex.IsMatch(primaryPhone))
+        var trimmedPrimary = primaryPhone?.Trim();
+        var trimmedSecondary = string.IsNullOrWhiteSpace(secondaryPhone) ? null : secondaryPhone.Trim();
+        var trimmedSocial = string.IsNullOrWhiteSpace(socialMediaLink) ? null : socialMediaLink.Trim();
+
+        if (string.IsNullOrWhiteSpace(trimmedPrimary) || !PhoneRegex.IsMatch(trimmedPrimary))
         {
             return ContactInfoErrors.InvalidPhoneNumber;
         }
 
-        if (!string.IsNullOrWhiteSpace(secondaryPhone) && !PhoneRegex.IsMatch(secondaryPhone))
+        if (trimmedSecondary is not null && !PhoneRegex.IsMatch(trimmedSecondary))
         {
             return ContactInfoErrors.InvalidPhoneNumber;
         }
 
         return new ContactInfo(
-            primaryPhone.Trim(),
-            string.IsNullOrWhiteSpace(secondaryPhone) ? null : secondaryPhone.Trim(),
+            trimmedPrimary,
+            trimmedSecondary,
             hasWhatsAppOnPrimary,
-            string.IsNullOrWhiteSpace(socialMediaLink) ? null : socialMediaLink.Trim());
+            trimmedSocial);
     }
 }
 

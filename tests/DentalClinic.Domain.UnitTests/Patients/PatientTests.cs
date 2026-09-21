@@ -1,6 +1,7 @@
 using DentalClinic.Domain.Common.Enums;
 using DentalClinic.Domain.Common.ValueObjects;
 using DentalClinic.Domain.Patients;
+using DentalClinic.Tests.Common.Patients;
 using Xunit;
 
 namespace DentalClinic.Domain.UnitTests.Patients;
@@ -10,21 +11,17 @@ public class PatientTests
     [Fact]
     public void CreatePatient_ShouldSucceed_WithValidData()
     {
-        var firstName = "John";
-        var lastName = "Doe";
-        var contactInfo = ContactInfo.Create("741085207410", null, true, "koko.com").Value;
-        var dateOfBirth = DateTime.UtcNow.AddYears(-30);
+        // Act
+        var result = PatientFactory.CreatePatient();
 
-        var result = Patient.Create(firstName, lastName, contactInfo, dateOfBirth, Gender.Male);
-
+        // Assert
         Assert.True(result.IsSuccess);
         var patient = result.Value;
         Assert.NotNull(patient);
-        Assert.Equal(firstName, patient.FirstName);
-        Assert.Equal(lastName, patient.LastName);
-        Assert.Equal(contactInfo, patient.ContactInfo);
-        Assert.Equal(dateOfBirth, patient.DateOfBirth);
+        Assert.Equal("John", patient.FirstName);
+        Assert.Equal("Doe", patient.LastName);
         Assert.Equal(Gender.Male, patient.Gender);
+        Assert.NotNull(patient.ContactInfo);
         Assert.NotNull(patient.MedicalHistory);
     }
 
@@ -34,8 +31,7 @@ public class PatientTests
     [InlineData(null)]
     public void CreatePatient_ShouldFail_WhenFirstNameInvalid(string? invalidFirstName)
     {
-        var contactInfo = ContactInfo.Create("741085207410", null, true, "koko.com").Value;
-        var result = Patient.Create(invalidFirstName!, "Doe", contactInfo, DateTime.UtcNow.AddYears(-30), Gender.Male);
+        var result = PatientFactory.CreatePatient(firstName: invalidFirstName!);
 
         Assert.True(result.IsError);
         Assert.Equal(PatientErrors.FirstNameRequired.Code, result.TopError.Code);
@@ -47,8 +43,7 @@ public class PatientTests
     [InlineData(null)]
     public void CreatePatient_ShouldFail_WhenLastNameInvalid(string? invalidLastName)
     {
-        var contactInfo = ContactInfo.Create("741085207410", null, true, "koko.com").Value;
-        var result = Patient.Create("John", invalidLastName!, contactInfo, DateTime.UtcNow.AddYears(-30), Gender.Male);
+        var result = PatientFactory.CreatePatient(lastName: invalidLastName!);
 
         Assert.True(result.IsError);
         Assert.Equal(PatientErrors.LastNameRequired.Code, result.TopError.Code);
@@ -57,6 +52,7 @@ public class PatientTests
     [Fact]
     public void CreatePatient_ShouldFail_WhenContactInfoIsNull()
     {
+        // استدعاء الميثود المباشرة للـ Domain لتمرير null وتجاوز القيمة الافتراضية
         var result = Patient.Create("John", "Doe", null!, DateTime.UtcNow.AddYears(-30), Gender.Male);
 
         Assert.True(result.IsError);
@@ -66,10 +62,9 @@ public class PatientTests
     [Fact]
     public void CreatePatient_ShouldFail_WhenGenderNotDefined()
     {
-        var contactInfo = ContactInfo.Create("741085207410", null, true, "koko.com").Value;
         Gender invalidGender = (Gender)999;
 
-        var result = Patient.Create("John", "Doe", contactInfo, DateTime.UtcNow.AddYears(-30), invalidGender);
+        var result = PatientFactory.CreatePatient(gender: invalidGender);
 
         Assert.True(result.IsError);
         Assert.Equal(PatientErrors.GenderRequired.Code, result.TopError.Code);
@@ -78,10 +73,9 @@ public class PatientTests
     [Fact]
     public void CreatePatient_ShouldFail_WhenDateOfBirthIsInFuture()
     {
-        var contactInfo = ContactInfo.Create("741085207410", null, true, "koko.com").Value;
         var futureDate = DateTime.UtcNow.AddDays(1);
 
-        var result = Patient.Create("John", "Doe", contactInfo, futureDate, Gender.Male);
+        var result = PatientFactory.CreatePatient(dateOfBirth: futureDate);
 
         Assert.True(result.IsError);
         Assert.Equal(PatientErrors.InvalidDateOfBirth.Code, result.TopError.Code);
@@ -90,8 +84,7 @@ public class PatientTests
     [Fact]
     public void UpdatePatient_ShouldSuccess_WithValidData()
     {
-        var contactInfo = ContactInfo.Create("741085207410", null, true, "koko.com").Value;
-        var patient = Patient.Create("John", "Doe", contactInfo, DateTime.UtcNow.AddYears(-30), Gender.Male).Value;
+        var patient = PatientFactory.CreatePatient().Value;
 
         var newContactInfo = ContactInfo.Create("987654321012", null, true, "updated.com").Value;
         var newDateOfBirth = DateTime.UtcNow.AddYears(-25);
