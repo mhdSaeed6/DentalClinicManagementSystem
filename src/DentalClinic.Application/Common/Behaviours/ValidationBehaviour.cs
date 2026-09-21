@@ -1,6 +1,6 @@
 using MediatR;
 
-namespace MechanicShop.Application.Common.Behaviours;
+namespace DentalClinic.Application.Common.Behaviours;
 
 using DentalClinic.Domain.Common.Results;
 using DentalClinic.Domain.Common.Results.Abstractions;
