@@ -73,8 +73,8 @@ public class IdentityService(UserManager<AppUser> userManager,
 
     public async Task<string?> GetUserNameAsync(string userId)
     {
-        var user = await _userManager.FindByIdAsync(userId);
+         var user = await _userManager.FindByIdAsync(userId);
 
-        return user?.UserName;
+         return user?.UserName;
     }
 }

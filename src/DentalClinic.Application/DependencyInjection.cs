@@ -4,8 +4,6 @@ using DentalClinic.Application.Common.Behaviours;
 
 using FluentValidation;
 
-using MechanicShop.Application.Common.Behaviours;
-
 namespace Microsoft.Extensions.DependencyInjection;
 
 public static class DependencyInjection
