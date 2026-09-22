@@ -26,6 +26,20 @@ public class PatientTests
     }
 
     [Theory]
+    [InlineData("invalid-phone")]
+    [InlineData("123")]
+    [InlineData("+12345678901234567890")] // Too long
+    [InlineData(null)]
+    public void Create_WithInvalidPhoneNumber_ShouldReturnError(string? invalidPhone)
+    {
+        // Act
+        var result = ContactInfo.Create(invalidPhone!, null, true, null);
+
+        // Assert
+        Assert.True(result.IsError);
+    }
+
+    [Theory]
     [InlineData("")]
     [InlineData("   ")]
     [InlineData(null)]

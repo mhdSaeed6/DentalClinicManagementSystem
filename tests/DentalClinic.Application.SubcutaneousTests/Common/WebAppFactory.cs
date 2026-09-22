@@ -18,7 +18,7 @@ using Testcontainers.MsSql;
 
 using Xunit;
 
-namespace MechanicShop.Application.SubcutaneousTests.Common;
+namespace DentalClinic.Application.SubcutaneousTests.Common;
 
 public class WebAppFactory : WebApplicationFactory<IAssemblyMarker>, IAsyncLifetime
 {
