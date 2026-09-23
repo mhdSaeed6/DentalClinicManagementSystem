@@ -20,8 +20,8 @@ public class GetDentalServicesQueryHandler(IAppDbContext context) : IRequestHand
         {
             var search = request.SearchTerm.Trim().ToLower();
             query = query.Where(service =>
-                service.Name.ToLower().Contains(search) ||
-                (service.Description != null && service.Description.ToLower().Contains(search)));
+                        service.Name.ToLower().Contains(search.ToLower()) ||
+                (service.Description != null && service.Description.ToLower().Contains(search.ToLower())));
         }
 
         var totalCount = await query.CountAsync(cancellationToken);
