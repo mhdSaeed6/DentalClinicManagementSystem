@@ -3,7 +3,7 @@ using DentalClinic.Domain.Common.Results;
 
 using MediatR;
 
-namespace MechanicShop.Application.Features.Identity.Queries.GenerateTokens;
+namespace DentalClinic.Application.Features.Identity.Queries.GenerateTokens;
 
 public record GenerateTokenQuery(
     string Email,

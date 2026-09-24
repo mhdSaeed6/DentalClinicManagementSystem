@@ -1,6 +1,6 @@
 using FluentValidation;
 
-namespace MechanicShop.Application.Features.Identity.Queries.GenerateTokens;
+namespace DentalClinic.Application.Features.Identity.Queries.GenerateTokens;
 
 public sealed class GenerateTokenQueryValidator : AbstractValidator<GenerateTokenQuery>
 {

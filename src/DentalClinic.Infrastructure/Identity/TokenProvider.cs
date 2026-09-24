@@ -34,6 +34,11 @@ public class TokenProvider(IConfiguration configuration, IAppDbContext context) 
 
     public ClaimsPrincipal? GetPrincipalFromExpiredToken(string token)
     {
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            return null;
+        }
+
         var tokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuerSigningKey = true,
@@ -47,17 +52,26 @@ public class TokenProvider(IConfiguration configuration, IAppDbContext context) 
         };
 
         var tokenHandler = new JwtSecurityTokenHandler();
-        var principal = tokenHandler.ValidateToken(token, tokenValidationParameters, out SecurityToken securityToken);
 
-        if (securityToken is not JwtSecurityToken jwtSecurityToken ||
-            !jwtSecurityToken.Header.Alg.Equals(SecurityAlgorithms.HmacSha256, StringComparison.InvariantCultureIgnoreCase))
+        try
         {
-            throw new SecurityTokenException("Invalid token.");
+            var principal = tokenHandler.ValidateToken(token, tokenValidationParameters, out SecurityToken securityToken);
+
+            // التأكد أيضاً من أن التوكن تم توقيعه بنفس الخوارزمية (HMACSHA256)
+            if (securityToken is not JwtSecurityToken jwtSecurityToken ||
+                !jwtSecurityToken.Header.Alg.Equals(SecurityAlgorithms.HmacSha256, StringComparison.InvariantCultureIgnoreCase))
+            {
+                return null;
+            }
+
+            return principal;
         }
-
-        return principal;
+        catch (Exception)
+        {
+            // في حال كان التوكن مشوهاً (Malformed) أو غير صالح كلياً
+            return null;
+        }
     }
-
     private async Task<Result<TokenResponse>> CreateAsync(AppUserDto user, CancellationToken ct = default)
     {
         var jwtSettings = _configuration.GetSection("JwtSettings");

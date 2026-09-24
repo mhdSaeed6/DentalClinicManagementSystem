@@ -6,7 +6,7 @@ using MediatR;
 
 using Microsoft.Extensions.Logging;
 
-namespace MechanicShop.Application.Features.Identity.Queries.GenerateTokens;
+namespace DentalClinic.Application.Features.Identity.Queries.GenerateTokens;
 
 public class GenerateTokenQueryHandler(ILogger<GenerateTokenQueryHandler> logger, IIdentityService identityService, ITokenProvider tokenProvider)
     : IRequestHandler<GenerateTokenQuery, Result<TokenResponse>>

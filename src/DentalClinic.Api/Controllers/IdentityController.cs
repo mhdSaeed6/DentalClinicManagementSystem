@@ -5,19 +5,18 @@ using Asp.Versioning;
 using DentalClinic.Api.Controllers;
 using DentalClinic.Application.Features.Identity;
 using DentalClinic.Application.Features.Identity.Dtos;
+using DentalClinic.Application.Features.Identity.Queries.GenerateTokens;
 using DentalClinic.Application.Features.Identity.Queries.GetUserInfo;
 using DentalClinic.Application.Features.Identity.Queries.RefreshTokens;
-
-using MechanicShop.Application.Features.Identity.Queries.GenerateTokens;
 
 using MediatR;
 
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
-namespace MechanicShop.Api.Controllers;
+namespace DentalClinic.Api.Controllers;
 
-[Route("identity")]
+[Route("api/v{version:apiVersion}/identity")]
 [ApiVersionNeutral]
 public sealed class IdentityController(ISender sender) : ApiController
 {
