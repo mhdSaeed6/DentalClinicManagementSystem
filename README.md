@@ -28,19 +28,22 @@ The solution is structured following **Clean Architecture** and **Domain-Driven 
 ```text
 DentalClinicManagementSystem/
 ├── src/
-│   ├── DentalClinic.Domain/          # Core Business Logic, Entities, Enums, & Domain Rules
-│   ├── DentalClinic.Application/     # CQRS Handlers, DTOs, Behaviors, & Fluent Validation
-│   ├── DentalClinic.Infrastructure/  # EF Core, Persistence, Migrations, & External Services
-│   ├── DentalClinic.Contracts/       # Public Request/Response DTOs
-│   └── DentalClinic.Api/             # Controllers, Middlewares, OpenAPI/Scalar Configs
+│   ├── DentalClinic.Api/                     # Controllers, Middlewares, & Configurations
+│   ├── DentalClinic.Application/             # CQRS Handlers, DTOs, Behaviors, & FluentValidation
+│   ├── DentalClinic.Contracts/               # Public Request/Response DTOs & Contracts
+│   ├── DentalClinic.Domain/                  # Core Entities, Enums, Value Objects, & Business Rules
+│   └── DentalClinic.Infrastructure/          # EF Core Persistence, Migrations, & External Services
 └── tests/
-    ├── DentalClinic.Domain.UnitTests/
-    ├── DentalClinic.Application.UnitTests/
-    └── DentalClinic.Api.IntegrationTests/
+    ├── DentalClinic.Api.IntegrationTests/            # Full HTTP Pipeline Integration Tests
+    ├── DentalClinic.Application.SubcutaneousTests/   # Subcutaneous Testing without HTTP Overhead
+    ├── DentalClinic.Application.UnitTests/           # Command & Query Handler Unit Tests
+    ├── DentalClinic.Domain.UnitTests/                # Domain Logic & Entity Unit Tests
+    └── DentalClinic.Tests.Common/                    # Shared Test Utilities, Builders, & Fixtures
+
 ```
 
-
 ### Applied Patterns & Practices:
+
 * **CQRS Pattern:** Complete separation of Read (Queries) and Write (Commands) paths using `MediatR`.
 * **Validation Pipeline:** Pre-request validation using `FluentValidation` via MediatR Pipeline Behaviors.
 * **Global Exception Handling:** Centralized custom middleware handling business exceptions cleanly without leaking stack traces.
@@ -52,9 +55,9 @@ DentalClinicManagementSystem/
 
 Quality is at the heart of this project. The system includes an extensive suite of automated tests covering all domain rules, application logic, and full HTTP API execution paths.
 
-- **Total Tests Executed:** `380` / `380` **Passed** 🟢
-- **Unit Testing:** Comprehensive test coverage for Domain entities, Value Objects, Mappers, and Application Handlers.
-- **Subcutaneous & Integration Testing:** Full end-to-end HTTP pipeline tests using `WebApplicationFactory` and real SQL Database side-effect assertions for all Controllers.
+* **Total Tests Executed:** `380` / `380` **Passed** 🟢
+* **Unit Testing:** Comprehensive test coverage for Domain entities, Value Objects, Mappers, and Application Handlers.
+* **Subcutaneous & Integration Testing:** Full end-to-end HTTP pipeline tests using `WebApplicationFactory` and real SQL Database side-effect assertions for all Controllers.
 
 ---
 
@@ -63,10 +66,11 @@ Quality is at the heart of this project. The system includes an extensive suite 
 * **Framework:** .NET 10.0 (ASP.NET Core Web API)
 * **ORM:** Entity Framework Core
 * **Database:** Microsoft SQL Server
+* **Containerization:** Docker, Docker Compose
 * **Design Patterns:** CQRS, Clean Architecture, MediatR
 * **Validation:** FluentValidation
-* **Observability:** OpenTelemetry, Prometheus, Serilog
-* **Testing Frameworks:** xUnit, FluentAssertions, WebApplicationFactory
+* **Observability:** OpenTelemetry, Prometheus, Serilog, Seq
+* **Testing Frameworks:** xUnit, WebApplicationFactory
 * **Documentation:** Scalar API Reference, Swagger UI
 
 ---
@@ -74,31 +78,64 @@ Quality is at the heart of this project. The system includes an extensive suite 
 ## 🚀 Getting Started
 
 ### Prerequisites
-* [.NET 10.0 SDK](https://dotnet.microsoft.com/)
-* [SQL Server](https://www.microsoft.com/en-us/sql-server/sql-server-downloads) (or LocalDB)
 
-### Local Setup
+* [.NET 10.0 SDK](https://dotnet.microsoft.com/?utm_source=gemini)
+* [Docker Desktop](https://www.docker.com/products/docker-desktop/?utm_source=gemini) *(Optional for containerized run)*
+
+### Option 1: Running with Docker Compose (Recommended)
+
 1. **Clone the repository:**
-   ```bash
-   git clone [https://github.com/mhdSaeed6/DentalClinicManagementSystem.git](https://github.com/mhdSaeed6/DentalClinicManagementSystem.git)
-   cd DentalClinicManagementSystem
-Update Connection String:
-Set your local SQL Server connection string in src/DentalClinic.Api/appsettings.json.
+```bash
+git clone [https://github.com/mhdSaeed6/DentalClinicManagementSystem.git](https://github.com/mhdSaeed6/DentalClinicManagementSystem.git)
+cd DentalClinicManagementSystem
 
-Run Database Migrations:
-The application automatically initializes and updates the database on startup in the Development environment.
+```
 
-Run the Application:
 
-Bash
+2. **Spin up the full infrastructure (API, SQL Server, Seq, Prometheus):**
+```bash
+docker compose up -d --build
+
+```
+
+
+3. **Access Services:**
+* **Scalar UI:** `http://localhost:5002/scalar/v1`
+* **Swagger UI:** `http://localhost:5002/swagger`
+* **Seq Logs:** `http://localhost:8081`
+* **Prometheus Metrics:** `http://localhost:9090`
+
+
+
+---
+
+### Option 2: Running Locally (.NET CLI)
+
+1. **Clone the repository & navigate:**
+```bash
+git clone [https://github.com/mhdSaeed6/DentalClinicManagementSystem.git](https://github.com/mhdSaeed6/DentalClinicManagementSystem.git)
+cd DentalClinicManagementSystem
+
+```
+
+
+2. **Update Connection String:**
+Set your local SQL Server connection string in `src/DentalClinic.Api/appsettings.json`.
+3. **Run the Application:**
+```bash
 dotnet run --project src/DentalClinic.Api
-Explore API Documentation & Metrics:
 
-Scalar UI: https://localhost:7198/scalar/v1
+```
 
-Swagger UI: https://localhost:7198/swagger
 
-Prometheus Metrics: https://localhost:7198/metrics
+4. **Explore Endpoints:**
+* **Scalar UI:** `https://localhost:7198/scalar/v1`
+* **Swagger UI:** `https://localhost:7198/swagger`
 
-📄 License
-This project is proprietary software. All rights reserved. See LICENSE for details.
+
+
+---
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](https://www.google.com/search?q=LICENSE&utm_source=gemini) file for details.
