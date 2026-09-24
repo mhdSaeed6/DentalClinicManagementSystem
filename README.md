@@ -25,6 +25,7 @@ A production-ready, highly scalable, and fully tested RESTful API built for mana
 
 The solution is structured following **Clean Architecture** and **Domain-Driven Design (DDD)** concepts to strictly separate concerns:
 
+```text
 DentalClinicManagementSystem/
 ├── src/
 │   ├── DentalClinic.Domain/          # Core Business Logic, Entities, Enums, & Domain Rules
@@ -33,9 +34,10 @@ DentalClinicManagementSystem/
 │   ├── DentalClinic.Contracts/       # Public Request/Response DTOs
 │   └── DentalClinic.Api/             # Controllers, Middlewares, OpenAPI/Scalar Configs
 └── tests/
-├── DentalClinic.Domain.UnitTests/
-├── DentalClinic.Application.UnitTests/
-└── DentalClinic.Api.IntegrationTests/
+    ├── DentalClinic.Domain.UnitTests/
+    ├── DentalClinic.Application.UnitTests/
+    └── DentalClinic.Api.IntegrationTests/
+```
 
 
 ### Applied Patterns & Practices:
