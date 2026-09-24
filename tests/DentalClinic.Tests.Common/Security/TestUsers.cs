@@ -5,6 +5,7 @@ namespace DentalClinic.Tests.Common.Security;
 
 public static class TestUsers
 {
+    public const string AdminPassword = "Admin123!";
     private static readonly PasswordHasher<AppUser> _hasher = new();
     public static AppUser Admin => new()
     {

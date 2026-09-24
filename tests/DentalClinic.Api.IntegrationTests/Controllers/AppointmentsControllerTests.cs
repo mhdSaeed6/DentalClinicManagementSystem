@@ -22,18 +22,6 @@ public class AppointmentsControllerTests(WebAppFactory webAppFactory)
 {
     private readonly AppHttpClient _client = webAppFactory.CreateAppHttpClient();
 
-    private async Task EnsureUserExistsAsync()
-    {
-        using var scope = webAppFactory.Services.CreateScope();
-        var userManager = scope.ServiceProvider.GetRequiredService<UserManager<AppUser>>();
-
-        var user = await userManager.FindByIdAsync(TestUsers.Admin.Id);
-        if (user is null)
-        {
-            await userManager.CreateAsync(TestUsers.Admin);
-        }
-    }
-
     // -------------------------------------------------------------------------
     // 1. GET /api/v1.0/appointments
     // -------------------------------------------------------------------------
@@ -470,5 +458,17 @@ public class AppointmentsControllerTests(WebAppFactory webAppFactory)
 
         // Assert
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    private async Task EnsureUserExistsAsync()
+    {
+        using var scope = webAppFactory.Services.CreateScope();
+        var userManager = scope.ServiceProvider.GetRequiredService<UserManager<AppUser>>();
+
+        var user = await userManager.FindByIdAsync(TestUsers.Admin.Id);
+        if (user is null)
+        {
+            await userManager.CreateAsync(TestUsers.Admin);
+        }
     }
 }
