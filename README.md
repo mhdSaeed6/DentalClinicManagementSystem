@@ -138,4 +138,4 @@ dotnet run --project src/DentalClinic.Api
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the [LICENSE](https://www.google.com/search?q=LICENSE&utm_source=gemini) file for details.
+This project is proprietary software. All rights reserved. See `LICENSE` for details.

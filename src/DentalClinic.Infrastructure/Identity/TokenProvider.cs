@@ -72,6 +72,7 @@ public class TokenProvider(IConfiguration configuration, IAppDbContext context) 
             return null;
         }
     }
+
     private async Task<Result<TokenResponse>> CreateAsync(AppUserDto user, CancellationToken ct = default)
     {
         var jwtSettings = _configuration.GetSection("JwtSettings");

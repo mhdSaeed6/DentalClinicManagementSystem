@@ -1,0 +1,86 @@
+services:
+  dentalclinic-api:
+    container_name: dentalclinic-api
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: final
+    ports:
+      - "5002:80"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:80
+      - ConnectionStrings__DefaultConnection=Server=sqlserver,1433;Database=DentalClinic;User Id=sa;Password=YourStrong@Password1;TrustServerCertificate=True;
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://seq:5341/ingest/otlp/v1/traces 
+      - OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+    depends_on:
+      - sqlserver
+      - seq
+    networks:
+      - dentalclinic-net
+    restart: on-failure
+    
+  sqlserver:
+    container_name: dentalclinic-sql
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    environment:
+      - ACCEPT_EULA=Y
+      - SA_PASSWORD=YourStrong@Password1
+    ports:
+      - "1434:1433"
+    volumes:
+      - sqlserver-data:/var/opt/mssql
+    networks:
+      - dentalclinic-net
+    restart: always
+
+  seq:
+    image: datalust/seq:latest
+    container_name: seq
+    volumes:
+      - ./containers/seq:/data
+    environment:
+      - ACCEPT_EULA=Y
+      - SEQ_FIRSTRUN_NOAUTHENTICATION=true
+    networks:
+      - dentalclinic-net
+    ports:
+      - "5342:5341"
+      - "8081:80"
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    volumes:
+      - ./containers/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+    networks:
+      - dentalclinic-net
+    depends_on:
+      - dentalclinic-api
+    restart: unless-stopped
+      
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=YourStrongPwd
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+    networks:
+      - dentalclinic-net
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
+volumes:
+  sqlserver-data: {}
+  grafana-data: {}
+
+networks:
+  dentalclinic-net:
+    driver: bridge
