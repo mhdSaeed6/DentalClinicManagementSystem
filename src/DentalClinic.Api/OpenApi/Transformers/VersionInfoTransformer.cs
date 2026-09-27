@@ -10,7 +10,7 @@ internal sealed class VersionInfoTransformer : IOpenApiDocumentTransformer
         var version = context.DocumentName;
 
         document.Info.Version = version;
-        document.Info.Title = $"MechanicShop API {version}";
+        document.Info.Title = $"Dental Clinic API {version}";
 
         return Task.CompletedTask;
     }

@@ -21,7 +21,7 @@ namespace DentalClinic.Api.Controllers;
 [Route("api/v{version:apiVersion}/appointments")]
 [ApiVersion("1.0")]
 [Authorize]
-public class AppointmentContoller(ISender sender) : ApiController
+public class AppointmentController(ISender sender) : ApiController
 {
     [HttpGet]
     [ProducesResponseType(typeof(PaginatedList<AppointmentDto>), StatusCodes.Status200OK)]
