@@ -15,7 +15,6 @@ using MediatR;
 
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.OutputCaching;
 
 namespace DentalClinic.Api.Controllers;
 
@@ -33,7 +32,6 @@ public class DoctorController(ISender sender) : ApiController
     [EndpointName("GetDoctors")]
     [MapToApiVersion("1.0")]
     [ProducesDefaultResponseType]
-    [OutputCache(Duration = 60)]
     public async Task<IActionResult> GetDoctors([FromQuery] GetPatientsRequest request, CancellationToken ct)
     {
         var query = new GetDoctorsQuery(
@@ -57,7 +55,6 @@ public class DoctorController(ISender sender) : ApiController
     [EndpointName("GetDoctorById")]
     [MapToApiVersion("1.0")]
     [ProducesDefaultResponseType]
-    [OutputCache(Duration = 60)]
     public async Task<IActionResult> GetDoctorById(Guid id, CancellationToken ct)
     {
         var result = await sender.Send(new GetDoctorByIdQuery(id), ct);

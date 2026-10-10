@@ -1,0 +1,50 @@
+﻿@page "/Error"
+@using System.Diagnostics
+@layout MainLayout
+@inject ClinicSessionState Session
+@inject NavigationManager Nav
+
+<PageTitle>@Session.T("Something went wrong", "حدث خطأ ما")</PageTitle>
+
+<div class="card mt-4">
+    <EmptyState Icon="alert"
+                Title="@Session.T("An unexpected error occurred", "حدث خطأ غير متوقع")"
+                Message="@Session.T("Please try again. If the problem persists, contact your administrator.",
+                                 "يرجى المحاولة مرة أخرى. إذا استمرت المشكلة، تواصل مع المسؤول.")">
+        <ActionContent>
+            <div class="flex gap-2" style="justify-content:center">
+                <button type="button" class="btn btn-outline" @onclick='() => Nav.NavigateTo("")'>
+                    <ClinicIcon Name="dashboard" Class="sm" />
+                    @Session.T("Dashboard", "لوحة التحكم")
+                </button>
+                <button type="button" class="btn btn-primary" @onclick="Reload">
+                    <ClinicIcon Name="refresh" Class="sm" />
+                    @Session.T("Reload page", "إعادة تحميل الصفحة")
+                </button>
+            </div>
+        </ActionContent>
+    </EmptyState>
+
+    @if (ShowRequestId)
+    {
+        <div class="text-center pb-3">
+            <span class="badge muted no-dot mono">@Session.T("Request ID", "معرّف الطلب"): @RequestId</span>
+        </div>
+    }
+</div>
+
+@code {
+    [CascadingParameter]
+    private HttpContext? HttpContext { get; set; }
+
+    private string? RequestId { get; set; }
+
+    private bool ShowRequestId => !string.IsNullOrEmpty(RequestId);
+
+    protected override void OnInitialized()
+    {
+        RequestId = Activity.Current?.Id ?? HttpContext?.TraceIdentifier;
+    }
+
+    private void Reload() => Nav.NavigateTo(Nav.Uri, forceLoad: true);
+}

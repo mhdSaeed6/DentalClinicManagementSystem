@@ -12,7 +12,6 @@ using MediatR;
 
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.OutputCaching;
 
 namespace DentalClinic.Api.Controllers;
 
@@ -30,7 +29,6 @@ public class InvoiceController(ISender sender) : ApiController
     [EndpointName("GetInvoices")]
     [MapToApiVersion("1.0")]
     [ProducesDefaultResponseType]
-    [OutputCache(Duration = 60)]
     public async Task<IActionResult> GetInvoices([FromQuery] GetInvoicesRequest request, CancellationToken ct)
     {
         var query = new GetInvoicesQuery(
@@ -55,7 +53,6 @@ public class InvoiceController(ISender sender) : ApiController
     [EndpointName("GetInvoiceById")]
     [MapToApiVersion("1.0")]
     [ProducesDefaultResponseType]
-    [OutputCache(Duration = 60)]
     public async Task<IActionResult> GetInvoiceById(Guid id, CancellationToken ct)
     {
         var result = await sender.Send(new GetInvoiceByIdQuery(id), ct);

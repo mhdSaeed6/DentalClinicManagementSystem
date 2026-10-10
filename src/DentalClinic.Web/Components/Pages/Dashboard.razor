@@ -1,0 +1,362 @@
+@page "/"
+@inject ApiClient Api
+@inject ClinicSessionState Session
+@inject NotificationService Notifier
+@inject NavigationManager Nav
+
+<PageTitle>@Session.T("Dashboard", "لوحة التحكم") · @Session.T("Al Noor Dental", "عيادة النور")</PageTitle>
+
+@if (_loading)
+{
+    <div class="stat-grid">
+        @for (var i = 0; i < 4; i++)
+        {
+            <div class="skeleton stat"></div>
+        }
+    </div>
+    <div class="grid grid-2-1">
+        <div class="card"><div class="card-body">
+            <div class="skeleton title"></div>
+            @for (var i = 0; i < 5; i++)
+            {
+                <div class="skeleton row"></div>
+            }
+        </div></div>
+        <div class="card"><div class="card-body">
+            <div class="skeleton title"></div>
+            @for (var i = 0; i < 4; i++)
+            {
+                <div class="skeleton row"></div>
+            }
+        </div></div>
+    </div>
+}
+else if (_error is not null)
+{
+    <div class="card">
+        <EmptyState Icon="alert" Title="@Session.T("Could not load the dashboard", "تعذّر تحميل لوحة التحكم")"
+                    Message="@_error">
+            <ActionContent>
+                <button type="button" class="btn btn-primary" @onclick="LoadAsync">
+                    <ClinicIcon Name="refresh" Class="sm" />
+                    <span>@Session.T("Try again", "إعادة المحاولة")</span>
+                </button>
+            </ActionContent>
+        </EmptyState>
+    </div>
+}
+else
+{
+    <div class="card mb-3" style="overflow:hidden">
+        <div class="card-body" style="display:flex;align-items:center;gap:24px;flex-wrap:wrap;
+                    background:linear-gradient(120deg, var(--brand-soft), transparent)">
+            <div>
+                <div class="fs-sm text-muted">@TodayLong</div>
+                <h1 style="margin-top:4px">@Greeting, @DisplayName 👋</h1>
+                <p class="text-muted mt-1">@Session.T("Here is what is happening in your clinic today.", "إليك ما يحدث في عيادتك اليوم.")</p>
+            </div>
+            <div class="spacer" style="flex:1"></div>
+            <div class="flex gap-2 flex-wrap">
+                <button type="button" class="btn btn-outline" @onclick='() => Nav.NavigateTo("patients?new=1")'>
+                    <ClinicIcon Name="plus" Class="sm" />
+                    <span>@Session.T("New patient", "مريض جديد")</span>
+                </button>
+                <button type="button" class="btn btn-primary" @onclick='() => Nav.NavigateTo("appointments?new=1")'>
+                    <ClinicIcon Name="plus" Class="sm" />
+                    <span>@Session.T("New appointment", "موعد جديد")</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="stat-grid">
+        <div class="stat teal">
+            <div class="stat-icon"><ClinicIcon Name="users" /></div>
+            <div class="stat-value">@_patientCount</div>
+            <div class="stat-label">@Session.T("Total patients", "إجمالي المرضى")</div>
+        </div>
+        <div class="stat blue">
+            <div class="stat-icon"><ClinicIcon Name="calendar" /></div>
+            <div class="stat-value">@_todayCount</div>
+            <div class="stat-label">@Session.T("Appointments today", "مواعيد اليوم")</div>
+            <div class="stat-trend up"><ClinicIcon Name="activity" Class="sm" /> @_scheduledCount @Session.T("scheduled", "محجوز")</div>
+        </div>
+        <div class="stat green">
+            <div class="stat-icon"><ClinicIcon Name="wallet" /></div>
+            <div class="stat-value">@ClinicFormatting.Money(_collected)</div>
+            <div class="stat-label">@Session.T("Collected revenue", "الإيرادات المحصّلة")</div>
+        </div>
+        <div class="stat amber">
+            <div class="stat-icon"><ClinicIcon Name="invoice" /></div>
+            <div class="stat-value">@ClinicFormatting.Money(_outstanding)</div>
+            <div class="stat-label">@Session.T("Outstanding balance", "الأرصدة المستحقة")</div>
+            <div class="stat-trend @(_outstanding > 0 ? "down" : "up")"><ClinicIcon Name="alert" Class="sm" /> @_unpaidInvoices @Session.T("open invoices", "فواتير مفتوحة")</div>
+        </div>
+    </div>
+
+    <div class="grid grid-2-1">
+        <div class="card">
+            <div class="card-header">
+                <div>
+                    <div class="card-title">@Session.T("Upcoming appointments", "المواعيد القادمة")</div>
+                    <div class="card-subtitle">@Session.T("Next scheduled visits", "الزيارات المجدولة التالية")</div>
+                </div>
+                <div class="spacer"></div>
+                <button type="button" class="btn btn-ghost btn-sm" @onclick='() => Nav.NavigateTo("appointments")'>
+                    @Session.T("View all", "عرض الكل") <ClinicIcon Name="chevron-right" Class="sm" />
+                </button>
+            </div>
+            <div class="card-body">
+                @if (_upcoming.Count == 0)
+                {
+                    <EmptyState Icon="calendar" Title="@Session.T("No upcoming appointments", "لا توجد مواعيد قادمة")"
+                                Message="@Session.T("Schedule a visit to see it here.", "احجز موعداً ليظهر هنا.")" />
+                }
+                else
+                {
+                    @foreach (var appt in _upcoming)
+                    {
+                        <div class="list-row">
+                            <Avatar Name="@PatientName(appt.PatientId)" />
+                            <div class="list-body">
+                                <div class="list-title">@PatientName(appt.PatientId)</div>
+                                <div class="list-sub">
+                                    @ClinicFormatting.DateTimeLabel(appt.ScheduledDateTime) ·
+                                    @ServiceName(appt.ServiceId) · @DoctorName(appt.DoctorId)
+                                </div>
+                            </div>
+                            <AppointmentStatusBadge Value="appt.Status" />
+                        </div>
+                    }
+                }
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <div class="card-title">@Session.T("Appointment mix", "توزيع المواعيد")</div>
+            </div>
+            <div class="card-body">
+                @foreach (var item in StatusBreakdown())
+                {
+                    <div class="mb-3">
+                        <div class="flex-between mb-1">
+                            <span class="fs-sm fw-600">@item.Label</span>
+                            <span class="fs-sm text-muted mono">@item.Count</span>
+                        </div>
+                        <div style="height:8px;border-radius:999px;background:var(--surface-3);overflow:hidden">
+                            <div style="height:100%;width:@item.Percent%;border-radius:999px;background:@item.Color"></div>
+                        </div>
+                    </div>
+                }
+
+                <div class="divider"></div>
+
+                <div class="flex-between mb-2">
+                    <span class="text-muted fs-sm">@Session.T("Total appointments", "إجمالي المواعيد")</span>
+                    <span class="fw-700 mono">@_appointments.Count</span>
+                </div>
+                <div class="flex-between mb-2">
+                    <span class="text-muted fs-sm">@Session.T("Active doctors", "الأطباء النشطون")</span>
+                    <span class="fw-700 mono">@_doctors.Count</span>
+                </div>
+                <div class="flex-between">
+                    <span class="text-muted fs-sm">@Session.T("Services offered", "الخدمات المتاحة")</span>
+                    <span class="fw-700 mono">@_services.Count</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="grid grid-2-1 mt-3">
+        <div class="card">
+            <div class="card-header">
+                <div class="card-title">@Session.T("Recent invoices", "أحدث الفواتير")</div>
+                <div class="spacer"></div>
+                <button type="button" class="btn btn-ghost btn-sm" @onclick='() => Nav.NavigateTo("invoices")'>
+                    @Session.T("Billing", "الفوترة") <ClinicIcon Name="chevron-right" Class="sm" />
+                </button>
+            </div>
+            @if (_invoices.Count == 0)
+            {
+                <EmptyState Icon="invoice" Title="@Session.T("No invoices yet", "لا توجد فواتير بعد")" />
+            }
+            else
+            {
+                <div class="table-wrap">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>@Session.T("Patient", "المريض")</th>
+                                <th>@Session.T("Total", "الإجمالي")</th>
+                                <th>@Session.T("Balance", "المتبقي")</th>
+                                <th>@Session.T("Status", "الحالة")</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var invoice in _invoices.Take(5))
+                            {
+                                <tr>
+                                    <td>
+                                        <div class="cell-person">
+                                            <Avatar Name="@PatientName(invoice.PatientId)" Size="sm" />
+                                            <span class="cell-main">@PatientName(invoice.PatientId)</span>
+                                        </div>
+                                    </td>
+                                    <td class="mono">@ClinicFormatting.Money(invoice.TotalAmount)</td>
+                                    <td class="mono fw-600">@ClinicFormatting.Money(invoice.RemainingAmount)</td>
+                                    <td><PaymentStatusBadge Value="invoice.Status" /></td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <div class="card-title">@Session.T("Newest patients", "أحدث المرضى")</div>
+            </div>
+            <div class="card-body">
+                @if (_patients.Count == 0)
+                {
+                    <EmptyState Icon="users" Title="@Session.T("No patients yet", "لا يوجد مرضى بعد")" />
+                }
+                else
+                {
+                    @foreach (var patient in _patients.Take(5))
+                    {
+                        <div class="list-row" style="cursor:pointer" @onclick='() => Nav.NavigateTo($"patients/{patient.Id}")'>
+                            <Avatar Name="@FullName(patient.FirstName, patient.LastName)" />
+                            <div class="list-body">
+                                <div class="list-title">@FullName(patient.FirstName, patient.LastName)</div>
+                                <div class="list-sub">@ClinicFormatting.Age(patient.DateOfBirth) @Session.T("yrs", "سنة") · @patient.PrimaryPhone</div>
+                            </div>
+                            <ClinicIcon Name="chevron-right" Class="sm text-soft" />
+                        </div>
+                    }
+                }
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private bool _loading = true;
+    private string? _error;
+
+    private List<PatientDto> _patients = [];
+    private List<DoctorDto> _doctors = [];
+    private List<DentalServiceDto> _services = [];
+    private List<AppointmentDto> _appointments = [];
+    private List<InvoiceDto> _invoices = [];
+    private int _patientCount;
+    private int _todayCount;
+    private int _scheduledCount;
+    private int _unpaidInvoices;
+    private decimal _collected;
+    private decimal _outstanding;
+    private List<AppointmentDto> _upcoming = [];
+
+    private string DisplayName => string.IsNullOrWhiteSpace(Session.UserName) ? "there" : Session.UserName;
+
+    private string Greeting => IsRtl ? "مرحباً" : "Good " + PartOfDay;
+
+    private string PartOfDay => DateTime.Now.Hour switch
+    {
+        < 12 => "morning",
+        < 17 => "afternoon",
+        _ => "evening",
+    };
+
+    private bool IsRtl => Session.IsRtl;
+
+    private string TodayLong => DateTime.Today.ToString("dddd, dd MMMM yyyy", System.Globalization.CultureInfo.InvariantCulture);
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+        StateHasChanged();
+
+        try
+        {
+            var patientsTask = Api.GetPatientsAsync(1, 100, null);
+            var doctorsTask = Api.GetDoctorsAsync(1, 100, null);
+            var servicesTask = Api.GetServicesAsync(1, 100, null);
+            var appointmentsTask = Api.GetAppointmentsAsync(1, 100);
+            var invoicesTask = Api.GetInvoicesAsync(1, 100);
+            await Task.WhenAll(patientsTask, doctorsTask, servicesTask, appointmentsTask, invoicesTask);
+
+            var patients = await patientsTask;
+            var doctors = await doctorsTask;
+            var services = await servicesTask;
+            var appointments = await appointmentsTask;
+            var invoices = await invoicesTask;
+
+            _patients = patients.Items ?? [];
+            _doctors = doctors.Items ?? [];
+            _services = services.Items ?? [];
+            _appointments = appointments.Items ?? [];
+            _invoices = invoices.Items ?? [];
+
+            _patientCount = patients.TotalCount;
+            _todayCount = _appointments.Count(a => a.ScheduledDateTime.Date == DateTime.Today);
+            _scheduledCount = _appointments.Count(a => a.Status == AppointmentStatus.Scheduled);
+            _collected = _invoices.Sum(i => i.PaidAmount);
+            _outstanding = _invoices.Sum(i => i.RemainingAmount);
+            _unpaidInvoices = _invoices.Count(i => i.Status != PaymentStatus.Paid);
+
+            var now = DateTime.Now;
+            _upcoming = _appointments
+                .Where(a => a.Status == AppointmentStatus.Scheduled && a.ScheduledDateTime >= now.AddHours(-1))
+                .OrderBy(a => a.ScheduledDateTime)
+                .Take(6)
+                .ToList();
+        }
+        catch (ApiException ex)
+        {
+            _error = ex.Message;
+        }
+        catch (Exception)
+        {
+            _error = Session.T("Unable to reach the clinic server.", "تعذّر الاتصال بالخادم.");
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private string FullName(string? first, string? last) => ClinicFormatting.FullName(first, last);
+
+    private string PatientName(Guid id) =>
+        _patients.FirstOrDefault(p => p.Id == id) is { } patient
+            ? FullName(patient.FirstName, patient.LastName)
+            : Session.T("Unknown patient", "مريض غير معروف");
+
+    private string DoctorName(Guid id) =>
+        _doctors.FirstOrDefault(d => d.Id == id) is { } doctor
+            ? FullName(doctor.FirstName, doctor.LastName)
+            : Session.T("Unassigned", "غير مُعيّن");
+
+    private string ServiceName(Guid id) =>
+        _services.FirstOrDefault(s => s.Id == id)?.Name ?? Session.T("Service", "خدمة");
+
+    private IEnumerable<(string Label, int Count, double Percent, string Color)> StatusBreakdown()
+    {
+        var total = Math.Max(_appointments.Count, 1);
+        var rows = new[]
+        {
+            (Label: Session.T("Scheduled", "محجوز"), Count: _appointments.Count(a => a.Status == AppointmentStatus.Scheduled), Color: "var(--info)"),
+            (Label: Session.T("Completed", "مكتمل"), Count: _appointments.Count(a => a.Status == AppointmentStatus.Completed), Color: "var(--success)"),
+            (Label: Session.T("Cancelled", "ملغى"), Count: _appointments.Count(a => a.Status == AppointmentStatus.Cancelled), Color: "var(--text-soft)"),
+            (Label: Session.T("No-show", "لم يحضر"), Count: _appointments.Count(a => a.Status == AppointmentStatus.NoShow), Color: "var(--warning)"),
+        };
+
+        return rows.Select(r => (r.Label, r.Count, Percent: r.Count * 100.0 / total, r.Color));
+    }
+}

@@ -1,0 +1,18 @@
+@namespace DentalClinic.Web.Components.Shared
+@implements IDisposable
+@inject NotificationService Notifier
+
+<div class="toast-host" aria-live="polite">
+    @foreach (var message in Notifier.Messages)
+    {
+        <ToastItem @key="message.Id" Message="message" />
+    }
+</div>
+
+@code {
+    protected override void OnInitialized() => Notifier.Changed += HandleChanged;
+
+    private void HandleChanged() => _ = InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Notifier.Changed -= HandleChanged;
+}

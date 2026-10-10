@@ -1,0 +1,30 @@
+@namespace DentalClinic.Web.Components.Shared
+
+<div class="page-head">
+    <div>
+        @if (!string.IsNullOrWhiteSpace(Eyebrow))
+        {
+            <div class="breadcrumb">@Eyebrow</div>
+        }
+        <div class="page-title">@Title</div>
+        @if (!string.IsNullOrWhiteSpace(Subtitle))
+        {
+            <div class="page-subtitle">@Subtitle</div>
+        }
+    </div>
+    <div class="spacer"></div>
+    @if (Actions is not null)
+    {
+        <div class="actions">@Actions</div>
+    }
+</div>
+
+@code {
+    [Parameter] public string Title { get; set; } = string.Empty;
+
+    [Parameter] public string? Subtitle { get; set; }
+
+    [Parameter] public string? Eyebrow { get; set; }
+
+    [Parameter] public RenderFragment? Actions { get; set; }
+}

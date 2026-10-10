@@ -1,0 +1,53 @@
+@namespace DentalClinic.Web.Components.Shared
+
+@if (IsOpen)
+{
+    <div class="overlay" @onclick="HandleBackdrop">
+        <div class="modal @SizeClass" @onclick:stopPropagation="true" role="dialog" aria-modal="true">
+            <div class="modal-head">
+                <div>
+                    <div class="modal-title">@Title</div>
+                    @if (!string.IsNullOrWhiteSpace(Subtitle))
+                    {
+                        <div class="modal-sub">@Subtitle</div>
+                    }
+                </div>
+                <button type="button" class="icon-btn close" @onclick="OnClose" aria-label="Close">
+                    <ClinicIcon Name="x" />
+                </button>
+            </div>
+            <div class="modal-body">
+                @ChildContent
+            </div>
+            @if (Footer is not null)
+            {
+                <div class="modal-foot">
+                    @Footer
+                </div>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool IsOpen { get; set; }
+
+    [Parameter] public string? Title { get; set; }
+
+    [Parameter] public string? Subtitle { get; set; }
+
+    /// <summary>Optional size modifier: "lg" or "xl".</summary>
+    [Parameter] public string? Size { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter] public RenderFragment? Footer { get; set; }
+
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    [Parameter] public bool CloseOnBackdrop { get; set; } = true;
+
+    private string SizeClass => Size ?? string.Empty;
+
+    private Task HandleBackdrop() => CloseOnBackdrop ? OnClose.InvokeAsync() : Task.CompletedTask;
+}

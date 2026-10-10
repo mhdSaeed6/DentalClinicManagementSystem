@@ -1,0 +1,203 @@
+﻿@inherits LayoutComponentBase
+@implements IDisposable
+@inject ClinicSessionState Session
+@inject NavigationManager Nav
+
+<div class="app-root" dir="@Session.Dir" data-theme="@Session.ThemeName"
+     data-collapsed="@Session.SidebarCollapsed.ToString().ToLowerInvariant()"
+     data-mobile-nav="@Session.MobileNavOpen.ToString().ToLowerInvariant()">
+
+    <ToastHost />
+
+    @if (!Session.IsAuthenticated)
+    {
+        <div class="page-loading">
+            <div class="flex-center gap-2 text-muted">
+                <span class="spinner"></span>
+                <span>@Session.T("Preparing your workspace…", "جارٍ تجهيز مساحة العمل…")</span>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="nav-backdrop" @onclick="Session.CloseMobileNav"></div>
+
+        <div class="app-shell">
+            <aside class="sidebar">
+                <div class="sidebar-brand">
+                    <div class="brand-logo"><ClinicIcon Name="tooth" /></div>
+                    <div class="brand-text">
+                        <strong>@Session.T("Al Noor Dental", "عيادة النور")</strong>
+                        <span>@Session.T("Clinic Suite", "نظام العيادة")</span>
+                    </div>
+                </div>
+
+                <nav style="display:flex;flex-direction:column;gap:2px">
+                    <div class="nav-group-label">@Session.T("Overview", "نظرة عامة")</div>
+                    <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
+                        <ClinicIcon Name="dashboard" />
+                        <span class="nav-label">@Session.T("Dashboard", "لوحة التحكم")</span>
+                    </NavLink>
+
+                    <div class="nav-group-label">@Session.T("Front desk", "الاستقبال")</div>
+                    <NavLink class="nav-link" href="appointments">
+                        <ClinicIcon Name="calendar" />
+                        <span class="nav-label">@Session.T("Appointments", "المواعيد")</span>
+                    </NavLink>
+                    <NavLink class="nav-link" href="patients">
+                        <ClinicIcon Name="users" />
+                        <span class="nav-label">@Session.T("Patients", "المرضى")</span>
+                    </NavLink>
+
+                    <div class="nav-group-label">@Session.T("Practice", "العيادة")</div>
+                    <NavLink class="nav-link" href="doctors">
+                        <ClinicIcon Name="doctor" />
+                        <span class="nav-label">@Session.T("Doctors", "الأطباء")</span>
+                    </NavLink>
+                    <NavLink class="nav-link" href="services">
+                        <ClinicIcon Name="services" />
+                        <span class="nav-label">@Session.T("Services", "الخدمات")</span>
+                    </NavLink>
+                    <NavLink class="nav-link" href="treatments">
+                        <ClinicIcon Name="clipboard" />
+                        <span class="nav-label">@Session.T("Treatments", "العلاجات")</span>
+                    </NavLink>
+
+                    <div class="nav-group-label">@Session.T("Finance", "المالية")</div>
+                    <NavLink class="nav-link" href="invoices">
+                        <ClinicIcon Name="invoice" />
+                        <span class="nav-label">@Session.T("Billing", "الفوترة")</span>
+                    </NavLink>
+
+                    <div class="nav-group-label">@Session.T("System", "النظام")</div>
+                    <NavLink class="nav-link" href="settings">
+                        <ClinicIcon Name="settings" />
+                        <span class="nav-label">@Session.T("Settings", "الإعدادات")</span>
+                    </NavLink>
+                </nav>
+
+                <div class="sidebar-footer">
+                    <button type="button" class="nav-link" @onclick="Session.ToggleSidebar">
+                        <ClinicIcon Name="panel" />
+                        <span class="nav-label">@Session.T("Collapse menu", "طي القائمة")</span>
+                    </button>
+                </div>
+            </aside>
+
+            <div class="main-area">
+                <header class="topbar">
+                    <button type="button" class="icon-btn mobile-only"
+                            @onclick="Session.ToggleMobileNav" aria-label="Menu">
+                        <ClinicIcon Name="menu" />
+                    </button>
+
+                    <div class="topbar-search">
+                        <ClinicIcon Name="search" Class="sm" />
+                        <input type="search" placeholder="@Session.T("Search patients, appointments…", "ابحث عن مريض، موعد…")"
+                               @bind="_search" @bind:event="oninput" @onkeydown="OnSearchKeyDown" />
+                    </div>
+
+                    <div class="topbar-actions">
+                        <button type="button" class="icon-btn" @onclick="Session.ToggleLanguage"
+                                title="@Session.T("Switch language", "تغيير اللغة")">
+                            <ClinicIcon Name="globe" Class="sm" />
+                        </button>
+                        <button type="button" class="icon-btn" @onclick="Session.ToggleTheme"
+                                title="@Session.T("Toggle theme", "تبديل المظهر")">
+                            <ClinicIcon Name="@(Session.ThemeName == "dark" ? "sun" : "moon")" Class="sm" />
+                        </button>
+                        <button type="button" class="icon-btn" title="@Session.T("Notifications", "الإشعارات")">
+                            <ClinicIcon Name="bell" Class="sm" />
+                        </button>
+
+                        <div style="position:relative">
+                            <button type="button" class="user-chip" @onclick="ToggleUserMenu">
+                                <Avatar Name="@DisplayName" Size="sm" />
+                                <div class="user-meta">
+                                    <strong>@DisplayName</strong>
+                                    <span>@RoleLabel</span>
+                                </div>
+                                <ClinicIcon Name="chevron-down" Class="sm" />
+                            </button>
+
+                            @if (_userMenuOpen)
+                            {
+                                <div style="position:fixed;inset:0;z-index:39" @onclick="CloseUserMenu"></div>
+                                <div class="card" style="position:absolute;inset-inline-end:0;top:52px;width:240px;z-index:40;padding:8px">
+                                    <div style="padding:12px 12px 14px;border-bottom:1px solid var(--border)">
+                                        <div class="fw-700">@DisplayName</div>
+                                        <div class="fs-xs text-muted">@Session.UserEmail</div>
+                                    </div>
+                                    <a class="nav-link" href="settings" style="color:var(--text)" @onclick="CloseUserMenu">
+                                        <ClinicIcon Name="settings" Class="sm" />
+                                        <span class="nav-label">@Session.T("Settings", "الإعدادات")</span>
+                                    </a>
+                                    <button type="button" class="nav-link" style="color:var(--danger)" @onclick="SignOut">
+                                        <ClinicIcon Name="logout" Class="sm" />
+                                        <span class="nav-label">@Session.T("Sign out", "تسجيل الخروج")</span>
+                                    </button>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </header>
+
+                <main class="content">
+                    @Body
+                </main>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private string _search = string.Empty;
+    private bool _userMenuOpen;
+
+    private string DisplayName => string.IsNullOrWhiteSpace(Session.UserName)
+        ? Session.T("Clinic user", "مستخدم العيادة")
+        : Session.UserName;
+
+    private string RoleLabel => Session.Role switch
+    {
+        StaffRole.Admin => Session.T("Administrator", "مدير"),
+        StaffRole.Doctor => Session.T("Doctor", "طبيب"),
+        StaffRole.Receptionist => Session.T("Receptionist", "موظف استقبال"),
+        _ => Session.T("Staff", "طاقم"),
+    };
+
+    protected override void OnInitialized() => Session.Changed += HandleChanged;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !Session.IsAuthenticated)
+        {
+            Nav.NavigateTo("login", replace: true);
+        }
+
+        await Task.CompletedTask;
+    }
+
+    private void HandleChanged() => _ = InvokeAsync(StateHasChanged);
+
+    private void ToggleUserMenu() => _userMenuOpen = !_userMenuOpen;
+
+    private void CloseUserMenu() => _userMenuOpen = false;
+
+    private void SignOut()
+    {
+        _userMenuOpen = false;
+        Session.SignOut();
+        Nav.NavigateTo("login", replace: true);
+    }
+
+    private void OnSearchKeyDown(KeyboardEventArgs args)
+    {
+        if (args.Key == "Enter" && !string.IsNullOrWhiteSpace(_search))
+        {
+            Nav.NavigateTo($"patients?q={Uri.EscapeDataString(_search)}");
+        }
+    }
+
+    public void Dispose() => Session.Changed -= HandleChanged;
+}

@@ -1,0 +1,10 @@
+@namespace DentalClinic.Web.Components.Shared
+@inject ClinicSessionState Session
+
+<span class="badge @ClinicFormatting.StatusCss(Value)">
+    @ClinicFormatting.StatusLabel(Value, Session.IsRtl)
+</span>
+
+@code {
+    [Parameter] public AppointmentStatus Value { get; set; }
+}

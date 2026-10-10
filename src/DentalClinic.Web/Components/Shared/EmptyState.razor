@@ -1,0 +1,26 @@
+@namespace DentalClinic.Web.Components.Shared
+
+<div class="empty">
+    <div class="empty-icon">
+        <ClinicIcon Name="@Icon" Class="xl" />
+    </div>
+    <h3>@Title</h3>
+    @if (!string.IsNullOrWhiteSpace(Message))
+    {
+        <p>@Message</p>
+    }
+    @if (ActionContent is not null)
+    {
+        @ActionContent
+    }
+</div>
+
+@code {
+    [Parameter] public string Icon { get; set; } = "info";
+
+    [Parameter] public string Title { get; set; } = "Nothing here yet";
+
+    [Parameter] public string? Message { get; set; }
+
+    [Parameter] public RenderFragment? ActionContent { get; set; }
+}

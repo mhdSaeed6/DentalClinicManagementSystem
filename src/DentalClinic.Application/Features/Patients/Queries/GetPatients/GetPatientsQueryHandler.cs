@@ -41,6 +41,7 @@ public class GetPatientsQueryHandler(IAppDbContext context) : IRequestHandler<Ge
         {
             Items = dtos,
             TotalCount = totalCount,
+            TotalPages = request.PageSize > 0 ? (int)Math.Ceiling(totalCount / (double)request.PageSize) : 0,
             PageNumber = request.PageNumber,
             PageSize = request.PageSize
         };

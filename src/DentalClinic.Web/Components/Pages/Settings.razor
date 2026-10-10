@@ -1,0 +1,163 @@
+@page "/settings"
+@inject ClinicSessionState Session
+@inject NotificationService Notifier
+@inject NavigationManager Nav
+@inject IConfiguration Config
+
+<PageTitle>@Session.T("Settings", "الإعدادات") · @Session.T("Al Noor Dental", "عيادة النور")</PageTitle>
+
+<PageHeader Title="@Session.T("Settings", "الإعدادات")"
+            Subtitle="@Session.T("Manage your profile, appearance and session.", "إدارة ملفك الشخصي والمظهر والجلسة.")" />
+
+<div class="grid grid-2-1">
+    <div>
+        <div class="card mb-3">
+            <div class="card-header">
+                <div class="card-title">@Session.T("Profile", "الملف الشخصي")</div>
+            </div>
+            <div class="card-body">
+                <div class="flex gap-3" style="align-items:center">
+                    <Avatar Name="@Session.UserName" Size="lg" />
+                    <div>
+                        <h2>@Session.UserName</h2>
+                        <div class="text-muted fs-sm">@Session.UserEmail</div>
+                        <div class="flex gap-1 flex-wrap mt-2">
+                            @foreach (var role in Session.Roles)
+                            {
+                                <span class="badge brand no-dot"><ClinicIcon Name="shield" Class="sm" /> @role</span>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card mb-3">
+            <div class="card-header">
+                <div class="card-title">@Session.T("Preferences", "التفضيلات")</div>
+            </div>
+            <div class="card-body">
+                <div class="field">
+                    <label class="label">@Session.T("Language", "اللغة")</label>
+                    <div class="flex gap-2">
+                        <button type="button" class="chip @(Session.Language == AppLanguage.English ? "active" : "")"
+                                @onclick="() => Session.SetLanguage(AppLanguage.English)">
+                            English
+                        </button>
+                        <button type="button" class="chip @(Session.IsRtl ? "active" : "")"
+                                @onclick="() => Session.SetLanguage(AppLanguage.Arabic)">
+                            العربية
+                        </button>
+                    </div>
+                </div>
+
+                <div class="field">
+                    <label class="label">@Session.T("Appearance", "المظهر")</label>
+                    <div class="flex gap-2">
+                        <button type="button" class="chip @(Session.ThemeName == "light" ? "active" : "")" @onclick="UseLight">
+                            <ClinicIcon Name="sun" Class="sm" /> @Session.T("Light", "فاتح")
+                        </button>
+                        <button type="button" class="chip @(Session.ThemeName == "dark" ? "active" : "")" @onclick="UseDark">
+                            <ClinicIcon Name="moon" Class="sm" /> @Session.T("Dark", "داكن")
+                        </button>
+                    </div>
+                </div>
+
+                <div class="field" style="margin-bottom:0">
+                    <label class="label">@Session.T("Navigation", "التنقل")</label>
+                    <label class="check">
+                        <input type="checkbox" checked="@Session.SidebarCollapsed" @onchange="ToggleSidebar" />
+                        <span>@Session.T("Start with the sidebar collapsed", "بدء القائمة مطوية")</span>
+                    </label>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <div class="card-title">@Session.T("About", "حول")</div>
+            </div>
+            <div class="card-body">
+                <dl class="kv">
+                    <dt>@Session.T("Application", "التطبيق")</dt>
+                    <dd>Al Noor Dental Clinic Suite</dd>
+                    <dt>@Session.T("API endpoint", "نقطة الاتصال بالـ API")</dt>
+                    <dd class="mono">@(Config["ApiBaseUrl"] ?? "http://localhost:5004")</dd>
+                    <dt>@Session.T("Front-end", "الواجهة الأمامية")</dt>
+                    <dd>Blazor Web App · .NET 10</dd>
+                </dl>
+            </div>
+        </div>
+    </div>
+
+    <div>
+        <div class="card mb-3">
+            <div class="card-header">
+                <div class="card-title">@Session.T("Session", "الجلسة")</div>
+            </div>
+            <div class="card-body">
+                <dl class="kv">
+                    <dt>@Session.T("Signed in as", "مسجّل الدخول باسم")</dt>
+                    <dd>@Session.UserEmail</dd>
+                    <dt>@Session.T("Role", "الصلاحية")</dt>
+                    <dd>@Session.Roles.FirstOrDefault()</dd>
+                    <dt>@Session.T("Token expires", "انتهاء الرمز")</dt>
+                    <dd>@(Session.ExpiresOnUtc == default ? "—" : Session.ExpiresOnUtc.ToLocalTime().ToString("dd MMM yyyy · HH:mm"))</dd>
+                </dl>
+                <button type="button" class="btn btn-danger-soft btn-block" @onclick="SignOut">
+                    <ClinicIcon Name="logout" Class="sm" />
+                    <span>@Session.T("Sign out", "تسجيل الخروج")</span>
+                </button>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <div class="card-title">@Session.T("Keyboard shortcuts", "اختصارات لوحة المفاتيح")</div>
+            </div>
+            <div class="card-body">
+                <div class="flex-between mb-2">
+                    <span class="text-muted fs-sm">@Session.T("Search", "بحث")</span>
+                    <span class="badge muted no-dot mono">/</span>
+                </div>
+                <div class="flex-between mb-2">
+                    <span class="text-muted fs-sm">@Session.T("Toggle theme", "تبديل المظهر")</span>
+                    <span class="badge muted no-dot mono">T</span>
+                </div>
+                <div class="flex-between">
+                    <span class="text-muted fs-sm">@Session.T("Toggle language", "تبديل اللغة")</span>
+                    <span class="badge muted no-dot mono">L</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private void UseLight()
+    {
+        if (Session.ThemeName != "light")
+        {
+            Session.ToggleTheme();
+        }
+    }
+
+    private void UseDark()
+    {
+        if (Session.ThemeName != "dark")
+        {
+            Session.ToggleTheme();
+        }
+    }
+
+    private void ToggleSidebar()
+    {
+        Session.ToggleSidebar();
+    }
+
+    private void SignOut()
+    {
+        Session.SignOut();
+        Nav.NavigateTo("login", replace: true);
+    }
+}

@@ -1,0 +1,418 @@
+@page "/invoices"
+@inject ApiClient Api
+@inject ClinicSessionState Session
+@inject NotificationService Notifier
+
+<PageTitle>@Session.T("Billing", "الفوترة") · @Session.T("Al Noor Dental", "عيادة النور")</PageTitle>
+
+<PageHeader Title="@Session.T("Billing & invoices", "الفوترة والفواتير")"
+            Subtitle="@Session.T("Track charges, payments and outstanding balances.", "تابع الرسوم والمدفوعات والأرصدة المستحقة.")">
+    <Actions>
+        <button type="button" class="btn btn-outline" @onclick="LoadAsync" disabled="@_loading">
+            <ClinicIcon Name="refresh" Class="sm" /><span>@Session.T("Refresh", "تحديث")</span>
+        </button>
+        <button type="button" class="btn btn-primary" @onclick="OpenCreate">
+            <ClinicIcon Name="plus" Class="sm" /><span>@Session.T("New invoice", "فاتورة جديدة")</span>
+        </button>
+    </Actions>
+</PageHeader>
+
+<div class="stat-grid">
+    <div class="stat teal">
+        <div class="stat-icon"><ClinicIcon Name="invoice" /></div>
+        <div class="stat-value">@_invoices.Count</div>
+        <div class="stat-label">@Session.T("Invoices loaded", "الفواتير المحمّلة")</div>
+    </div>
+    <div class="stat green">
+        <div class="stat-icon"><ClinicIcon Name="wallet" /></div>
+        <div class="stat-value">@ClinicFormatting.Money(_invoices.Sum(i => i.PaidAmount))</div>
+        <div class="stat-label">@Session.T("Collected", "المحصّل")</div>
+    </div>
+    <div class="stat amber">
+        <div class="stat-icon"><ClinicIcon Name="alert" /></div>
+        <div class="stat-value">@ClinicFormatting.Money(_invoices.Sum(i => i.RemainingAmount))</div>
+        <div class="stat-label">@Session.T("Outstanding", "المستحق")</div>
+    </div>
+    <div class="stat rose">
+        <div class="stat-icon"><ClinicIcon Name="clock" /></div>
+        <div class="stat-value">@_invoices.Count(i => i.Status != PaymentStatus.Paid)</div>
+        <div class="stat-label">@Session.T("Open invoices", "فواتير مفتوحة")</div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header" style="flex-wrap:wrap;gap:12px">
+        <div class="flex gap-1 flex-wrap">
+            <button type="button" class="chip @(_statusFilter is null ? "active" : "")" @onclick='() => _statusFilter = null'>@Session.T("All", "الكل")</button>
+            <button type="button" class="chip @(_statusFilter == PaymentStatus.Unpaid ? "active" : "")" @onclick='() => _statusFilter = PaymentStatus.Unpaid'>@Session.T("Unpaid", "غير مدفوعة")</button>
+            <button type="button" class="chip @(_statusFilter == PaymentStatus.PartiallyPaid ? "active" : "")" @onclick='() => _statusFilter = PaymentStatus.PartiallyPaid'>@Session.T("Partial", "جزئية")</button>
+            <button type="button" class="chip @(_statusFilter == PaymentStatus.Paid ? "active" : "")" @onclick='() => _statusFilter = PaymentStatus.Paid'>@Session.T("Paid", "مدفوعة")</button>
+        </div>
+        <div class="spacer" style="flex:1"></div>
+        <select class="select" style="max-width:220px" @bind="_patientFilter" @bind:after="ApplyFilter">
+            <option value="">@Session.T("All patients", "كل المرضى")</option>
+            @foreach (var patient in _patients)
+            {
+                <option value="@patient.Id">@FullName(patient.FirstName, patient.LastName)</option>
+            }
+        </select>
+    </div>
+
+    @if (_loading)
+    {
+        <div class="card-body">
+            @for (var i = 0; i < 5; i++)
+            {
+                <div class="skeleton row"></div>
+            }
+        </div>
+    }
+    else if (Filtered.Count == 0)
+    {
+        <EmptyState Icon="invoice" Title="@Session.T("No invoices", "لا توجد فواتير")"
+                    Message="@Session.T("Create an invoice to start tracking payments.", "أنشئ فاتورة لبدء تتبع المدفوعات.")">
+            <ActionContent><button type="button" class="btn btn-primary" @onclick="OpenCreate"><ClinicIcon Name="plus" Class="sm" /> @Session.T("New invoice", "فاتورة جديدة")</button></ActionContent>
+        </EmptyState>
+    }
+    else
+    {
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>@Session.T("Invoice", "الفاتورة")</th>
+                        <th>@Session.T("Patient", "المريض")</th>
+                        <th>@Session.T("Total", "الإجمالي")</th>
+                        <th>@Session.T("Paid", "المدفوع")</th>
+                        <th>@Session.T("Balance", "المتبقي")</th>
+                        <th>@Session.T("Status", "الحالة")</th>
+                        <th style="text-align:end">@Session.T("Actions", "إجراءات")</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var invoice in Filtered)
+                    {
+                        <tr>
+                            <td class="cell-main mono">#@invoice.Id.ToString()[..8]</td>
+                            <td>
+                                <div class="cell-person">
+                                    <Avatar Name="@PatientName(invoice.PatientId)" Size="sm" />
+                                    <span class="cell-main">@PatientName(invoice.PatientId)</span>
+                                </div>
+                            </td>
+                            <td class="mono">@ClinicFormatting.Money(invoice.TotalAmount)</td>
+                            <td class="mono text-success">@ClinicFormatting.Money(invoice.PaidAmount)</td>
+                            <td class="mono fw-700">@ClinicFormatting.Money(invoice.RemainingAmount)</td>
+                            <td><PaymentStatusBadge Value="invoice.Status" /></td>
+                            <td>
+                                <div class="row-actions">
+                                    <button type="button" class="btn btn-outline btn-sm" @onclick="() => OpenDetails(invoice)">
+                                        <ClinicIcon Name="eye" Class="sm" /> @Session.T("Manage", "إدارة")
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        <Pager PageNumber="_page" PageSize="_pageSize" TotalCount="_total" TotalPages="_totalPages" OnPageChange="GoToPage" />
+    }
+</div>
+
+<Modal IsOpen="_formOpen" Title="@Session.T("New invoice", "فاتورة جديدة")"
+       Subtitle="@Session.T("Charge a patient for treatment", "تحصيل مبلغ من المريض مقابل العلاج")" OnClose="CloseForm">
+    <ChildContent>
+    @if (!string.IsNullOrWhiteSpace(_formError))
+    {
+        <div class="badge danger no-dot mb-2" style="display:flex;padding:10px 14px;border-radius:11px">
+            <ClinicIcon Name="alert" Class="sm" /><span>@_formError</span>
+        </div>
+    }
+    <div class="field">
+        <label class="label">@Session.T("Patient", "المريض") <span class="req">*</span></label>
+        <select class="select" @bind="_form.PatientId">
+            <option value="@Guid.Empty">@Session.T("— Select patient —", "— اختر المريض —")</option>
+            @foreach (var patient in _patients)
+            {
+                <option value="@patient.Id">@FullName(patient.FirstName, patient.LastName) · @patient.PrimaryPhone</option>
+            }
+        </select>
+    </div>
+    <div class="field">
+        <label class="label">@Session.T("Total amount (USD)", "المبلغ الإجمالي (دولار)") <span class="req">*</span></label>
+        <input type="number" step="0.01" min="0.01" class="input" @bind="_form.TotalAmount" />
+    </div>
+    <p class="text-muted fs-sm">@Session.T("An appointment linkage is optional and can be added later.", "ربط الموعد اختياري ويمكن إضافته لاحقاً.")</p>
+    </ChildContent>
+
+    <Footer>
+        <button type="button" class="btn btn-ghost" @onclick="CloseForm">@Session.T("Cancel", "إلغاء")</button>
+        <button type="button" class="btn btn-primary" @onclick="SaveAsync" disabled="@_saving">
+            @if (_saving)
+            {
+                <span class="spinner"></span>
+            }
+            else
+            {
+                <ClinicIcon Name="check" Class="sm" />
+            }
+            <span>@Session.T("Create invoice", "إنشاء الفاتورة")</span>
+        </button>
+    </Footer>
+</Modal>
+
+<Drawer IsOpen="_drawerOpen" Title="@($"#{_selected?.Id.ToString()[..8]}")"
+        Subtitle="@(_selected is null ? null : PatientName(_selected.PatientId))" Icon="invoice"
+        OnClose="() => _drawerOpen = false">
+    @if (_selected is not null)
+    {
+        <div class="grid" style="grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px">
+            <div class="card"><div class="card-body" style="padding:14px">
+                <div class="fs-xs text-soft">@Session.T("Total", "الإجمالي")</div>
+                <div class="fw-700 mono">@ClinicFormatting.Money(_selected.TotalAmount)</div>
+            </div></div>
+            <div class="card"><div class="card-body" style="padding:14px">
+                <div class="fs-xs text-soft">@Session.T("Paid", "المدفوع")</div>
+                <div class="fw-700 mono text-success">@ClinicFormatting.Money(_selected.PaidAmount)</div>
+            </div></div>
+            <div class="card"><div class="card-body" style="padding:14px">
+                <div class="fs-xs text-soft">@Session.T("Balance", "المتبقي")</div>
+                <div class="fw-700 mono">@ClinicFormatting.Money(_selected.RemainingAmount)</div>
+            </div></div>
+        </div>
+
+        <div class="flex-between mb-2">
+            <h3>@Session.T("Payment history", "سجل المدفوعات")</h3>
+            <PaymentStatusBadge Value="_selected.Status" />
+        </div>
+
+        @if (_selected.Payments.Count == 0)
+        {
+            <p class="text-muted fs-sm mb-3">@Session.T("No payments recorded yet.", "لم تُسجَّل أي مدفوعات بعد.")</p>
+        }
+        else
+        {
+            <div class="mb-3">
+                @foreach (var payment in _selected.Payments.OrderByDescending(p => p.PaidAtUtc))
+                {
+                    <div class="list-row">
+                        <div class="stat-icon green" style="margin:0;width:38px;height:38px"><ClinicIcon Name="check" Class="sm" /></div>
+                        <div class="list-body">
+                            <div class="list-title">@ClinicFormatting.Money(payment.Amount)</div>
+                            <div class="list-sub">@ClinicFormatting.DateTimeLabel(payment.PaidAtUtc) @(string.IsNullOrWhiteSpace(payment.TransactionNotes) ? "" : "· " + payment.TransactionNotes)</div>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+
+        @if (_selected.Status != PaymentStatus.Paid)
+        {
+            <div class="divider"></div>
+            <h3 class="mb-2">@Session.T("Record a payment", "تسجيل دفعة")</h3>
+            @if (!string.IsNullOrWhiteSpace(_paymentError))
+            {
+                <div class="badge danger no-dot mb-2" style="display:flex;padding:10px 14px;border-radius:11px">
+                    <ClinicIcon Name="alert" Class="sm" /><span>@_paymentError</span>
+                </div>
+            }
+            <div class="form-grid">
+                <div class="field">
+                    <label class="label">@Session.T("Amount (USD)", "المبلغ (دولار)")</label>
+                    <input type="number" step="0.01" min="0.01" class="input" @bind="_payment.Amount" />
+                </div>
+                <div class="field">
+                    <label class="label">@Session.T("Notes", "ملاحظات")</label>
+                    <input class="input" @bind="_payment.Notes" />
+                </div>
+            </div>
+            <button type="button" class="btn btn-primary btn-block" @onclick="AddPaymentAsync" disabled="@_saving">
+                @if (_saving)
+                {
+                    <span class="spinner"></span>
+                }
+                else
+                {
+                    <ClinicIcon Name="plus" Class="sm" />
+                }
+                <span>@Session.T("Add payment", "إضافة دفعة")</span>
+            </button>
+        }
+    }
+</Drawer>
+
+@code {
+    private List<InvoiceDto> _invoices = [];
+    private List<PatientDto> _patients = [];
+    private int _page = 1;
+    private int _pageSize = 10;
+    private int _total;
+    private int _totalPages;
+    private bool _loading = true;
+    private bool _saving;
+
+    private PaymentStatus? _statusFilter;
+    private Guid? _patientFilter;
+
+    private bool _formOpen;
+    private string? _formError;
+    private InvoiceFormRequest _form = new();
+
+    private bool _drawerOpen;
+    private string? _paymentError;
+    private InvoiceDto? _selected;
+    private InvoicePaymentRequest _payment = new();
+
+    private List<InvoiceDto> Filtered => _statusFilter is null
+        ? _invoices
+        : _invoices.Where(i => i.Status == _statusFilter).ToList();
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var patients = await Api.GetPatientsAsync(1, 100, null);
+            _patients = patients.Items ?? [];
+        }
+        catch
+        {
+            // lookup best-effort
+        }
+
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        StateHasChanged();
+        try
+        {
+            var result = await Api.GetInvoicesAsync(_page, _pageSize, _patientFilter);
+            _invoices = result.Items ?? [];
+            _total = result.TotalCount;
+            _totalPages = result.TotalPages;
+        }
+        catch (ApiException ex)
+        {
+            Notifier.Error(Session.T("Could not load invoices", "تعذّر تحميل الفواتير"), ex.Message);
+            _invoices = [];
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task ApplyFilter()
+    {
+        _page = 1;
+        await LoadAsync();
+    }
+
+    private async Task GoToPage(int page)
+    {
+        _page = page;
+        await LoadAsync();
+    }
+
+    private void OpenCreate()
+    {
+        _form = new InvoiceFormRequest { TotalAmount = 50 };
+        _formError = null;
+        _formOpen = true;
+    }
+
+    private void CloseForm()
+    {
+        _formOpen = false;
+        _formError = null;
+    }
+
+    private async Task SaveAsync()
+    {
+        _formError = null;
+        if (_form.PatientId == Guid.Empty)
+        {
+            _formError = Session.T("Please select a patient.", "الرجاء اختيار المريض.");
+            return;
+        }
+
+        if (_form.TotalAmount <= 0)
+        {
+            _formError = Session.T("Total amount must be greater than zero.", "يجب أن يكون المبلغ أكبر من صفر.");
+            return;
+        }
+
+        _saving = true;
+        try
+        {
+            var invoice = await Api.CreateInvoiceAsync(_form);
+            Notifier.Success(Session.T("Invoice created", "تم إنشاء الفاتورة"));
+            CloseForm();
+            OpenDetails(invoice, reload: true);
+        }
+        catch (ApiException ex)
+        {
+            _formError = ex.Message;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private void OpenDetails(InvoiceDto invoice, bool reload = false)
+    {
+        _selected = invoice;
+        _payment = new InvoicePaymentRequest();
+        _paymentError = null;
+        _drawerOpen = true;
+
+        if (reload)
+        {
+            _ = LoadAsync();
+        }
+    }
+
+    private async Task AddPaymentAsync()
+    {
+        if (_selected is null)
+        {
+            return;
+        }
+
+        _paymentError = null;
+        if (_payment.Amount <= 0)
+        {
+            _paymentError = Session.T("Enter an amount greater than zero.", "أدخل مبلغاً أكبر من صفر.");
+            return;
+        }
+
+        _saving = true;
+        try
+        {
+            _selected = await Api.AddInvoicePaymentAsync(_selected.Id, _payment);
+            _payment = new InvoicePaymentRequest();
+            Notifier.Success(Session.T("Payment recorded", "تم تسجيل الدفعة"));
+            await LoadAsync();
+        }
+        catch (ApiException ex)
+        {
+            _paymentError = ex.Message;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private string FullName(string? first, string? last) => ClinicFormatting.FullName(first, last);
+
+    private string PatientName(Guid id) =>
+        _patients.FirstOrDefault(p => p.Id == id) is { } patient
+            ? FullName(patient.FirstName, patient.LastName)
+            : Session.T("Unknown patient", "مريض غير معروف");
+}

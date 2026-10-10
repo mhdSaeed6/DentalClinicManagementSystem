@@ -1,0 +1,72 @@
+@namespace DentalClinic.Web.Components.Shared
+@inject ClinicSessionState Session
+
+@if (TotalCount > 0)
+{
+    <div class="pager">
+        <div class="pager-info">
+            @Session.T("Showing", "عرض")
+            <strong>@RangeStart</strong>–<strong>@RangeEnd</strong>
+            @Session.T("of", "من")
+            <strong>@TotalCount</strong>
+        </div>
+        <div class="pager-controls">
+            <button type="button" @onclick="() => Go(PageNumber - 1)" disabled="@(PageNumber <= 1)" aria-label="Previous">
+                <ClinicIcon Name="chevron-left" Class="sm" />
+            </button>
+
+            @foreach (var page in Pages)
+            {
+                <button type="button" class="@(page == PageNumber ? "active" : "")" @onclick="() => Go(page)">
+                    @(page)
+                </button>
+            }
+
+            <button type="button" @onclick="() => Go(PageNumber + 1)" disabled="@(PageNumber >= TotalPages)" aria-label="Next">
+                <ClinicIcon Name="chevron-right" Class="sm" />
+            </button>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public int PageNumber { get; set; } = 1;
+
+    [Parameter] public int PageSize { get; set; } = 10;
+
+    [Parameter] public int TotalCount { get; set; }
+
+    [Parameter] public int TotalPages { get; set; }
+
+    [Parameter] public EventCallback<int> OnPageChange { get; set; }
+
+    private int RangeStart => TotalCount == 0 ? 0 : ((PageNumber - 1) * PageSize) + 1;
+
+    private int RangeEnd => Math.Min(PageNumber * PageSize, TotalCount);
+
+    private IEnumerable<int> Pages
+    {
+        get
+        {
+            var total = Math.Max(TotalPages, 1);
+            var start = Math.Max(1, PageNumber - 2);
+            var end = Math.Min(total, start + 4);
+            start = Math.Max(1, end - 4);
+
+            for (var page = start; page <= end; page++)
+            {
+                yield return page;
+            }
+        }
+    }
+
+    private Task Go(int page)
+    {
+        if (page < 1 || page > Math.Max(TotalPages, 1) || page == PageNumber)
+        {
+            return Task.CompletedTask;
+        }
+
+        return OnPageChange.InvokeAsync(page);
+    }
+}

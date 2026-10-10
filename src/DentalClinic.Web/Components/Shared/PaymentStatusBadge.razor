@@ -1,0 +1,10 @@
+@namespace DentalClinic.Web.Components.Shared
+@inject ClinicSessionState Session
+
+<span class="badge @ClinicFormatting.PaymentCss(Value)">
+    @ClinicFormatting.PaymentLabel(Value, Session.IsRtl)
+</span>
+
+@code {
+    [Parameter] public PaymentStatus Value { get; set; }
+}

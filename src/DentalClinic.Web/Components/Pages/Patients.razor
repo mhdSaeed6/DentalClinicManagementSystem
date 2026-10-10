@@ -1,0 +1,458 @@
+@page "/patients"
+@inject ApiClient Api
+@inject ClinicSessionState Session
+@inject NotificationService Notifier
+@inject NavigationManager Nav
+@implements IDisposable
+
+<PageTitle>@Session.T("Patients", "المرضى") · @Session.T("Al Noor Dental", "عيادة النور")</PageTitle>
+
+<PageHeader Title="@Session.T("Patients", "المرضى")"
+            Subtitle="@Session.T("Manage your patient registry and medical notes.", "إدارة سجل المرضى والملاحظات الطبية.")">
+    <Actions>
+        <button type="button" class="btn btn-outline" @onclick="LoadAsync" disabled="@_loading">
+            <ClinicIcon Name="refresh" Class="sm" />
+            <span>@Session.T("Refresh", "تحديث")</span>
+        </button>
+        <button type="button" class="btn btn-primary" @onclick="OpenCreate">
+            <ClinicIcon Name="plus" Class="sm" />
+            <span>@Session.T("New patient", "مريض جديد")</span>
+        </button>
+    </Actions>
+</PageHeader>
+
+<div class="card">
+    <div class="card-header">
+        <div class="topbar-search" style="max-width:360px">
+            <ClinicIcon Name="search" Class="sm" />
+            <input type="search" placeholder="@Session.T("Search by name or phone…", "ابحث بالاسم أو الهاتف…")"
+                   value="@_search" @oninput="OnSearchInput" />
+        </div>
+        <div class="spacer"></div>
+        <span class="badge muted no-dot">@_total @Session.T("patients", "مريض")</span>
+    </div>
+
+    @if (_loading)
+    {
+        <div class="card-body">
+            @for (var i = 0; i < 6; i++)
+            {
+                <div class="skeleton row"></div>
+            }
+        </div>
+    }
+    else if (_error is not null)
+    {
+        <EmptyState Icon="alert" Title="@Session.T("Something went wrong", "حدث خطأ")" Message="@_error">
+            <ActionContent><button type="button" class="btn btn-primary" @onclick="LoadAsync">@Session.T("Retry", "إعادة")</button></ActionContent>
+        </EmptyState>
+    }
+    else if (_patients.Count == 0)
+    {
+        <EmptyState Icon="users"
+                    Title="@Session.T("No patients found", "لا يوجد مرضى")"
+                    Message="@Session.T("Try a different search, or add your first patient.", "جرّب بحثاً آخر، أو أضف أول مريض.")">
+            <ActionContent><button type="button" class="btn btn-primary" @onclick="OpenCreate"><ClinicIcon Name="plus" Class="sm" /> @Session.T("Add patient", "إضافة مريض")</button></ActionContent>
+        </EmptyState>
+    }
+    else
+    {
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>@Session.T("Patient", "المريض")</th>
+                        <th>@Session.T("Contact", "التواصل")</th>
+                        <th>@Session.T("Age / Gender", "العمر / الجنس")</th>
+                        <th>@Session.T("Medical alerts", "تنبيهات طبية")</th>
+                        <th style="text-align:end">@Session.T("Actions", "إجراءات")</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var patient in _patients)
+                    {
+                        <tr>
+                            <td style="cursor:pointer" @onclick='() => Nav.NavigateTo($"patients/{patient.Id}")'>
+                                <div class="cell-person">
+                                    <Avatar Name="@FullName(patient)" />
+                                    <div>
+                                        <div class="cell-main">@FullName(patient)</div>
+                                        <div class="cell-sub">@Session.T("ID", "الرقم") @patient.Id.ToString()[..8]</div>
+                                    </div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="cell-main">@patient.PrimaryPhone</div>
+                                <div class="cell-sub">@(string.IsNullOrWhiteSpace(patient.SecondaryPhone) ? "—" : patient.SecondaryPhone)</div>
+                            </td>
+                            <td>
+                                <div class="cell-main">@ClinicFormatting.Age(patient.DateOfBirth) @Session.T("yrs", "سنة")</div>
+                                <div class="cell-sub">@ClinicFormatting.GenderLabel(patient.Gender, Session.IsRtl)</div>
+                            </td>
+                            <td>
+                                @if (HasAlerts(patient))
+                                {
+                                    <span class="badge warning">@Alerts(patient)</span>
+                                }
+                                else
+                                {
+                                    <span class="badge success no-dot">@Session.T("Clear", "سليم")</span>
+                                }
+                            </td>
+                            <td>
+                                <div class="row-actions">
+                                    <button type="button" class="btn btn-ghost btn-icon" title="@Session.T("View", "عرض")"
+                                            @onclick='() => Nav.NavigateTo($"patients/{patient.Id}")'>
+                                        <ClinicIcon Name="eye" Class="sm" />
+                                    </button>
+                                    <button type="button" class="btn btn-ghost btn-icon" title="@Session.T("Edit", "تعديل")"
+                                            @onclick="() => OpenEdit(patient)">
+                                        <ClinicIcon Name="edit" Class="sm" />
+                                    </button>
+                                    <button type="button" class="btn btn-danger-soft btn-icon" title="@Session.T("Delete", "حذف")"
+                                            @onclick="() => AskDelete(patient)">
+                                        <ClinicIcon Name="trash" Class="sm" />
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        <Pager PageNumber="_page" PageSize="_pageSize" TotalCount="_total" TotalPages="_totalPages"
+               OnPageChange="GoToPage" />
+    }
+</div>
+
+<Modal IsOpen="_formOpen" Size="lg" Title="@FormTitle"
+       Subtitle="@Session.T("Patient demographic and medical details", "البيانات الديموغرافية والطبية للمريض")"
+       OnClose="CloseForm">
+    <ChildContent>
+    @if (!string.IsNullOrWhiteSpace(_formError))
+    {
+        <div class="badge danger no-dot mb-2" style="display:flex;padding:10px 14px;border-radius:11px">
+            <ClinicIcon Name="alert" Class="sm" /><span>@_formError</span>
+        </div>
+    }
+
+    <div class="form-grid">
+        <div class="field">
+            <label class="label">@Session.T("First name", "الاسم الأول") <span class="req">*</span></label>
+            <input class="input" @bind="_form.FirstName" />
+        </div>
+        <div class="field">
+            <label class="label">@Session.T("Last name", "اسم العائلة") <span class="req">*</span></label>
+            <input class="input" @bind="_form.LastName" />
+        </div>
+        <div class="field">
+            <label class="label">@Session.T("Date of birth", "تاريخ الميلاد") <span class="req">*</span></label>
+            <input type="date" class="input" value="@_form.DateOfBirth.ToString("yyyy-MM-dd")" @onchange="OnDateOfBirthChanged" />
+        </div>
+        <div class="field">
+            <label class="label">@Session.T("Gender", "الجنس")</label>
+            <select class="select" @bind="_form.Gender">
+                <option value="Male">@Session.T("Male", "ذكر")</option>
+                <option value="Female">@Session.T("Female", "أنثى")</option>
+            </select>
+        </div>
+    </div>
+
+    <div class="divider"></div>
+    <h3 class="mb-2">@Session.T("Contact information", "معلومات التواصل")</h3>
+    <div class="form-grid">
+        <div class="field">
+            <label class="label">@Session.T("Primary phone", "الهاتف الأساسي") <span class="req">*</span></label>
+            <input class="input" @bind="_form.ContactInfo.PrimaryPhone" placeholder="+963911111222" />
+        </div>
+        <div class="field">
+            <label class="label">@Session.T("Secondary phone", "هاتف بديل")</label>
+            <input class="input" @bind="_form.ContactInfo.SecondaryPhone" />
+        </div>
+        <div class="field span-2">
+            <label class="check">
+                <input type="checkbox" @bind="_form.ContactInfo.HasWhatsAppOnPrimary" />
+                <span>@Session.T("Primary number has WhatsApp", "الرقم الأساسي عليه واتساب")</span>
+            </label>
+        </div>
+    </div>
+
+    <div class="divider"></div>
+    <h3 class="mb-2">@Session.T("Medical history", "التاريخ الطبي")</h3>
+    <div class="flex gap-2 flex-wrap mb-3">
+        <label class="check"><input type="checkbox" @bind="_form.MedicalHistory.HasDiabetes" /><span>@Session.T("Diabetes", "سكري")</span></label>
+        <label class="check"><input type="checkbox" @bind="_form.MedicalHistory.HasHypertension" /><span>@Session.T("Hypertension", "ضغط")</span></label>
+        <label class="check"><input type="checkbox" @bind="_form.MedicalHistory.HasHeartDisease" /><span>@Session.T("Heart disease", "أمراض قلب")</span></label>
+    </div>
+    <div class="field">
+        <label class="label">@Session.T("Allergies", "الحساسية")</label>
+        <input class="input" @bind="_form.MedicalHistory.Allergies" placeholder="@Session.T("e.g. Penicillin", "مثال: البنسلين")" />
+    </div>
+    <div class="field">
+        <label class="label">@Session.T("Notes", "ملاحظات")</label>
+        <textarea class="textarea" @bind="_form.MedicalHistory.Notes"></textarea>
+    </div>
+    </ChildContent>
+
+    <Footer>
+        <button type="button" class="btn btn-ghost" @onclick="CloseForm">@Session.T("Cancel", "إلغاء")</button>
+        <button type="button" class="btn btn-primary" @onclick="SaveAsync" disabled="@_saving">
+            @if (_saving)
+            {
+                <span class="spinner"></span>
+            }
+            else
+            {
+                <ClinicIcon Name="check" Class="sm" />
+            }
+            <span>@Session.T("Save patient", "حفظ المريض")</span>
+        </button>
+    </Footer>
+</Modal>
+
+<ConfirmDialog IsOpen="_confirmOpen" Danger="true"
+               Title="@Session.T("Delete patient", "حذف المريض")"
+               Message="@Session.T($"Delete {_deleteTargetName}?", $"هل تريد حذف {_deleteTargetName}؟")"
+               Detail="@Session.T("This action cannot be undone.", "لا يمكن التراجع عن هذا الإجراء.")"
+               ConfirmLabel="@Session.T("Delete", "حذف")" CancelLabel="@Session.T("Cancel", "إلغاء")"
+               OnConfirm="DeleteAsync" OnCancel="() => _confirmOpen = false" />
+
+@code {
+    private List<PatientDto> _patients = [];
+    private int _page = 1;
+    private int _pageSize = 10;
+    private int _total;
+    private int _totalPages;
+    private string? _search;
+    private bool _loading = true;
+    private string? _error;
+
+    private bool _formOpen;
+    private bool _saving;
+    private string? _formError;
+    private Guid? _editingId;
+    private PatientFormRequest _form = new();
+
+    private bool _confirmOpen;
+    private Guid _deleteTargetId;
+    private string _deleteTargetName = string.Empty;
+
+    private CancellationTokenSource? _searchCts;
+
+    private string FormTitle => _editingId is null
+        ? Session.T("New patient", "مريض جديد")
+        : Session.T("Edit patient", "تعديل المريض");
+
+    protected override async Task OnInitializedAsync()
+    {
+        var query = NavQuery.Parse(Nav.Uri);
+
+        if (query.TryGetValue("q", out var search))
+        {
+            _search = search;
+        }
+
+        await LoadAsync();
+
+        if (query.ContainsKey("new"))
+        {
+            OpenCreate();
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+        StateHasChanged();
+
+        try
+        {
+            var result = await Api.GetPatientsAsync(_page, _pageSize, _search);
+            _patients = result.Items ?? [];
+            _total = result.TotalCount;
+            _totalPages = result.TotalPages;
+        }
+        catch (ApiException ex)
+        {
+            _error = ex.Message;
+        }
+        catch (Exception)
+        {
+            _error = Session.T("Unable to load patients. Is the API running?", "تعذّر تحميل المرضى. هل الـ API يعمل؟");
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task GoToPage(int page)
+    {
+        _page = page;
+        await LoadAsync();
+    }
+
+    private async Task OnSearchInput(ChangeEventArgs args)
+    {
+        _search = args.Value?.ToString();
+        _page = 1;
+        _searchCts?.Cancel();
+        _searchCts = new CancellationTokenSource();
+        var token = _searchCts.Token;
+
+        try
+        {
+            await Task.Delay(350, token);
+            await LoadAsync();
+        }
+        catch (TaskCanceledException)
+        {
+            // superseded by a newer keystroke
+        }
+    }
+
+    private void OpenCreate()
+    {
+        _editingId = null;
+        _form = new PatientFormRequest();
+        _formError = null;
+        _formOpen = true;
+    }
+
+    private void OpenEdit(PatientDto patient)
+    {
+        _editingId = patient.Id;
+        _form = new PatientFormRequest
+        {
+            FirstName = patient.FirstName,
+            LastName = patient.LastName,
+            DateOfBirth = patient.DateOfBirth,
+            Gender = ClinicFormatting.GenderValue(ClinicFormatting.GenderLabel(patient.Gender, false)),
+            ContactInfo = new ContactInfoRequest
+            {
+                PrimaryPhone = patient.PrimaryPhone,
+                SecondaryPhone = patient.SecondaryPhone,
+                HasWhatsAppOnPrimary = patient.HasWhatsAppOnPrimary,
+            },
+            MedicalHistory = new MedicalHistoryRequest
+            {
+                HasDiabetes = patient.MedicalHistory?.HasDiabetes ?? false,
+                HasHypertension = patient.MedicalHistory?.HasHypertension ?? false,
+                HasHeartDisease = patient.MedicalHistory?.HasHeartDisease ?? false,
+                Allergies = patient.MedicalHistory?.Allergies,
+                Notes = patient.MedicalHistory?.Notes,
+            },
+        };
+        _formError = null;
+        _formOpen = true;
+    }
+
+    private void CloseForm()
+    {
+        _formOpen = false;
+        _formError = null;
+    }
+
+    private void OnDateOfBirthChanged(ChangeEventArgs args)
+    {
+        if (DateTime.TryParse(args.Value?.ToString(), out var date))
+        {
+            _form.DateOfBirth = date;
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        _formError = null;
+
+        if (string.IsNullOrWhiteSpace(_form.FirstName) || string.IsNullOrWhiteSpace(_form.LastName))
+        {
+            _formError = Session.T("First and last name are required.", "الاسم الأول واسم العائلة مطلوبان.");
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_form.ContactInfo.PrimaryPhone))
+        {
+            _formError = Session.T("A primary phone number is required.", "رقم الهاتف الأساسي مطلوب.");
+            return;
+        }
+
+        _saving = true;
+        try
+        {
+            if (_editingId is null)
+            {
+                await Api.CreatePatientAsync(_form);
+                Notifier.Success(Session.T("Patient created", "تم إنشاء المريض"));
+            }
+            else
+            {
+                await Api.UpdatePatientAsync(_editingId.Value, _form);
+                Notifier.Success(Session.T("Patient updated", "تم تحديث المريض"));
+            }
+
+            CloseForm();
+            await LoadAsync();
+        }
+        catch (ApiException ex)
+        {
+            _formError = ex.Message;
+        }
+        catch (Exception)
+        {
+            _formError = Session.T("Could not save the patient.", "تعذّر حفظ المريض.");
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private void AskDelete(PatientDto patient)
+    {
+        _deleteTargetId = patient.Id;
+        _deleteTargetName = FullName(patient);
+        _confirmOpen = true;
+    }
+
+    private async Task DeleteAsync()
+    {
+        _confirmOpen = false;
+        try
+        {
+            await Api.DeletePatientAsync(_deleteTargetId);
+            Notifier.Success(Session.T("Patient deleted", "تم حذف المريض"));
+            await LoadAsync();
+        }
+        catch (ApiException ex)
+        {
+            Notifier.Error(Session.T("Delete failed", "فشل الحذف"), ex.Message);
+        }
+    }
+
+    private string FullName(PatientDto patient) => ClinicFormatting.FullName(patient.FirstName, patient.LastName);
+
+    private static bool HasAlerts(PatientDto patient) =>
+        patient.MedicalHistory is { } history &&
+        (history.HasDiabetes || history.HasHypertension || history.HasHeartDisease);
+
+    private string Alerts(PatientDto patient)
+    {
+        var history = patient.MedicalHistory;
+        var alerts = new List<string>();
+
+        if (history?.HasDiabetes == true) alerts.Add(Session.T("Diabetes", "سكري"));
+        if (history?.HasHypertension == true) alerts.Add(Session.T("Hypertension", "ضغط"));
+        if (history?.HasHeartDisease == true) alerts.Add(Session.T("Heart", "قلب"));
+
+        return string.Join(" · ", alerts);
+    }
+
+    public void Dispose()
+    {
+        _searchCts?.Cancel();
+        _searchCts?.Dispose();
+    }
+}

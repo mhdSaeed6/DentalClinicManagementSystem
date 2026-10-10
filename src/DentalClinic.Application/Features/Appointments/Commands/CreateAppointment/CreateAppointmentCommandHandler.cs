@@ -80,8 +80,8 @@ public class CreateAppointmentCommandHandler(
         context.Appointments.Add(appointment);
         await context.SaveChangesAsync(cancellationToken);
 
-        // 5. Invalidate Cache Tag (plural)
-        await cache.RemoveByTagAsync("appointments", cancellationToken);
+        // 5. Invalidate Cache Tag
+        await cache.RemoveByTagAsync("appointment", cancellationToken);
 
         logger.LogInformation("Appointment created successfully with ID: {AppointmentId}", appointment.Id);
 

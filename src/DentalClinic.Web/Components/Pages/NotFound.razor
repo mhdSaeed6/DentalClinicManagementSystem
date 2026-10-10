@@ -1,0 +1,19 @@
+﻿@page "/not-found"
+@layout MainLayout
+@inject ClinicSessionState Session
+@inject NavigationManager Nav
+
+<PageTitle>@Session.T("Page not found", "الصفحة غير موجودة")</PageTitle>
+
+<div class="card mt-4">
+    <EmptyState Icon="search"
+                Title="@Session.T("We couldn't find that page", "لم نتمكن من العثور على الصفحة")"
+                Message="@Session.T("The page may have been moved or no longer exists.", "ربما تم نقل الصفحة أو لم تعد موجودة.")">
+        <ActionContent>
+            <button type="button" class="btn btn-primary" @onclick='() => Nav.NavigateTo("")'>
+                <ClinicIcon Name="dashboard" Class="sm" />
+                @Session.T("Back to dashboard", "العودة إلى لوحة التحكم")
+            </button>
+        </ActionContent>
+    </EmptyState>
+</div>

@@ -1,0 +1,371 @@
+@page "/doctors"
+@inject ApiClient Api
+@inject ClinicSessionState Session
+@inject NotificationService Notifier
+@implements IDisposable
+
+<PageTitle>@Session.T("Doctors", "الأطباء") · @Session.T("Al Noor Dental", "عيادة النور")</PageTitle>
+
+<PageHeader Title="@Session.T("Doctors", "الأطباء")"
+            Subtitle="@Session.T("Your clinical team and their specializations.", "فريقك الطبي وتخصصاتهم.")">
+    <Actions>
+        <button type="button" class="btn btn-outline" @onclick="LoadAsync" disabled="@_loading">
+            <ClinicIcon Name="refresh" Class="sm" /><span>@Session.T("Refresh", "تحديث")</span>
+        </button>
+        <button type="button" class="btn btn-primary" @onclick="OpenCreate">
+            <ClinicIcon Name="plus" Class="sm" /><span>@Session.T("New doctor", "طبيب جديد")</span>
+        </button>
+    </Actions>
+</PageHeader>
+
+<div class="card">
+    <div class="card-header">
+        <div class="topbar-search" style="max-width:360px">
+            <ClinicIcon Name="search" Class="sm" />
+            <input type="search" placeholder="@Session.T("Search doctors…", "ابحث عن طبيب…")"
+                   value="@_search" @oninput="OnSearchInput" />
+        </div>
+        <div class="spacer"></div>
+        <span class="badge muted no-dot">@_total @Session.T("doctors", "طبيب")</span>
+    </div>
+
+    @if (_loading)
+    {
+        <div class="card-body">
+            @for (var i = 0; i < 5; i++)
+            {
+                <div class="skeleton row"></div>
+            }
+        </div>
+    }
+    else if (_doctors.Count == 0)
+    {
+        <EmptyState Icon="doctor" Title="@Session.T("No doctors yet", "لا يوجد أطباء")"
+                    Message="@Session.T("Add the first member of your clinical team.", "أضف أول عضو في فريقك الطبي.")">
+            <ActionContent><button type="button" class="btn btn-primary" @onclick="OpenCreate"><ClinicIcon Name="plus" Class="sm" /> @Session.T("Add doctor", "إضافة طبيب")</button></ActionContent>
+        </EmptyState>
+    }
+    else
+    {
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>@Session.T("Doctor", "الطبيب")</th>
+                        <th>@Session.T("Specialization", "التخصص")</th>
+                        <th>@Session.T("Contact", "التواصل")</th>
+                        <th>@Session.T("Status", "الحالة")</th>
+                        <th style="text-align:end">@Session.T("Actions", "إجراءات")</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var doctor in _doctors)
+                    {
+                        <tr>
+                            <td>
+                                <div class="cell-person">
+                                    <Avatar Name="@FullName(doctor)" />
+                                    <div>
+                                        <div class="cell-main">@Session.T("Dr.", "د.") @FullName(doctor)</div>
+                                        <div class="cell-sub">@ClinicFormatting.GenderLabel(doctor.Gender, Session.IsRtl)</div>
+                                    </div>
+                                </div>
+                            </td>
+                            <td><span class="badge brand no-dot">@doctor.Specialization</span></td>
+                            <td>
+                                <div class="cell-main">@doctor.PrimaryPhone</div>
+                                <div class="cell-sub">@(string.IsNullOrWhiteSpace(doctor.SecondaryPhone) ? "—" : doctor.SecondaryPhone)</div>
+                            </td>
+                            <td>
+                                @if (doctor.IsActive)
+                                {
+                                    <span class="badge success">@Session.T("Active", "نشط")</span>
+                                }
+                                else
+                                {
+                                    <span class="badge muted">@Session.T("Inactive", "غير نشط")</span>
+                                }
+                            </td>
+                            <td>
+                                <div class="row-actions">
+                                    <button type="button" class="btn btn-ghost btn-icon" title="@Session.T("Edit", "تعديل")" @onclick="() => OpenEdit(doctor)">
+                                        <ClinicIcon Name="edit" Class="sm" />
+                                    </button>
+                                    <button type="button" class="btn btn-danger-soft btn-icon" title="@Session.T("Delete", "حذف")" @onclick="() => AskDelete(doctor)">
+                                        <ClinicIcon Name="trash" Class="sm" />
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        <Pager PageNumber="_page" PageSize="_pageSize" TotalCount="_total" TotalPages="_totalPages" OnPageChange="GoToPage" />
+    }
+</div>
+
+<Modal IsOpen="_formOpen" Title="@FormTitle"
+       Subtitle="@Session.T("Doctor profile and contact details", "ملف الطبيب وبيانات التواصل")" OnClose="CloseForm">
+    <ChildContent>
+    @if (!string.IsNullOrWhiteSpace(_formError))
+    {
+        <div class="badge danger no-dot mb-2" style="display:flex;padding:10px 14px;border-radius:11px">
+            <ClinicIcon Name="alert" Class="sm" /><span>@_formError</span>
+        </div>
+    }
+
+    <div class="form-grid">
+        <div class="field">
+            <label class="label">@Session.T("First name", "الاسم الأول") <span class="req">*</span></label>
+            <input class="input" @bind="_form.FirstName" />
+        </div>
+        <div class="field">
+            <label class="label">@Session.T("Last name", "اسم العائلة") <span class="req">*</span></label>
+            <input class="input" @bind="_form.LastName" />
+        </div>
+        <div class="field">
+            <label class="label">@Session.T("Specialization", "التخصص") <span class="req">*</span></label>
+            <input class="input" @bind="_form.Specialization" placeholder="@Session.T("e.g. Orthodontics", "مثال: تقويم الأسنان")" />
+        </div>
+        <div class="field">
+            <label class="label">@Session.T("Gender", "الجنس")</label>
+            <select class="select" @bind="_form.Gender">
+                <option value="Male">@Session.T("Male", "ذكر")</option>
+                <option value="Female">@Session.T("Female", "أنثى")</option>
+            </select>
+        </div>
+        <div class="field">
+            <label class="label">@Session.T("Primary phone", "الهاتف الأساسي") <span class="req">*</span></label>
+            <input class="input" @bind="_form.ContactInfo.PrimaryPhone" placeholder="+963911111111" />
+        </div>
+        <div class="field">
+            <label class="label">@Session.T("Secondary phone", "هاتف بديل")</label>
+            <input class="input" @bind="_form.ContactInfo.SecondaryPhone" />
+        </div>
+        <div class="field span-2">
+            <label class="label">@Session.T("Social media link", "رابط التواصل الاجتماعي")</label>
+            <input class="input" @bind="_form.ContactInfo.SocialMediaLink" placeholder="https://…" />
+        </div>
+        <div class="field span-2">
+            <label class="check">
+                <input type="checkbox" @bind="_form.ContactInfo.HasWhatsAppOnPrimary" />
+                <span>@Session.T("Primary number has WhatsApp", "الرقم الأساسي عليه واتساب")</span>
+            </label>
+        </div>
+    </div>
+    </ChildContent>
+
+    <Footer>
+        <button type="button" class="btn btn-ghost" @onclick="CloseForm">@Session.T("Cancel", "إلغاء")</button>
+        <button type="button" class="btn btn-primary" @onclick="SaveAsync" disabled="@_saving">
+            @if (_saving)
+            {
+                <span class="spinner"></span>
+            }
+            else
+            {
+                <ClinicIcon Name="check" Class="sm" />
+            }
+            <span>@Session.T("Save doctor", "حفظ الطبيب")</span>
+        </button>
+    </Footer>
+</Modal>
+
+<ConfirmDialog IsOpen="_confirmOpen"
+               Title="@Session.T("Delete doctor", "حذف الطبيب")"
+               Message="@Session.T($"Remove {_deleteTargetName} from the team?", $"هل تريد إزالة {_deleteTargetName} من الفريق؟")"
+               ConfirmLabel="@Session.T("Delete", "حذف")" CancelLabel="@Session.T("Cancel", "إلغاء")"
+               OnConfirm="DeleteAsync" OnCancel="() => _confirmOpen = false" />
+
+@code {
+    private List<DoctorDto> _doctors = [];
+    private int _page = 1;
+    private int _pageSize = 10;
+    private int _total;
+    private int _totalPages;
+    private string? _search;
+    private bool _loading = true;
+
+    private bool _formOpen;
+    private bool _saving;
+    private string? _formError;
+    private Guid? _editingId;
+    private DoctorFormRequest _form = new();
+
+    private bool _confirmOpen;
+    private Guid _deleteTargetId;
+    private string _deleteTargetName = string.Empty;
+
+    private CancellationTokenSource? _searchCts;
+
+    private string FormTitle => _editingId is null ? Session.T("New doctor", "طبيب جديد") : Session.T("Edit doctor", "تعديل الطبيب");
+
+    protected override async Task OnInitializedAsync()
+    {
+        var query = NavQuery.Parse(NavMgr.Uri);
+        if (query.ContainsKey("new"))
+        {
+            OpenCreate();
+        }
+
+        await LoadAsync();
+    }
+
+    [Inject] private NavigationManager NavMgr { get; set; } = default!;
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        StateHasChanged();
+        try
+        {
+            var result = await Api.GetDoctorsAsync(_page, _pageSize, _search);
+            _doctors = result.Items ?? [];
+            _total = result.TotalCount;
+            _totalPages = result.TotalPages;
+        }
+        catch (Exception)
+        {
+            _doctors = [];
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task GoToPage(int page)
+    {
+        _page = page;
+        await LoadAsync();
+    }
+
+    private async Task OnSearchInput(ChangeEventArgs args)
+    {
+        _search = args.Value?.ToString();
+        _page = 1;
+        _searchCts?.Cancel();
+        _searchCts = new CancellationTokenSource();
+        var token = _searchCts.Token;
+
+        try
+        {
+            await Task.Delay(350, token);
+            await LoadAsync();
+        }
+        catch (TaskCanceledException)
+        {
+            // superseded by a newer keystroke
+        }
+    }
+
+    private void OpenCreate()
+    {
+        _editingId = null;
+        _form = new DoctorFormRequest();
+        _formError = null;
+        _formOpen = true;
+    }
+
+    private void OpenEdit(DoctorDto doctor)
+    {
+        _editingId = doctor.Id;
+        _form = new DoctorFormRequest
+        {
+            FirstName = doctor.FirstName,
+            LastName = doctor.LastName,
+            Specialization = doctor.Specialization,
+            Gender = doctor.Gender == 1 ? "Female" : "Male",
+            ContactInfo = new ContactInfoRequest
+            {
+                PrimaryPhone = doctor.PrimaryPhone,
+                SecondaryPhone = doctor.SecondaryPhone,
+                HasWhatsAppOnPrimary = doctor.HasWhatsAppOnPrimary,
+                SocialMediaLink = doctor.SocialMediaLink,
+            },
+        };
+        _formError = null;
+        _formOpen = true;
+    }
+
+    private void CloseForm()
+    {
+        _formOpen = false;
+        _formError = null;
+    }
+
+    private async Task SaveAsync()
+    {
+        _formError = null;
+
+        if (string.IsNullOrWhiteSpace(_form.FirstName) || string.IsNullOrWhiteSpace(_form.LastName) || string.IsNullOrWhiteSpace(_form.Specialization))
+        {
+            _formError = Session.T("Name and specialization are required.", "الاسم والتخصص مطلوبان.");
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_form.ContactInfo.PrimaryPhone))
+        {
+            _formError = Session.T("A primary phone number is required.", "رقم الهاتف الأساسي مطلوب.");
+            return;
+        }
+
+        _saving = true;
+        try
+        {
+            if (_editingId is null)
+            {
+                await Api.CreateDoctorAsync(_form);
+                Notifier.Success(Session.T("Doctor created", "تم إنشاء الطبيب"));
+            }
+            else
+            {
+                await Api.UpdateDoctorAsync(_editingId.Value, _form);
+                Notifier.Success(Session.T("Doctor updated", "تم تحديث الطبيب"));
+            }
+
+            CloseForm();
+            await LoadAsync();
+        }
+        catch (ApiException ex)
+        {
+            _formError = ex.Message;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private void AskDelete(DoctorDto doctor)
+    {
+        _deleteTargetId = doctor.Id;
+        _deleteTargetName = FullName(doctor);
+        _confirmOpen = true;
+    }
+
+    private async Task DeleteAsync()
+    {
+        _confirmOpen = false;
+        try
+        {
+            await Api.DeleteDoctorAsync(_deleteTargetId);
+            Notifier.Success(Session.T("Doctor deleted", "تم حذف الطبيب"));
+            await LoadAsync();
+        }
+        catch (ApiException ex)
+        {
+            Notifier.Error(Session.T("Delete failed", "فشل الحذف"), ex.Message);
+        }
+    }
+
+    private string FullName(DoctorDto doctor) => ClinicFormatting.FullName(doctor.FirstName, doctor.LastName);
+
+    public void Dispose()
+    {
+        _searchCts?.Cancel();
+        _searchCts?.Dispose();
+    }
+}

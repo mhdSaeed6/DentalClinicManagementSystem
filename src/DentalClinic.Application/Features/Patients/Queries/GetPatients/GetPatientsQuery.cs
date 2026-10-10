@@ -12,7 +12,7 @@ public sealed record GetPatientsQuery(
 {
     public string CacheKey => $"patients-page-{PageNumber}-size-{PageSize}-search-{SearchTerm ?? "all"}";
 
-    public string[] Tags => ["patients"];
+    public string[] Tags => ["patient"];
 
     public TimeSpan Expiration => TimeSpan.FromMinutes(10);
 }

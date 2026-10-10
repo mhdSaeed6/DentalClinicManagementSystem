@@ -1,0 +1,68 @@
+@namespace DentalClinic.Web.Components.Shared
+@implements IDisposable
+@inject NotificationService Notifier
+
+<div class="toast @CssKind">
+    <div class="toast-icon">
+        <ClinicIcon Name="@IconName" Class="sm" />
+    </div>
+    <div>
+        <div class="toast-title">@Message.Title</div>
+        @if (!string.IsNullOrWhiteSpace(Message.Message))
+        {
+            <div class="toast-message">@Message.Message</div>
+        }
+    </div>
+    <button type="button" class="toast-close" @onclick="Dismiss" aria-label="Dismiss">
+        <ClinicIcon Name="x" Class="sm" />
+    </button>
+</div>
+
+@code {
+    [Parameter] public ToastMessage Message { get; set; } = default!;
+
+    private CancellationTokenSource? _cts;
+
+    private string CssKind => Message.Kind switch
+    {
+        ToastKind.Success => "success",
+        ToastKind.Warning => "warning",
+        ToastKind.Error => "error",
+        _ => "info",
+    };
+
+    private string IconName => Message.Kind switch
+    {
+        ToastKind.Success => "check-circle",
+        ToastKind.Warning => "alert",
+        ToastKind.Error => "alert",
+        _ => "info",
+    };
+
+    protected override void OnInitialized()
+    {
+        _cts = new CancellationTokenSource();
+        _ = AutoDismissAsync(_cts.Token);
+    }
+
+    private async Task AutoDismissAsync(CancellationToken token)
+    {
+        try
+        {
+            await Task.Delay(TimeSpan.FromSeconds(5), token);
+            await InvokeAsync(() => Notifier.Dismiss(Message.Id));
+        }
+        catch (TaskCanceledException)
+        {
+            // Component disposed before the delay elapsed.
+        }
+    }
+
+    private void Dismiss() => Notifier.Dismiss(Message.Id);
+
+    public void Dispose()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+    }
+}

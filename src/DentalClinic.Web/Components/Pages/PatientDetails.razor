@@ -1,0 +1,306 @@
+@page "/patients/{Id:guid}"
+@inject ApiClient Api
+@inject ClinicSessionState Session
+@inject NavigationManager Nav
+
+<PageTitle>@(_patient is null ? Session.T("Patient", "مريض") : FullName(_patient)) · @Session.T("Al Noor Dental", "عيادة النور")</PageTitle>
+
+@if (_loading)
+{
+    <div class="card"><div class="card-body">
+        <div class="skeleton title"></div>
+        @for (var i = 0; i < 8; i++)
+        {
+            <div class="skeleton row"></div>
+        }
+    </div></div>
+}
+else if (_error is not null)
+{
+    <div class="card">
+        <EmptyState Icon="alert" Title="@Session.T("Patient not found", "لم يتم العثور على المريض")" Message="@_error">
+            <ActionContent>
+                <button type="button" class="btn btn-primary" @onclick='() => Nav.NavigateTo("patients")'>
+                    <ClinicIcon Name="chevron-left" Class="sm" /> @Session.T("Back to patients", "عودة إلى المرضى")
+                </button>
+            </ActionContent>
+        </EmptyState>
+    </div>
+}
+else if (_patient is not null)
+{
+    <div class="breadcrumb">
+        <a href="patients">@Session.T("Patients", "المرضى")</a>
+        <ClinicIcon Name="chevron-right" Class="sm" />
+        <span>@FullName(_patient)</span>
+    </div>
+
+    <div class="card mb-3">
+        <div class="card-body" style="display:flex;gap:22px;align-items:center;flex-wrap:wrap">
+            <Avatar Name="@FullName(_patient)" Size="lg" />
+            <div>
+                <h1>@FullName(_patient)</h1>
+                <div class="flex gap-2 flex-wrap mt-1">
+                    <span class="badge brand no-dot"><ClinicIcon Name="user" Class="sm" /> @ClinicFormatting.GenderLabel(_patient.Gender, Session.IsRtl)</span>
+                    <span class="badge muted no-dot"><ClinicIcon Name="calendar" Class="sm" /> @ClinicFormatting.Age(_patient.DateOfBirth) @Session.T("years", "سنة")</span>
+                    <span class="badge muted no-dot"><ClinicIcon Name="phone" Class="sm" /> @_patient.PrimaryPhone</span>
+                    @if (_patient.HasWhatsAppOnPrimary)
+                    {
+                        <span class="badge success no-dot"><ClinicIcon Name="whatsapp" Class="sm" /> WhatsApp</span>
+                    }
+                </div>
+            </div>
+            <div class="spacer" style="flex:1"></div>
+            <div class="flex gap-2 flex-wrap">
+                <button type="button" class="btn btn-outline" @onclick='() => Nav.NavigateTo($"appointments?new=1&patient={_patient.Id}")'>
+                    <ClinicIcon Name="calendar" Class="sm" /> @Session.T("Book appointment", "حجز موعد")
+                </button>
+                <button type="button" class="btn btn-primary" @onclick='() => Nav.NavigateTo($"treatments?new=1&patient={_patient.Id}")'>
+                    <ClinicIcon Name="plus" Class="sm" /> @Session.T("Add treatment", "إضافة علاج")
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="tabs">
+        <button type="button" class="tab @(_tab == "overview" ? "active" : "")" @onclick='() => _tab = "overview"'>@Session.T("Overview", "نظرة عامة")</button>
+        <button type="button" class="tab @(_tab == "appointments" ? "active" : "")" @onclick='() => _tab = "appointments"'>@Session.T("Appointments", "المواعيد") (@_appointments.Count)</button>
+        <button type="button" class="tab @(_tab == "treatments" ? "active" : "")" @onclick='() => _tab = "treatments"'>@Session.T("Treatments", "العلاجات") (@_treatments.Count)</button>
+        <button type="button" class="tab @(_tab == "invoices" ? "active" : "")" @onclick='() => _tab = "invoices"'>@Session.T("Invoices", "الفواتير") (@_invoices.Count)</button>
+    </div>
+
+    @if (_tab == "overview")
+    {
+        <div class="grid grid-1-2">
+            <div class="card">
+                <div class="card-header"><div class="card-title">@Session.T("Contact details", "بيانات التواصل")</div></div>
+                <div class="card-body">
+                    <dl class="kv">
+                        <dt>@Session.T("Primary phone", "الهاتف الأساسي")</dt>
+                        <dd>@_patient.PrimaryPhone</dd>
+                        <dt>@Session.T("Secondary phone", "هاتف بديل")</dt>
+                        <dd>@(string.IsNullOrWhiteSpace(_patient.SecondaryPhone) ? "—" : _patient.SecondaryPhone)</dd>
+                        <dt>@Session.T("Date of birth", "تاريخ الميلاد")</dt>
+                        <dd>@ClinicFormatting.LongDate(_patient.DateOfBirth)</dd>
+                    </dl>
+                </div>
+            </div>
+
+            <div>
+                <div class="stat-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:18px">
+                    <div class="stat teal">
+                        <div class="stat-icon"><ClinicIcon Name="calendar" /></div>
+                        <div class="stat-value">@_appointments.Count</div>
+                        <div class="stat-label">@Session.T("Visits", "الزيارات")</div>
+                    </div>
+                    <div class="stat blue">
+                        <div class="stat-icon"><ClinicIcon Name="invoice" /></div>
+                        <div class="stat-value">@ClinicFormatting.Money(_invoices.Sum(i => i.TotalAmount))</div>
+                        <div class="stat-label">@Session.T("Total billed", "إجمالي الفواتير")</div>
+                    </div>
+                    <div class="stat amber">
+                        <div class="stat-icon"><ClinicIcon Name="wallet" /></div>
+                        <div class="stat-value">@ClinicFormatting.Money(_invoices.Sum(i => i.RemainingAmount))</div>
+                        <div class="stat-label">@Session.T("Balance due", "الرصيد المستحق")</div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-title">@Session.T("Medical history", "التاريخ الطبي")</div>
+                        <div class="spacer"></div>
+                        @if (HasAlerts)
+                        {
+                            <span class="badge warning">@Session.T("Attention needed", "يتطلب انتباهاً")</span>
+                        }
+                        else
+                        {
+                            <span class="badge success">@Session.T("No alerts", "لا تنبيهات")</span>
+                        }
+                    </div>
+                    <div class="card-body">
+                        <div class="flex gap-2 flex-wrap mb-3">
+                            <span class="chip @(Med("diabetes") ? "active" : "")"><ClinicIcon Name="droplet" Class="sm" /> @Session.T("Diabetes", "سكري")</span>
+                            <span class="chip @(Med("bp") ? "active" : "")"><ClinicIcon Name="activity" Class="sm" /> @Session.T("Hypertension", "ضغط")</span>
+                            <span class="chip @(Med("heart") ? "active" : "")"><ClinicIcon Name="heart" Class="sm" /> @Session.T("Heart disease", "أمراض قلب")</span>
+                        </div>
+                        <dl class="kv">
+                            <dt>@Session.T("Allergies", "الحساسية")</dt>
+                            <dd>@(string.IsNullOrWhiteSpace(_patient.MedicalHistory?.Allergies) ? Session.T("None recorded", "لا يوجد") : _patient.MedicalHistory!.Allergies)</dd>
+                            <dt>@Session.T("Notes", "ملاحظات")</dt>
+                            <dd>@(string.IsNullOrWhiteSpace(_patient.MedicalHistory?.Notes) ? "—" : _patient.MedicalHistory!.Notes)</dd>
+                        </dl>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+    else if (_tab == "appointments")
+    {
+        <div class="card">
+            @if (_appointments.Count == 0)
+            {
+                <EmptyState Icon="calendar" Title="@Session.T("No appointments", "لا مواعيد")" />
+            }
+            else
+            {
+                <div class="table-wrap">
+                    <table class="table">
+                        <thead><tr>
+                            <th>@Session.T("Date", "التاريخ")</th>
+                            <th>@Session.T("Doctor", "الطبيب")</th>
+                            <th>@Session.T("Service", "الخدمة")</th>
+                            <th>@Session.T("Status", "الحالة")</th>
+                        </tr></thead>
+                        <tbody>
+                            @foreach (var appt in _appointments.OrderByDescending(a => a.ScheduledDateTime))
+                            {
+                                <tr>
+                                    <td class="cell-main">@ClinicFormatting.DateTimeLabel(appt.ScheduledDateTime)</td>
+                                    <td>@DoctorName(appt.DoctorId)</td>
+                                    <td>@ServiceName(appt.ServiceId)</td>
+                                    <td><AppointmentStatusBadge Value="appt.Status" /></td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    }
+    else if (_tab == "treatments")
+    {
+        <div class="card">
+            @if (_treatments.Count == 0)
+            {
+                <EmptyState Icon="tooth" Title="@Session.T("No treatments recorded", "لا علاجات مسجّلة")" />
+            }
+            else
+            {
+                <div class="table-wrap">
+                    <table class="table">
+                        <thead><tr>
+                            <th>@Session.T("Tooth", "السن")</th>
+                            <th>@Session.T("Procedure", "الإجراء")</th>
+                            <th>@Session.T("Doctor", "الطبيب")</th>
+                            <th class="text-end">@Session.T("Cost", "التكلفة")</th>
+                        </tr></thead>
+                        <tbody>
+                            @foreach (var treatment in _treatments)
+                            {
+                                <tr>
+                                    <td><span class="badge brand no-dot">@ClinicFormatting.ToothLabel(treatment.ToothNumber)</span></td>
+                                    <td class="cell-main">@treatment.ProcedureDetails</td>
+                                    <td>@DoctorName(treatment.DoctorId)</td>
+                                    <td class="text-end mono fw-600">@ClinicFormatting.Money(treatment.Cost)</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    }
+    else
+    {
+        <div class="card">
+            @if (_invoices.Count == 0)
+            {
+                <EmptyState Icon="invoice" Title="@Session.T("No invoices", "لا فواتير")" />
+            }
+            else
+            {
+                <div class="table-wrap">
+                    <table class="table">
+                        <thead><tr>
+                            <th>@Session.T("Invoice", "الفاتورة")</th>
+                            <th>@Session.T("Total", "الإجمالي")</th>
+                            <th>@Session.T("Paid", "المدفوع")</th>
+                            <th>@Session.T("Balance", "المتبقي")</th>
+                            <th>@Session.T("Status", "الحالة")</th>
+                        </tr></thead>
+                        <tbody>
+                            @foreach (var invoice in _invoices)
+                            {
+                                <tr>
+                                    <td class="cell-main">#@invoice.Id.ToString()[..8]</td>
+                                    <td class="mono">@ClinicFormatting.Money(invoice.TotalAmount)</td>
+                                    <td class="mono">@ClinicFormatting.Money(invoice.PaidAmount)</td>
+                                    <td class="mono fw-600">@ClinicFormatting.Money(invoice.RemainingAmount)</td>
+                                    <td><PaymentStatusBadge Value="invoice.Status" /></td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    }
+}
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    private bool _loading = true;
+    private string? _error;
+    private string _tab = "overview";
+    private PatientDto? _patient;
+    private List<DoctorDto> _doctors = [];
+    private List<DentalServiceDto> _services = [];
+    private List<AppointmentDto> _appointments = [];
+    private List<TreatmentRecordDto> _treatments = [];
+    private List<InvoiceDto> _invoices = [];
+
+    private bool HasAlerts => _patient?.MedicalHistory is { } h && (h.HasDiabetes || h.HasHypertension || h.HasHeartDisease);
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var patientTask = Api.GetPatientAsync(Id);
+            var doctorsTask = Api.GetDoctorsAsync(1, 100, null);
+            var servicesTask = Api.GetServicesAsync(1, 100, null);
+            var appointmentsTask = Api.GetAppointmentsAsync(1, 100, patientId: Id);
+            var treatmentsTask = Api.GetTreatmentRecordsAsync(1, 100, patientId: Id);
+            var invoicesTask = Api.GetInvoicesAsync(1, 100, patientId: Id);
+
+            await Task.WhenAll(patientTask, doctorsTask, servicesTask, appointmentsTask, treatmentsTask, invoicesTask);
+
+            _patient = await patientTask;
+            _doctors = (await doctorsTask).Items ?? [];
+            _services = (await servicesTask).Items ?? [];
+            _appointments = (await appointmentsTask).Items ?? [];
+            _treatments = (await treatmentsTask).Items ?? [];
+            _invoices = (await invoicesTask).Items ?? [];
+        }
+        catch (ApiException ex)
+        {
+            _error = ex.Message;
+        }
+        catch (Exception)
+        {
+            _error = Session.T("Unable to load this patient.", "تعذّر تحميل بيانات المريض.");
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private string FullName(PatientDto patient) => ClinicFormatting.FullName(patient.FirstName, patient.LastName);
+
+    private string DoctorName(Guid id) =>
+        _doctors.FirstOrDefault(d => d.Id == id) is { } doctor
+            ? ClinicFormatting.FullName(doctor.FirstName, doctor.LastName)
+            : Session.T("Unassigned", "غير مُعيّن");
+
+    private string ServiceName(Guid id) => _services.FirstOrDefault(s => s.Id == id)?.Name ?? Session.T("Service", "خدمة");
+
+    private bool Med(string key) => key switch
+    {
+        "diabetes" => _patient?.MedicalHistory?.HasDiabetes == true,
+        "bp" => _patient?.MedicalHistory?.HasHypertension == true,
+        "heart" => _patient?.MedicalHistory?.HasHeartDisease == true,
+        _ => false,
+    };
+}

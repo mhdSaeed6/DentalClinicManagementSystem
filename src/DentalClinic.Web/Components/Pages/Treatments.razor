@@ -1,0 +1,371 @@
+@page "/treatments"
+@inject ApiClient Api
+@inject ClinicSessionState Session
+@inject NotificationService Notifier
+@inject NavigationManager Nav
+
+<PageTitle>@Session.T("Treatments", "العلاجات") · @Session.T("Al Noor Dental", "عيادة النور")</PageTitle>
+
+<PageHeader Title="@Session.T("Treatment records", "سجلات العلاجات")"
+            Subtitle="@Session.T("FDI tooth-chart based clinical procedures.", "إجراءات سريرية وفق مخطط الأسنان FDI.")">
+    <Actions>
+        <button type="button" class="btn btn-outline" @onclick="LoadAsync" disabled="@_loading">
+            <ClinicIcon Name="refresh" Class="sm" /><span>@Session.T("Refresh", "تحديث")</span>
+        </button>
+        <button type="button" class="btn btn-primary" @onclick="OpenCreate">
+            <ClinicIcon Name="plus" Class="sm" /><span>@Session.T("New treatment", "علاج جديد")</span>
+        </button>
+    </Actions>
+</PageHeader>
+
+<div class="card">
+    <div class="card-header" style="flex-wrap:wrap;gap:12px">
+        <select class="select" style="max-width:220px" @bind="_doctorFilter" @bind:after="ApplyFilter">
+            <option value="">@Session.T("All doctors", "كل الأطباء")</option>
+            @foreach (var doctor in _doctors)
+            {
+                <option value="@doctor.Id">@Session.T("Dr.", "د.") @FullName(doctor.FirstName, doctor.LastName)</option>
+            }
+        </select>
+        <select class="select" style="max-width:220px" @bind="_patientFilter" @bind:after="ApplyFilter">
+            <option value="">@Session.T("All patients", "كل المرضى")</option>
+            @foreach (var patient in _patients)
+            {
+                <option value="@patient.Id">@FullName(patient.FirstName, patient.LastName)</option>
+            }
+        </select>
+        <div class="spacer" style="flex:1"></div>
+        <span class="badge muted no-dot">@_total @Session.T("records", "سجل")</span>
+    </div>
+
+    @if (_loading)
+    {
+        <div class="card-body">
+            @for (var i = 0; i < 5; i++)
+            {
+                <div class="skeleton row"></div>
+            }
+        </div>
+    }
+    else if (_records.Count == 0)
+    {
+        <EmptyState Icon="tooth" Title="@Session.T("No treatment records", "لا سجلات علاج")"
+                    Message="@Session.T("Record a procedure performed on a tooth.", "سجّل إجراءً تم على أحد الأسنان.")">
+            <ActionContent><button type="button" class="btn btn-primary" @onclick="OpenCreate"><ClinicIcon Name="plus" Class="sm" /> @Session.T("Add treatment", "إضافة علاج")</button></ActionContent>
+        </EmptyState>
+    }
+    else
+    {
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>@Session.T("Tooth", "السن")</th>
+                        <th>@Session.T("Procedure", "الإجراء")</th>
+                        <th>@Session.T("Patient", "المريض")</th>
+                        <th>@Session.T("Doctor", "الطبيب")</th>
+                        <th class="text-end">@Session.T("Cost", "التكلفة")</th>
+                        <th style="text-align:end">@Session.T("Actions", "إجراءات")</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var record in _records)
+                    {
+                        <tr>
+                            <td><span class="badge brand no-dot">@ClinicFormatting.ToothLabel(record.ToothNumber)</span></td>
+                            <td class="cell-main">@record.ProcedureDetails</td>
+                            <td>
+                                <div class="cell-person">
+                                    <Avatar Name="@PatientName(record.PatientId)" Size="sm" />
+                                    <span>@PatientName(record.PatientId)</span>
+                                </div>
+                            </td>
+                            <td>@Session.T("Dr.", "د.") @DoctorName(record.DoctorId)</td>
+                            <td class="text-end mono fw-600">@ClinicFormatting.Money(record.Cost)</td>
+                            <td>
+                                <div class="row-actions">
+                                    <button type="button" class="btn btn-ghost btn-icon" title="@Session.T("Edit", "تعديل")" @onclick="() => OpenEdit(record)">
+                                        <ClinicIcon Name="edit" Class="sm" />
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        <Pager PageNumber="_page" PageSize="_pageSize" TotalCount="_total" TotalPages="_totalPages" OnPageChange="GoToPage" />
+    }
+</div>
+
+<Modal IsOpen="_formOpen" Size="lg" Title="@FormTitle"
+       Subtitle="@Session.T("Select the tooth on the chart and describe the procedure", "اختر السن من المخطط وصف الإجراء")" OnClose="CloseForm">
+    <ChildContent>
+    @if (!string.IsNullOrWhiteSpace(_formError))
+    {
+        <div class="badge danger no-dot mb-2" style="display:flex;padding:10px 14px;border-radius:11px">
+            <ClinicIcon Name="alert" Class="sm" /><span>@_formError</span>
+        </div>
+    }
+
+    <h3 class="mb-2">@Session.T("FDI tooth chart", "مخطط الأسنان FDI")</h3>
+    <div class="mb-2 fs-xs text-soft">
+        @Session.T("Selected tooth:", "السن المحدد:") <span class="badge brand no-dot">@ClinicFormatting.ToothLabel(_form.ToothNumber)</span>
+    </div>
+    <div class="tooth-grid mb-3">
+        @foreach (var tooth in UpperTeeth)
+        {
+            <button type="button" class="tooth @(_form.ToothNumber == tooth ? "selected" : "")" @onclick="() => _form.ToothNumber = tooth">@tooth</button>
+        }
+    </div>
+    <div class="tooth-grid mb-3">
+        @foreach (var tooth in LowerTeeth)
+        {
+            <button type="button" class="tooth @(_form.ToothNumber == tooth ? "selected" : "")" @onclick="() => _form.ToothNumber = tooth">@tooth</button>
+        }
+    </div>
+
+    <div class="form-grid">
+        <div class="field">
+            <label class="label">@Session.T("Patient", "المريض") <span class="req">*</span></label>
+            <select class="select" @bind="_form.PatientId">
+                <option value="@Guid.Empty">@Session.T("— Select —", "— اختر —")</option>
+                @foreach (var patient in _patients)
+                {
+                    <option value="@patient.Id">@FullName(patient.FirstName, patient.LastName)</option>
+                }
+            </select>
+        </div>
+        <div class="field">
+            <label class="label">@Session.T("Doctor", "الطبيب") <span class="req">*</span></label>
+            <select class="select" @bind="_form.DoctorId">
+                <option value="@Guid.Empty">@Session.T("— Select —", "— اختر —")</option>
+                @foreach (var doctor in _doctors)
+                {
+                    <option value="@doctor.Id">@Session.T("Dr.", "د.") @FullName(doctor.FirstName, doctor.LastName)</option>
+                }
+            </select>
+        </div>
+        <div class="field">
+            <label class="label">@Session.T("Cost (USD)", "التكلفة (دولار)")</label>
+            <input type="number" step="0.01" min="0" class="input" @bind="_form.Cost" />
+        </div>
+        <div class="field">
+            <label class="label">@Session.T("Appointment (optional)", "الموعد (اختياري)")</label>
+            <select class="select" @bind="_form.AppointmentId">
+                <option value="">@Session.T("— None —", "— بدون —")</option>
+                @foreach (var appt in _appointments)
+                {
+                    <option value="@appt.Id">@ClinicFormatting.ShortDate(appt.ScheduledDateTime) · @PatientName(appt.PatientId)</option>
+                }
+            </select>
+        </div>
+        <div class="field span-2">
+            <label class="label">@Session.T("Procedure details", "تفاصيل الإجراء") <span class="req">*</span></label>
+            <textarea class="textarea" @bind="_form.ProcedureDetails" placeholder="@Session.T("Describe what was performed…", "صف ما تم إجراؤه…")"></textarea>
+        </div>
+    </div>
+    </ChildContent>
+
+    <Footer>
+        <button type="button" class="btn btn-ghost" @onclick="CloseForm">@Session.T("Cancel", "إلغاء")</button>
+        <button type="button" class="btn btn-primary" @onclick="SaveAsync" disabled="@_saving">
+            @if (_saving)
+            {
+                <span class="spinner"></span>
+            }
+            else
+            {
+                <ClinicIcon Name="check" Class="sm" />
+            }
+            <span>@Session.T("Save treatment", "حفظ العلاج")</span>
+        </button>
+    </Footer>
+</Modal>
+
+@code {
+    private List<TreatmentRecordDto> _records = [];
+    private List<PatientDto> _patients = [];
+    private List<DoctorDto> _doctors = [];
+    private List<AppointmentDto> _appointments = [];
+
+    private int _page = 1;
+    private int _pageSize = 10;
+    private int _total;
+    private int _totalPages;
+    private bool _loading = true;
+    private bool _saving;
+    private bool _formOpen;
+    private string? _formError;
+    private Guid? _editingId;
+    private TreatmentRecordFormRequest _form = new();
+
+    private Guid? _doctorFilter;
+    private Guid? _patientFilter;
+
+    private static readonly int[] UpperTeethList = [18, 17, 16, 15, 14, 13, 12, 11, 21, 22, 23, 24, 25, 26, 27, 28];
+    private static readonly int[] LowerTeethList = [48, 47, 46, 45, 44, 43, 42, 41, 31, 32, 33, 34, 35, 36, 37, 38];
+
+    private int[] UpperTeeth => UpperTeethList;
+    private int[] LowerTeeth => LowerTeethList;
+
+    private string FormTitle => _editingId is null ? Session.T("New treatment", "علاج جديد") : Session.T("Edit treatment", "تعديل العلاج");
+
+    protected override async Task OnInitializedAsync()
+    {
+        var query = NavQuery.Parse(Nav.Uri);
+        await LoadLookupsAsync();
+
+        if (query.TryGetValue("patient", out var patientId) && Guid.TryParse(patientId, out var pid))
+        {
+            _form.PatientId = pid;
+        }
+
+        await LoadAsync();
+
+        if (query.ContainsKey("new"))
+        {
+            OpenCreate();
+        }
+    }
+
+    private async Task LoadLookupsAsync()
+    {
+        try
+        {
+            var patientsTask = Api.GetPatientsAsync(1, 100, null);
+            var doctorsTask = Api.GetDoctorsAsync(1, 100, null);
+            var appointmentsTask = Api.GetAppointmentsAsync(1, 100);
+            await Task.WhenAll(patientsTask, doctorsTask, appointmentsTask);
+
+            _patients = (await patientsTask).Items ?? [];
+            _doctors = (await doctorsTask).Items ?? [];
+            _appointments = (await appointmentsTask).Items ?? [];
+        }
+        catch
+        {
+            // best-effort
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        StateHasChanged();
+        try
+        {
+            var result = await Api.GetTreatmentRecordsAsync(_page, _pageSize, _patientFilter, _doctorFilter);
+            _records = result.Items ?? [];
+            _total = result.TotalCount;
+            _totalPages = result.TotalPages;
+        }
+        catch (ApiException ex)
+        {
+            Notifier.Error(Session.T("Could not load treatments", "تعذّر تحميل العلاجات"), ex.Message);
+            _records = [];
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task ApplyFilter()
+    {
+        _page = 1;
+        await LoadAsync();
+    }
+
+    private async Task GoToPage(int page)
+    {
+        _page = page;
+        await LoadAsync();
+    }
+
+    private void OpenCreate()
+    {
+        _editingId = null;
+        var patientId = _form.PatientId;
+        _form = new TreatmentRecordFormRequest { PatientId = patientId, ToothNumber = 11 };
+        _formError = null;
+        _formOpen = true;
+    }
+
+    private void OpenEdit(TreatmentRecordDto record)
+    {
+        _editingId = record.Id;
+        _form = new TreatmentRecordFormRequest
+        {
+            PatientId = record.PatientId,
+            DoctorId = record.DoctorId,
+            AppointmentId = record.AppointmentId,
+            ToothNumber = record.ToothNumber,
+            ProcedureDetails = record.ProcedureDetails,
+            Cost = record.Cost,
+        };
+        _formError = null;
+        _formOpen = true;
+    }
+
+    private void CloseForm()
+    {
+        _formOpen = false;
+        _formError = null;
+    }
+
+    private async Task SaveAsync()
+    {
+        _formError = null;
+
+        if (_form.PatientId == Guid.Empty || _form.DoctorId == Guid.Empty)
+        {
+            _formError = Session.T("Please select a patient and doctor.", "الرجاء اختيار المريض والطبيب.");
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_form.ProcedureDetails))
+        {
+            _formError = Session.T("Procedure details are required.", "تفاصيل الإجراء مطلوبة.");
+            return;
+        }
+
+        _saving = true;
+        try
+        {
+            if (_editingId is null)
+            {
+                await Api.CreateTreatmentRecordAsync(_form);
+                Notifier.Success(Session.T("Treatment recorded", "تم تسجيل العلاج"));
+            }
+            else
+            {
+                await Api.UpdateTreatmentRecordAsync(_editingId.Value, _form);
+                Notifier.Success(Session.T("Treatment updated", "تم تحديث العلاج"));
+            }
+
+            CloseForm();
+            await LoadAsync();
+        }
+        catch (ApiException ex)
+        {
+            _formError = ex.Message;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private string FullName(string? first, string? last) => ClinicFormatting.FullName(first, last);
+
+    private string PatientName(Guid id) =>
+        _patients.FirstOrDefault(p => p.Id == id) is { } patient
+            ? FullName(patient.FirstName, patient.LastName)
+            : Session.T("Unknown patient", "مريض غير معروف");
+
+    private string DoctorName(Guid id) =>
+        _doctors.FirstOrDefault(d => d.Id == id) is { } doctor
+            ? FullName(doctor.FirstName, doctor.LastName)
+            : Session.T("Unassigned", "غير مُعيّن");
+}

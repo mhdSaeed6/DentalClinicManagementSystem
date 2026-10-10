@@ -1,0 +1,7 @@
+@inherits LayoutComponentBase
+@inject ClinicSessionState Session
+
+<div class="app-root" dir="@Session.Dir" data-theme="@Session.ThemeName">
+    <ToastHost />
+    @Body
+</div>

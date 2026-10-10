@@ -1,0 +1,27 @@
+@namespace DentalClinic.Web.Components.Shared
+
+<div class="avatar @SizeClass @RoundedClass @GradientClass" title="@Name">
+    @ClinicFormatting.Initials(Name)
+</div>
+
+@code {
+    [Parameter] public string Name { get; set; } = string.Empty;
+
+    /// <summary>"sm", "lg" or null for the default size.</summary>
+    [Parameter] public string? Size { get; set; }
+
+    [Parameter] public bool Rounded { get; set; }
+
+    private string SizeClass => Size is null ? string.Empty : Size;
+
+    private string RoundedClass => Rounded ? "rounded" : string.Empty;
+
+    private string GradientClass
+    {
+        get
+        {
+            var hash = Name.Aggregate(7, (acc, c) => acc * 31 + c);
+            return "g" + (Math.Abs(hash) % 6 + 1);
+        }
+    }
+}
