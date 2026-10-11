@@ -6,6 +6,7 @@ using DentalClinic.Application.Common.Models;
 using DentalClinic.Application.Features.Appointments.Dtos;
 using DentalClinic.Application.SubcutaneousTests.Common;
 using DentalClinic.Contracts.Requests.Appointments;
+using DentalClinic.Domain.Appointments.Enums;
 using DentalClinic.Infrastructure.Identity;
 using DentalClinic.Tests.Common.Builders;
 using DentalClinic.Tests.Common.Security;
@@ -455,6 +456,82 @@ public class AppointmentsControllerTests(WebAppFactory webAppFactory)
         // Act
         var appointmentId = Guid.NewGuid();
         var response = await _client.PatchAsJsonAsync<object>($"/api/v1.0/appointments/{appointmentId}/cancel", null!, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    // -------------------------------------------------------------------------
+    // 7. PATCH /api/v1.0/appointments/{id}/no-show
+    // -------------------------------------------------------------------------
+
+    [Fact]
+    public async Task MarkNoShowAppointment_WithValidId_ShouldUpdateStatus()
+    {
+        // Arrange
+        await webAppFactory.ResetDatabaseAsync();
+        await EnsureUserExistsAsync();
+
+        var token = await _client.GenerateTokenAsync(TestUsers.Admin);
+        _client.SetAuthorizationHeader(token);
+
+        var patient = PatientTestDataBuilder.Create().Build();
+        var doctor = DoctorTestDataBuilder.Create().Build();
+        var service = DentalServiceTestDataBuilder.Create().Build();
+
+        var appointment = AppointmentTestDataBuilder.Create()
+            .WithPatient(patient.Id)
+            .WithDoctor(doctor.Id)
+            .WithService(service.Id)
+            .Build();
+
+        await webAppFactory.ExecuteDbContextAsync(async context =>
+        {
+            context.Patients.Add(patient);
+            context.Doctors.Add(doctor);
+            context.DentalServices.Add(service);
+            context.Appointments.Add(appointment);
+            await context.SaveChangesAsync(default);
+        });
+
+        // Act
+        var response = await _client.PatchAsJsonAsync<object>($"/api/v1.0/appointments/{appointment.Id}/no-show", null!, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var getResponse = await _client.GetAsync($"/api/v1.0/appointments/{appointment.Id}");
+        Assert.Equal(HttpStatusCode.OK, getResponse.StatusCode);
+
+        var result = await getResponse.Content.ReadFromJsonAsync<AppointmentDto>();
+        Assert.NotNull(result);
+        Assert.Equal(appointment.Id, result!.Id);
+        Assert.Equal(AppointmentStatus.NoShow, result.Status);
+    }
+
+    [Fact]
+    public async Task MarkNoShowAppointment_WithInvalidId_ShouldReturnNotFound()
+    {
+        // Arrange
+        await EnsureUserExistsAsync();
+        var token = await _client.GenerateTokenAsync(TestUsers.Admin);
+        _client.SetAuthorizationHeader(token);
+
+        var nonExistentId = Guid.NewGuid();
+
+        // Act
+        var response = await _client.PatchAsJsonAsync<object>($"/api/v1.0/appointments/{nonExistentId}/no-show", null!, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task MarkNoShowAppointment_WithoutAuthentication_ShouldReturnUnauthorized()
+    {
+        // Act
+        var appointmentId = Guid.NewGuid();
+        var response = await _client.PatchAsJsonAsync<object>($"/api/v1.0/appointments/{appointmentId}/no-show", null!, CancellationToken.None);
 
         // Assert
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);

@@ -3,6 +3,7 @@ using System.Threading.RateLimiting;
 
 using Asp.Versioning;
 
+using DentalClinic.Api.BackgroundServices;
 using DentalClinic.Api.Infrastructure;
 using DentalClinic.Api.OpenApi.Transformers;
 using DentalClinic.Api.Services;
@@ -37,6 +38,8 @@ public static class DependencyInjection
                 .AddAppOutputCaching()
                 .AddAppOpenTelememrty()
                 .AddSignalR();
+
+        services.AddHostedService<AppointmentNoShowBackgroundService>();
 
         return services;
     }
