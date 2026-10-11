@@ -168,6 +168,82 @@ public class AppointmentTest
 
     #endregion
 
+    #region MarkAsNoShow Tests
+
+    [Fact]
+    public void MarkAsNoShow_ShouldSucceed_WhenAppointmentIsScheduled()
+    {
+        // Arrange
+        var appointment = AppointmentFactory.CreateAppointment().Value;
+
+        // Act
+        var result = appointment.MarkAsNoShow();
+
+        // Assert
+        Assert.True(result.IsSuccess);
+        Assert.Equal(AppointmentStatus.NoShow, appointment.Status);
+    }
+
+    [Fact]
+    public void MarkAsNoShow_ShouldReturnError_WhenAppointmentIsAlreadyNoShow()
+    {
+        // Arrange
+        var appointment = AppointmentFactory.CreateAppointment().Value;
+        appointment.MarkAsNoShow();
+
+        // Act
+        var result = appointment.MarkAsNoShow();
+
+        // Assert
+        Assert.True(result.IsError);
+        Assert.Equal(AppointmentErrors.AlreadyNoShow.Code, result.TopError.Code);
+    }
+
+    [Fact]
+    public void MarkAsNoShow_ShouldReturnError_WhenAppointmentIsCompleted()
+    {
+        // Arrange
+        var appointment = AppointmentFactory.CreateAppointment().Value;
+        appointment.Complete();
+
+        // Act
+        var result = appointment.MarkAsNoShow();
+
+        // Assert
+        Assert.True(result.IsError);
+        Assert.Equal(AppointmentErrors.AlreadyCompleted.Code, result.TopError.Code);
+    }
+
+    [Fact]
+    public void MarkAsNoShow_ShouldReturnError_WhenAppointmentIsCancelled()
+    {
+        // Arrange
+        var appointment = AppointmentFactory.CreateAppointment().Value;
+        appointment.Cancel();
+
+        // Act
+        var result = appointment.MarkAsNoShow();
+
+        // Assert
+        Assert.True(result.IsError);
+        Assert.Equal(AppointmentErrors.AlreadyCancelled.Code, result.TopError.Code);
+    }
+
+    [Fact]
+    public void HasEndedBy_ShouldBeTrue_WhenCutoffIsAfterScheduledEnd()
+    {
+        // Arrange
+        var start = DateTime.UtcNow.AddDays(1);
+        var appointment = AppointmentFactory.CreateAppointment(scheduledDateTime: start, durationInMinutes: 30).Value;
+
+        // Act & Assert
+        Assert.False(appointment.HasEndedBy(start.AddMinutes(30).AddSeconds(-1)));
+        Assert.True(appointment.HasEndedBy(start.AddMinutes(30)));
+        Assert.True(appointment.HasEndedBy(start.AddHours(2)));
+    }
+
+    #endregion
+
     #region Reschedule Tests
 
     [Fact]

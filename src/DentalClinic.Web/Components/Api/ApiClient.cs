@@ -143,6 +143,9 @@ public sealed class ApiClient
     public Task<AppointmentDto> CancelAppointmentAsync(Guid id, CancellationToken ct = default) =>
         PatchAsync<AppointmentDto>($"appointments/{id}/cancel", null, ct);
 
+    public Task<AppointmentDto> MarkNoShowAppointmentAsync(Guid id, CancellationToken ct = default) =>
+        PatchAsync<AppointmentDto>($"appointments/{id}/no-show", null, ct);
+
     // -----------------------------------------------------------------------
     // Invoices
     // -----------------------------------------------------------------------

@@ -4,6 +4,7 @@ using DentalClinic.Application.Common.Models;
 using DentalClinic.Application.Features.Appointments.Commands.CancelAppointment;
 using DentalClinic.Application.Features.Appointments.Commands.CompleteAppointment;
 using DentalClinic.Application.Features.Appointments.Commands.CreateAppointment;
+using DentalClinic.Application.Features.Appointments.Commands.MarkNoShowAppointment;
 using DentalClinic.Application.Features.Appointments.Commands.RescheduleAppointment;
 using DentalClinic.Application.Features.Appointments.Dtos;
 using DentalClinic.Application.Features.Appointments.Queries.GetAppointmentById;
@@ -151,6 +152,25 @@ public class AppointmentController(ISender sender) : ApiController
     public async Task<IActionResult> CancelAppointment(Guid id, CancellationToken ct)
     {
         var result = await sender.Send(new CancelAppointmentCommand(id), ct);
+
+        return result.Match(
+            response => Ok(response),
+            Problem);
+    }
+
+    [HttpPatch("{id:guid}/no-show")]
+    [ProducesResponseType(typeof(AppointmentDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
+    [EndpointSummary("Marks an appointment as no-show.")]
+    [EndpointDescription("This endpoint marks a scheduled appointment as a no-show when the patient did not attend.")]
+    [EndpointName("MarkNoShowAppointment")]
+    [MapToApiVersion("1.0")]
+    [ProducesDefaultResponseType]
+    public async Task<IActionResult> MarkNoShowAppointment(Guid id, CancellationToken ct)
+    {
+        var result = await sender.Send(new MarkNoShowAppointmentCommand(id), ct);
 
         return result.Match(
             response => Ok(response),

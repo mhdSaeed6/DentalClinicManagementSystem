@@ -127,4 +127,32 @@ public class Appointment : AuditableEntity
 
         return Result.Updated;
     }
+
+    public Result<Updated> MarkAsNoShow()
+    {
+        if (Status == AppointmentStatus.Completed)
+        {
+            return AppointmentErrors.AlreadyCompleted;
+        }
+
+        if (Status == AppointmentStatus.Cancelled)
+        {
+            return AppointmentErrors.AlreadyCancelled;
+        }
+
+        if (Status == AppointmentStatus.NoShow)
+        {
+            return AppointmentErrors.AlreadyNoShow;
+        }
+
+        Status = AppointmentStatus.NoShow;
+        return Result.Updated;
+    }
+
+    /// <summary>
+    /// Determines whether the appointment has ended relative to the supplied cutoff
+    /// (the scheduled start plus its duration must be at or before the cutoff).
+    /// </summary>
+    public bool HasEndedBy(DateTime cutoffUtc) =>
+        ScheduledDateTime.AddMinutes(DurationInMinutes) <= cutoffUtc;
 }

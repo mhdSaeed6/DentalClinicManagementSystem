@@ -101,6 +101,9 @@
                                         <button type="button" class="btn btn-ghost btn-icon" title="@Session.T("Reschedule", "إعادة جدولة")" @onclick="() => OpenReschedule(appt)">
                                             <ClinicIcon Name="refresh" Class="sm" />
                                         </button>
+                                        <button type="button" class="btn btn-warning-soft btn-sm" @onclick="() => NoShowAsync(appt)">
+                                            <ClinicIcon Name="user-x" Class="sm" /> @Session.T("No-show", "لم يحضر")
+                                        </button>
                                         <button type="button" class="btn btn-danger-soft btn-sm" @onclick="() => CancelAsync(appt)">
                                             <ClinicIcon Name="x" Class="sm" /> @Session.T("Cancel", "إلغاء")
                                         </button>
@@ -452,6 +455,20 @@
         {
             await Api.CancelAppointmentAsync(appointment.Id);
             Notifier.Info(Session.T("Appointment cancelled", "تم إلغاء الموعد"));
+            await LoadAsync();
+        }
+        catch (ApiException ex)
+        {
+            Notifier.Error(Session.T("Action failed", "فشل الإجراء"), ex.Message);
+        }
+    }
+
+    private async Task NoShowAsync(AppointmentDto appointment)
+    {
+        try
+        {
+            await Api.MarkNoShowAppointmentAsync(appointment.Id);
+            Notifier.Warning(Session.T("Appointment marked as no-show", "تم تحديد الموعد كعدم حضور"));
             await LoadAsync();
         }
         catch (ApiException ex)

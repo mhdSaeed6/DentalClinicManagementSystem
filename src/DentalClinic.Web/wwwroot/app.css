@@ -555,6 +555,10 @@ button { font-family: inherit; }
 .btn-success-soft { background: var(--success-soft); color: var(--success); }
 .btn-success-soft:hover { background: var(--success); color: #fff; }
 
+.btn-warning-soft { background: var(--warning-soft); color: var(--warning); }
+.btn-warning-soft:hover { background: var(--warning); color: #fff; }
+.app-root[data-theme="dark"] .btn-warning-soft:hover { color: #3b2600; }
+
 .btn-sm { padding: 7px 12px; font-size: 0.8rem; border-radius: 9px; }
 .btn-lg { padding: 13px 22px; font-size: 0.95rem; }
 .btn-block { width: 100%; }

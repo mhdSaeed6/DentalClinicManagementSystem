@@ -19,4 +19,8 @@ public static class AppointmentErrors
     public static readonly Error AlreadyCancelled = Error.Validation(
         "Appointment.AlreadyCancelled",
         "Cannot modify an appointment that is already cancelled.");
+
+    public static readonly Error AlreadyNoShow = Error.Validation(
+        "Appointment.AlreadyNoShow",
+        "Appointment is already marked as no-show.");
 }
