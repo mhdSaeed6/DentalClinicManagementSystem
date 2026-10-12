@@ -55,6 +55,11 @@ public class AddInvoicePaymentCommandHandler(
         await cache.RemoveAsync($"invoice-{request.InvoiceId}", cancellationToken);
         await cache.RemoveByTagAsync("invoice", cancellationToken);
 
-        return invoice.ToDto();
+        var patientName = await context.Patients
+            .Where(p => p.Id == invoice.PatientId)
+            .Select(p => p.FirstName + " " + p.LastName)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        return invoice.ToDto(patientName);
     }
 }

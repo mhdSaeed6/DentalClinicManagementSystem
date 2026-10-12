@@ -1,6 +1,8 @@
 using Asp.Versioning;
 
+using DentalClinic.Application.Common.Interfaces;
 using DentalClinic.Application.Common.Models;
+using DentalClinic.Application.Common.Security;
 using DentalClinic.Application.Features.Appointments.Commands.CancelAppointment;
 using DentalClinic.Application.Features.Appointments.Commands.CompleteAppointment;
 using DentalClinic.Application.Features.Appointments.Commands.CreateAppointment;
@@ -20,8 +22,8 @@ namespace DentalClinic.Api.Controllers;
 
 [Route("api/v{version:apiVersion}/appointments")]
 [ApiVersion("1.0")]
-[Authorize]
-public class AppointmentController(ISender sender) : ApiController
+[Authorize(Policy = "StaffOnly")]
+public class AppointmentController(ISender sender, IUser user) : ApiController
 {
     [HttpGet]
     [ProducesResponseType(typeof(PaginatedList<AppointmentDto>), StatusCodes.Status200OK)]
@@ -35,6 +37,7 @@ public class AppointmentController(ISender sender) : ApiController
     public async Task<IActionResult> GetAppointments([FromQuery] GetAppointmentsRequest request, CancellationToken ct)
     {
         var query = new GetAppointmentsQuery(
+            Scope: user.DoctorScope(),
             PageNumber: request.PageNumber,
             PageSize: request.PageSize,
             PatientId: request.PatientId,
@@ -58,7 +61,7 @@ public class AppointmentController(ISender sender) : ApiController
     [ProducesDefaultResponseType]
     public async Task<IActionResult> GetAppointmentById(Guid id, CancellationToken ct)
     {
-        var result = await sender.Send(new GetAppointmentByIdQuery(id), ct);
+        var result = await sender.Send(new GetAppointmentByIdQuery(id, user.DoctorScope()), ct);
 
         return result.Match(
             response => Ok(response),

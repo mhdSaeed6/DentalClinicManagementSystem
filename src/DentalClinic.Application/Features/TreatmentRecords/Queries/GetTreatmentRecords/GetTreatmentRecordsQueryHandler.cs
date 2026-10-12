@@ -16,6 +16,13 @@ public class GetTreatmentRecordsQueryHandler(IAppDbContext context) : IRequestHa
     {
         var query = context.TreatmentRecords.AsNoTracking();
 
+        // Trusted, server-derived scope: a doctor may only read their own records.
+        if (request.Scope.IsRestricted)
+        {
+            var scopeDoctorId = request.Scope.DoctorId;
+            query = query.Where(r => r.DoctorId == scopeDoctorId);
+        }
+
         if (request.PatientId.HasValue)
         {
             query = query.Where(r => r.PatientId == request.PatientId.Value);

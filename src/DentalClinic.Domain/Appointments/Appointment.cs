@@ -1,4 +1,5 @@
 using DentalClinic.Domain.Appointments.Enums;
+using DentalClinic.Domain.Appointments.Events;
 using DentalClinic.Domain.Common.Results;
 using DentalClinic.Domain.Doctors;
 using DentalClinic.Domain.Patients;
@@ -58,7 +59,7 @@ public class Appointment : AuditableEntity
             return AppointmentErrors.InvalidDuration;
         }
 
-        return new Appointment(
+        var appointment = new Appointment(
             Guid.NewGuid(),
             patientId,
             doctorId,
@@ -66,6 +67,15 @@ public class Appointment : AuditableEntity
             scheduledDateTime,
             durationInMinutes,
             string.IsNullOrWhiteSpace(notes) ? null : notes.Trim());
+
+        appointment.AddDomainEvent(new AppointmentCreatedEvent(
+            appointment.Id,
+            appointment.PatientId,
+            appointment.DoctorId,
+            appointment.ServiceId,
+            appointment.ScheduledDateTime));
+
+        return appointment;
     }
 
     public Result<Updated> Complete()
@@ -80,7 +90,19 @@ public class Appointment : AuditableEntity
             return AppointmentErrors.AlreadyCancelled;
         }
 
+        if (Status == AppointmentStatus.NoShow)
+        {
+            return AppointmentErrors.AlreadyNoShow;
+        }
+
         Status = AppointmentStatus.Completed;
+
+        AddDomainEvent(new AppointmentCompletedEvent(
+            Id,
+            PatientId,
+            DoctorId,
+            ScheduledDateTime));
+
         return Result.Updated;
     }
 
@@ -96,7 +118,18 @@ public class Appointment : AuditableEntity
             return AppointmentErrors.AlreadyCancelled;
         }
 
+        if (Status == AppointmentStatus.NoShow)
+        {
+            return AppointmentErrors.AlreadyNoShow;
+        }
+
         Status = AppointmentStatus.Cancelled;
+
+        AddDomainEvent(new AppointmentCancelledEvent(
+            Id,
+            PatientId,
+            DoctorId));
+
         return Result.Updated;
     }
 
@@ -112,6 +145,11 @@ public class Appointment : AuditableEntity
             return AppointmentErrors.AlreadyCancelled;
         }
 
+        if (Status == AppointmentStatus.NoShow)
+        {
+            return AppointmentErrors.AlreadyNoShow;
+        }
+
         if (newScheduledDateTime <= DateTime.UtcNow)
         {
             return AppointmentErrors.InvalidScheduledTime;
@@ -122,8 +160,17 @@ public class Appointment : AuditableEntity
             return AppointmentErrors.InvalidDuration;
         }
 
+        var previousScheduledDateTime = ScheduledDateTime;
+
         ScheduledDateTime = newScheduledDateTime;
         DurationInMinutes = newDurationInMinutes;
+
+        AddDomainEvent(new AppointmentRescheduledEvent(
+            Id,
+            PatientId,
+            DoctorId,
+            previousScheduledDateTime,
+            ScheduledDateTime));
 
         return Result.Updated;
     }
@@ -146,6 +193,12 @@ public class Appointment : AuditableEntity
         }
 
         Status = AppointmentStatus.NoShow;
+
+        AddDomainEvent(new AppointmentMarkedAsNoShowEvent(
+            Id,
+            PatientId,
+            DoctorId));
+
         return Result.Updated;
     }
 

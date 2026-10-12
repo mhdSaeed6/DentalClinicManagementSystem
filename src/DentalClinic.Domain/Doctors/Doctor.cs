@@ -14,6 +14,12 @@ public class Doctor : AuditableEntity
     public Gender Gender { get; private set; }
     public bool IsActive { get; private set; }
 
+    /// <summary>
+    /// Identifier of the identity account (<c>AppUser</c>) that owns this doctor
+    /// profile. Null until an administrator links the profile to an account.
+    /// </summary>
+    public string? UserId { get; private set; }
+
     private Doctor() { }
 
     private Doctor(
@@ -117,4 +123,15 @@ public class Doctor : AuditableEntity
 
     public void Deactivate() => IsActive = false;
     public void Activate() => IsActive = true;
+
+    /// <summary>
+    /// Links this doctor profile to an identity account. The account identifier is
+    /// trusted server-side data (never supplied by clinicians themselves).
+    /// </summary>
+    public void AssignUser(string userId) => UserId = userId;
+
+    /// <summary>
+    /// Removes the link between this doctor profile and any identity account.
+    /// </summary>
+    public void UnassignUser() => UserId = null;
 }

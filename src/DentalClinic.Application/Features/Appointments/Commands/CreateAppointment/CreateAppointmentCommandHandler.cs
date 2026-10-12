@@ -1,5 +1,6 @@
 using DentalClinic.Application.Common.Errors;
 using DentalClinic.Application.Common.Interfaces;
+using DentalClinic.Application.Common.Security;
 using DentalClinic.Application.Features.Appointments.Dtos;
 using DentalClinic.Application.Features.Appointments.Mappers;
 using DentalClinic.Domain.Appointments;
@@ -17,12 +18,20 @@ namespace DentalClinic.Application.Features.Appointments.Commands.CreateAppointm
 public class CreateAppointmentCommandHandler(
     ILogger<CreateAppointmentCommandHandler> logger,
     IAppDbContext context,
-    HybridCache cache)
+    HybridCache cache,
+    IUser user)
     : IRequestHandler<CreateAppointmentCommand, Result<AppointmentDto>>
 {
     public async Task<Result<AppointmentDto>> Handle(CreateAppointmentCommand request, CancellationToken cancellationToken)
     {
         logger.LogInformation("Creating appointment for patient {PatientId}", request.PatientId);
+
+        // 0. Ownership: a doctor may only book appointments for themselves.
+        if (!user.CanAccessAppointment(request.DoctorId))
+        {
+            logger.LogWarning("Appointment creation denied for user {UserId}. Doctor {DoctorId} is not the caller.", user.Id, request.DoctorId);
+            return ApplicationErrors.AppointmentAccessForbidden;
+        }
 
         // 1. Check Patient Existence & Active State
         var patient = await context.Patients.FirstOrDefaultAsync(p => p.Id == request.PatientId, cancellationToken);

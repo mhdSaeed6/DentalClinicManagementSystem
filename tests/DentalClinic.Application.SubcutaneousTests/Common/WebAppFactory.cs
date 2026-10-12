@@ -2,6 +2,7 @@ using DentalClinic.Api;
 using DentalClinic.Application.Common.Interfaces;
 using DentalClinic.Infrastructure.Data;
 using DentalClinic.Infrastructure.Settings;
+using DentalClinic.Tests.Common.Security;
 
 using MediatR;
 
@@ -26,6 +27,12 @@ public class WebAppFactory : WebApplicationFactory<IAssemblyMarker>, IAsyncLifet
     private readonly MsSqlContainer _dbContainer = new MsSqlBuilder().Build();
 
     #pragma warning restore CS0618 // Re-enable obsolete warning for WebApplicationFactory
+
+    /// <summary>
+    /// Shared test identity used by all mediator scopes. Defaults to <c>Admin</c>;
+    /// individual tests may switch it with the <c>As...</c> helpers.
+    /// </summary>
+    public TestCurrentUser CurrentUser { get; } = new();
 
     public IMediator CreateMediator()
     {
@@ -60,6 +67,9 @@ public class WebAppFactory : WebApplicationFactory<IAssemblyMarker>, IAsyncLifet
         builder.ConfigureTestServices(services =>
         {
             services.RemoveAll<IHostedService>();
+
+            services.RemoveAll<IUser>();
+            services.AddSingleton<IUser>(CurrentUser);
 
             services.RemoveAll<DbContextOptions<AppDbContext>>();
             services.AddDbContext<AppDbContext>((sp, options) =>

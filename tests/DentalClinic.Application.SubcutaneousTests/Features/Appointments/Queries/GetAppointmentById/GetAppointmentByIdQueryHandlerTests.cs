@@ -1,4 +1,5 @@
 using DentalClinic.Application.Common.Interfaces;
+using DentalClinic.Application.Common.Security;
 using DentalClinic.Application.Features.Appointments.Queries.GetAppointmentById;
 using DentalClinic.Application.SubcutaneousTests.Common;
 using DentalClinic.Domain.Appointments;
@@ -23,7 +24,7 @@ public class GetAppointmentByIdQueryHandlerTests(WebAppFactory factory)
     {
         // Arrange
         var appointment = await SeedAppointmentAsync();
-        var query = new GetAppointmentByIdQuery(appointment.Id);
+        var query = new GetAppointmentByIdQuery(appointment.Id, DoctorAccessScope.None);
 
         // Act
         var result = await _mediator.Send(query);
@@ -40,7 +41,7 @@ public class GetAppointmentByIdQueryHandlerTests(WebAppFactory factory)
     public async Task Handle_WithNonExistingAppointmentId_ShouldReturnNotFound()
     {
         // Arrange
-        var query = new GetAppointmentByIdQuery(Guid.NewGuid());
+        var query = new GetAppointmentByIdQuery(Guid.NewGuid(), DoctorAccessScope.None);
 
         // Act
         var result = await _mediator.Send(query);

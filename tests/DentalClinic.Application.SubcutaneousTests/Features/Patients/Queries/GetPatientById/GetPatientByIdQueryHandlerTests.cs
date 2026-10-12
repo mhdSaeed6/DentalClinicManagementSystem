@@ -1,4 +1,5 @@
 using DentalClinic.Application.Common.Interfaces;
+using DentalClinic.Application.Common.Security;
 using DentalClinic.Application.Features.Patients.Queries.GetPatientById;
 using DentalClinic.Application.SubcutaneousTests.Common;
 using DentalClinic.Domain.Common.Enums;
@@ -25,7 +26,7 @@ public class GetPatientByIdQueryHandlerTests(WebAppFactory factory)
         await _context.Patients.AddAsync(patient);
         await _context.SaveChangesAsync(default);
 
-        var query = new GetPatientByIdQuery(patient.Id);
+        var query = new GetPatientByIdQuery(patient.Id, PatientAccessScope.None);
 
         // Act
         var result = await _mediator.Send(query);
@@ -40,7 +41,7 @@ public class GetPatientByIdQueryHandlerTests(WebAppFactory factory)
     [Fact]
     public async Task Handle_WithNonExistingPatientId_ShouldReturnNotFound()
     {
-        var query = new GetPatientByIdQuery(Guid.NewGuid());
+        var query = new GetPatientByIdQuery(Guid.NewGuid(), PatientAccessScope.None);
         var result = await _mediator.Send(query);
         Assert.True(result.IsError);
     }

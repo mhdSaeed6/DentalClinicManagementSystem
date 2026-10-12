@@ -94,6 +94,21 @@ public class TokenProvider(IConfiguration configuration, IAppDbContext context) 
             claims.Add(new(ClaimTypes.Role, role));
         }
 
+        // Issue a trusted doctor_profile claim for doctor accounts so downstream
+        // authorization does not have to re-resolve the profile on every request.
+        if (user.Roles.Contains(Roles.Doctor))
+        {
+            var doctorId = await _context.Doctors
+                .Where(d => d.UserId == user.UserId)
+                .Select(d => (Guid?)d.Id)
+                .FirstOrDefaultAsync(ct);
+
+            if (doctorId is { } id)
+            {
+                claims.Add(new(ClinicClaimTypes.DoctorId, id.ToString()));
+            }
+        }
+
         var descriptor = new SecurityTokenDescriptor
         {
             Subject = new ClaimsIdentity(claims),

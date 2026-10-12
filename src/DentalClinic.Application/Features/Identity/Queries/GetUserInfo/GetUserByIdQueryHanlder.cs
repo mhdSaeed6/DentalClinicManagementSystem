@@ -5,15 +5,20 @@ using DentalClinic.Domain.Common.Results;
 
 using MediatR;
 
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 namespace MechanicShop.Application.Features.Identity.Queries.GetUserInfo;
 
-public class GetUserByIdQueryHanlder(ILogger<GetUserByIdQueryHanlder> logger, IIdentityService identityService)
+public class GetUserByIdQueryHanlder(
+    ILogger<GetUserByIdQueryHanlder> logger,
+    IIdentityService identityService,
+    IAppDbContext context)
     : IRequestHandler<GetUserByIdQuery, Result<AppUserDto>>
 {
     private readonly ILogger<GetUserByIdQueryHanlder> _logger = logger;
     private readonly IIdentityService _identityService = identityService;
+    private readonly IAppDbContext _context = context;
 
     public async Task<Result<AppUserDto>> Handle(GetUserByIdQuery request, CancellationToken ct)
     {
@@ -26,6 +31,15 @@ public class GetUserByIdQueryHanlder(ILogger<GetUserByIdQueryHanlder> logger, II
             return getUserByIdResult.Errors;
         }
 
-        return getUserByIdResult.Value;
+        var user = getUserByIdResult.Value;
+
+        // Resolve the linked doctor profile (if any) so doctor-facing clients can
+        // scope their views to the signed-in clinician.
+        var doctorId = await _context.Doctors
+            .Where(d => d.UserId == user.UserId)
+            .Select(d => (Guid?)d.Id)
+            .FirstOrDefaultAsync(ct);
+
+        return user with { DoctorId = doctorId };
     }
 }

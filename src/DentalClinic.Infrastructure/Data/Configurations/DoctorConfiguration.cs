@@ -37,6 +37,15 @@ public class DoctorConfiguration : IEntityTypeConfiguration<Doctor>
             .HasDefaultValue(true)
             .IsRequired();
 
+        // 4. Identity link (a doctor profile may be claimed by a single account)
+        builder.Property(d => d.UserId)
+            .HasMaxLength(450)
+            .IsRequired(false);
+
+        builder.HasIndex(d => d.UserId)
+            .IsUnique()
+            .HasFilter("[UserId] IS NOT NULL");
+
         // ضبط الـ Value Object الخاص بـ ContactInfo
         builder.OwnsOne(d => d.ContactInfo, contact =>
         {

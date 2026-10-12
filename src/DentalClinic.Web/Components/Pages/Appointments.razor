@@ -28,13 +28,16 @@
             }
         </div>
         <div class="spacer" style="flex:1"></div>
-        <select class="select" style="max-width:200px" @bind="_doctorFilter" @bind:after="ApplyFilters">
-            <option value="">@Session.T("All doctors", "كل الأطباء")</option>
-            @foreach (var doctor in _doctors)
-            {
-                <option value="@doctor.Id">@Session.T("Dr.", "د.") @FullName(doctor.FirstName, doctor.LastName)</option>
-            }
-        </select>
+        @if (!Session.IsDoctor)
+        {
+            <select class="select" style="max-width:200px" @bind="_doctorFilter" @bind:after="ApplyFilters">
+                <option value="">@Session.T("All doctors", "كل الأطباء")</option>
+                @foreach (var doctor in _doctors)
+                {
+                    <option value="@doctor.Id">@Session.T("Dr.", "د.") @FullName(doctor.FirstName, doctor.LastName)</option>
+                }
+            </select>
+        }
         <select class="select" style="max-width:200px" @bind="_serviceFilter" @bind:after="ApplyFilters">
             <option value="">@Session.T("All services", "كل الخدمات")</option>
             @foreach (var service in _services)
@@ -146,7 +149,7 @@
     <div class="form-grid">
         <div class="field">
             <label class="label">@Session.T("Doctor", "الطبيب") <span class="req">*</span></label>
-            <select class="select" @bind="_form.DoctorId">
+            <select class="select" @bind="_form.DoctorId" disabled="@Session.IsDoctor">
                 <option value="@Guid.Empty">@Session.T("— Select —", "— اختر —")</option>
                 @foreach (var doctor in _doctors)
                 {
@@ -347,6 +350,13 @@
     private void OpenCreate()
     {
         _form = new AppointmentFormRequest();
+
+        // A doctor books visits for themselves only; the API enforces the same rule.
+        if (Session.IsDoctor && Session.DoctorId is { } ownDoctorId)
+        {
+            _form.DoctorId = ownDoctorId;
+        }
+
         _formError = null;
         _formOpen = true;
     }

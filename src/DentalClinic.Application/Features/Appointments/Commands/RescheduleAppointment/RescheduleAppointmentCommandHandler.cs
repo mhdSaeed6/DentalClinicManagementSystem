@@ -1,5 +1,6 @@
 using DentalClinic.Application.Common.Errors;
 using DentalClinic.Application.Common.Interfaces;
+using DentalClinic.Application.Common.Security;
 using DentalClinic.Application.Features.Appointments.Dtos;
 using DentalClinic.Application.Features.Appointments.Mappers;
 using DentalClinic.Domain.Appointments;
@@ -15,7 +16,8 @@ namespace DentalClinic.Application.Features.Appointments.Commands.RescheduleAppo
 public class RescheduleAppointmentCommandHandler(
     ILogger<RescheduleAppointmentCommandHandler> logger,
     IAppDbContext context,
-    HybridCache cache)
+    HybridCache cache,
+    IUser user)
     : IRequestHandler<RescheduleAppointmentCommand, Result<AppointmentDto>>
 {
     public async Task<Result<AppointmentDto>> Handle(RescheduleAppointmentCommand request, CancellationToken cancellationToken)
@@ -25,6 +27,12 @@ public class RescheduleAppointmentCommandHandler(
         {
             logger.LogWarning("Appointment reschedule failed. Appointment {AppointmentId} not found.", request.AppointmentId);
             return ApplicationErrors.AppointmentNotFound;
+        }
+
+        if (!user.CanAccessAppointment(appointment.DoctorId))
+        {
+            logger.LogWarning("Appointment reschedule denied for user {UserId} on appointment {AppointmentId}.", user.Id, request.AppointmentId);
+            return ApplicationErrors.AppointmentAccessForbidden;
         }
 
         var result = appointment.Reschedule(request.ScheduledDateTime, request.DurationInMinutes);

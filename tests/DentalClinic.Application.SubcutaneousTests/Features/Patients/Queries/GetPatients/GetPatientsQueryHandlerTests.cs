@@ -1,4 +1,5 @@
 using DentalClinic.Application.Common.Interfaces;
+using DentalClinic.Application.Common.Security;
 using DentalClinic.Application.Features.Patients.Queries.GetPatients;
 using DentalClinic.Application.SubcutaneousTests.Common;
 using DentalClinic.Domain.Common.Enums;
@@ -20,7 +21,7 @@ public class GetPatientsQueryHandlerTests(WebAppFactory factory)
     {
         // Arrange
         await SeedPatientsAsync();
-        var query = new GetPatientsQuery(PageNumber: 1, PageSize: 10, SearchTerm: null);
+        var query = new GetPatientsQuery(Scope: PatientAccessScope.None, PageNumber: 1, PageSize: 10, SearchTerm: null);
 
         // Act
         var result = await _mediator.Send(query);
@@ -35,7 +36,7 @@ public class GetPatientsQueryHandlerTests(WebAppFactory factory)
     {
         // Arrange
         await SeedPatientsAsync();
-        var query = new GetPatientsQuery(PageNumber: 1, PageSize: 10, SearchTerm: "saeed");
+        var query = new GetPatientsQuery(Scope: PatientAccessScope.None, PageNumber: 1, PageSize: 10, SearchTerm: "saeed");
 
         // Act
         var result = await _mediator.Send(query);

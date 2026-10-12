@@ -1,4 +1,5 @@
 using DentalClinic.Application.Common.Interfaces;
+using DentalClinic.Application.Common.Security;
 using DentalClinic.Application.Features.Invoices.Queries.GetInvoices;
 using DentalClinic.Application.SubcutaneousTests.Common;
 using DentalClinic.Domain.Common.Enums;
@@ -34,6 +35,7 @@ public class GetInvoicesQueryHandlerTests(WebAppFactory factory)
         await _context.SaveChangesAsync(default);
 
         var query = new GetInvoicesQuery(
+            Scope: DoctorAccessScope.None,
             PageNumber: 1,
             PageSize: 10,
             PatientId: patient.Id,
@@ -54,7 +56,7 @@ public class GetInvoicesQueryHandlerTests(WebAppFactory factory)
     public async Task Handle_WhenNoMatchingInvoices_ShouldReturnEmptyPaginatedList()
     {
         // Arrange
-        var query = new GetInvoicesQuery(PageNumber: 1, PageSize: 10, PatientId: Guid.NewGuid());
+        var query = new GetInvoicesQuery(Scope: DoctorAccessScope.None, PageNumber: 1, PageSize: 10, PatientId: Guid.NewGuid());
 
         // Act
         var result = await _mediator.Send(query);
@@ -64,6 +66,50 @@ public class GetInvoicesQueryHandlerTests(WebAppFactory factory)
         Assert.NotNull(result.Value);
         Assert.Empty(result.Value.Items!);
         Assert.Equal(0, result.Value.TotalCount);
+    }
+
+    [Fact]
+    public async Task Handle_WithRestrictedDoctorScope_ShouldHideInvoicesNotLinkedToThatDoctor()
+    {
+        // Arrange: an invoice with no appointment is never visible to a doctor.
+        var patient = await SeedPatientAsync();
+        var invoice = Invoice.Create(patient.Id, 250, null).Value;
+        await _context.Invoices.AddAsync(invoice);
+        await _context.SaveChangesAsync(default);
+
+        var query = new GetInvoicesQuery(
+            Scope: new DoctorAccessScope(IsRestricted: true, DoctorId: Guid.NewGuid()),
+            PageNumber: 1,
+            PageSize: 10);
+
+        // Act
+        var result = await _mediator.Send(query);
+
+        // Assert
+        Assert.True(result.IsSuccess);
+        Assert.NotNull(result.Value);
+        Assert.Empty(result.Value.Items!);
+        Assert.Equal(0, result.Value.TotalCount);
+    }
+
+    [Fact]
+    public async Task Handle_ShouldPopulatePatientName()
+    {
+        // Arrange
+        var patient = await SeedPatientAsync();
+        var invoice = Invoice.Create(patient.Id, 300, null).Value;
+        await _context.Invoices.AddAsync(invoice);
+        await _context.SaveChangesAsync(default);
+
+        var query = new GetInvoicesQuery(Scope: DoctorAccessScope.None, PageNumber: 1, PageSize: 10, PatientId: patient.Id);
+
+        // Act
+        var result = await _mediator.Send(query);
+
+        // Assert
+        Assert.True(result.IsSuccess);
+        var item = Assert.Single(result.Value.Items!);
+        Assert.Equal("John Doe", item.PatientName);
     }
 
     private async Task<Patient> SeedPatientAsync()

@@ -168,12 +168,26 @@ public class WebAppFactory : WebApplicationFactory<IAssemblyMarker>, IAsyncLifet
             var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
             await context.Database.EnsureCreatedAsync();
 
+            var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
+            foreach (var roleName in new[] { "Admin", "Doctor", "Receptionist" })
+            {
+                if (!await roleManager.RoleExistsAsync(roleName))
+                {
+                    await roleManager.CreateAsync(new IdentityRole(roleName));
+                }
+            }
+
             var userManager = scope.ServiceProvider.GetRequiredService<UserManager<AppUser>>();
             var admin = TestUsers.Admin;
 
             if (await userManager.FindByIdAsync(admin.Id) is null)
             {
                 await userManager.CreateAsync(admin);
+            }
+
+            if (!await userManager.IsInRoleAsync(admin, "Admin"))
+            {
+                await userManager.AddToRoleAsync(admin, "Admin");
             }
         }
 

@@ -5,13 +5,14 @@ namespace DentalClinic.Application.Features.Invoices.Mappers;
 
 public static class InvoiceMappingExtensions
 {
-    public static InvoiceDto ToDto(this Invoice entity)
+    public static InvoiceDto ToDto(this Invoice entity, string? patientName = null)
     {
         ArgumentNullException.ThrowIfNull(entity);
 
         return new InvoiceDto(
             entity.Id,
             entity.PatientId,
+            patientName ?? string.Empty,
             entity.AppointmentId,
             entity.TotalAmount,
             entity.PaidAmount,
@@ -32,8 +33,9 @@ public static class InvoiceMappingExtensions
             entity.TransactionNotes);
     }
 
-    public static List<InvoiceDto> ToDtos(this IEnumerable<Invoice> entities)
+    public static List<InvoiceDto> ToDtos(this IEnumerable<Invoice> entities, IReadOnlyDictionary<Guid, string>? patientNames = null)
     {
-        return [.. entities.Select(e => e.ToDto())];
+        return [.. entities.Select(e =>
+            e.ToDto(patientNames is not null && patientNames.TryGetValue(e.PatientId, out var name) ? name : null))];
     }
 }

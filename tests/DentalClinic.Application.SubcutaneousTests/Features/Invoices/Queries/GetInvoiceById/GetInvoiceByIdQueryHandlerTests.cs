@@ -1,4 +1,5 @@
 using DentalClinic.Application.Common.Interfaces;
+using DentalClinic.Application.Common.Security;
 using DentalClinic.Application.Features.Invoices.Queries.GetInvoiceById;
 using DentalClinic.Application.SubcutaneousTests.Common;
 using DentalClinic.Domain.Common.Enums;
@@ -21,7 +22,7 @@ public class GetInvoiceByIdQueryHandlerTests(WebAppFactory factory)
     {
         // Arrange
         var invoice = await SeedInvoiceAsync();
-        var query = new GetInvoiceByIdQuery(invoice.Id);
+        var query = new GetInvoiceByIdQuery(invoice.Id, DoctorAccessScope.None);
 
         // Act
         var result = await _mediator.Send(query);
@@ -31,13 +32,29 @@ public class GetInvoiceByIdQueryHandlerTests(WebAppFactory factory)
         Assert.NotNull(result.Value);
         Assert.Equal(invoice.Id, result.Value.Id);
         Assert.Equal(300, result.Value.TotalAmount);
+        Assert.Equal("John Doe", result.Value.PatientName);
+    }
+
+    [Fact]
+    public async Task Handle_WithRestrictedDoctorScope_ForInvoiceWithoutOwnAppointment_ShouldReturnForbidden()
+    {
+        // Arrange
+        var invoice = await SeedInvoiceAsync();
+        var query = new GetInvoiceByIdQuery(invoice.Id, new DoctorAccessScope(IsRestricted: true, DoctorId: Guid.NewGuid()));
+
+        // Act
+        var result = await _mediator.Send(query);
+
+        // Assert
+        Assert.True(result.IsError);
+        Assert.Equal("Invoice.AccessForbidden", result.TopError.Code);
     }
 
     [Fact]
     public async Task Handle_WithNonExistingInvoiceId_ShouldReturnInvoiceNotFound()
     {
         // Arrange
-        var query = new GetInvoiceByIdQuery(Guid.NewGuid());
+        var query = new GetInvoiceByIdQuery(Guid.NewGuid(), DoctorAccessScope.None);
 
         // Act
         var result = await _mediator.Send(query);

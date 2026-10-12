@@ -1,3 +1,4 @@
+using DentalClinic.Application.Common.Security;
 using DentalClinic.Application.Features.Invoices.Queries.GetInvoiceById;
 using DentalClinic.Application.SubcutaneousTests.Common;
 using MediatR;
@@ -14,7 +15,7 @@ public class GetInvoiceByIdValidatorTests(WebAppFactory factory)
     public async Task GetInvoiceById_ShouldFailValidation_WhenInvoiceIdIsEmpty()
     {
         // Arrange
-        var query = new GetInvoiceByIdQuery(Guid.Empty);
+        var query = new GetInvoiceByIdQuery(Guid.Empty, DoctorAccessScope.None);
 
         // Act
         var result = await _mediator.Send(query);

@@ -1,5 +1,6 @@
 using DentalClinic.Application.Common.Errors;
 using DentalClinic.Application.Common.Interfaces;
+using DentalClinic.Application.Common.Security;
 using DentalClinic.Domain.Common.Results;
 
 using MediatR;
@@ -12,7 +13,8 @@ namespace DentalClinic.Application.Features.Appointments.Commands.CompleteAppoin
 public class CompleteAppointmentCommandHandler(
     ILogger<CompleteAppointmentCommandHandler> logger,
     IAppDbContext context,
-    HybridCache cache)
+    HybridCache cache,
+    IUser user)
     : IRequestHandler<CompleteAppointmentCommand, Result<Updated>>
 {
     public async Task<Result<Updated>> Handle(CompleteAppointmentCommand request, CancellationToken cancellationToken)
@@ -22,6 +24,12 @@ public class CompleteAppointmentCommandHandler(
         {
             logger.LogWarning("Appointment complete failed. Appointment {AppointmentId} not found.", request.AppointmentId);
             return ApplicationErrors.AppointmentNotFound;
+        }
+
+        if (!user.CanAccessAppointment(appointment.DoctorId))
+        {
+            logger.LogWarning("Appointment complete denied for user {UserId} on appointment {AppointmentId}.", user.Id, request.AppointmentId);
+            return ApplicationErrors.AppointmentAccessForbidden;
         }
 
         var result = appointment.Complete();

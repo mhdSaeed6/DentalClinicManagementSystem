@@ -16,6 +16,14 @@ public class GetAppointmentsQueryHandler(IAppDbContext context) : IRequestHandle
     {
         var query = context.Appointments.AsNoTracking();
 
+        // Trusted, server-derived scope. Applied before any client-supplied filter
+        // so a doctor can never see another doctor's appointments.
+        if (request.Scope.IsRestricted)
+        {
+            var scopeDoctorId = request.Scope.DoctorId;
+            query = query.Where(a => a.DoctorId == scopeDoctorId);
+        }
+
         if (request.PatientId.HasValue)
         {
             query = query.Where(a => a.PatientId == request.PatientId.Value);

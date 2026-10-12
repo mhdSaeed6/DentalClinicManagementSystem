@@ -1,3 +1,4 @@
+using DentalClinic.Application.Common.Security;
 using DentalClinic.Application.Features.TreatmentRecords.Queries.GetTreatmentRecordById;
 using DentalClinic.Application.SubcutaneousTests.Common;
 using MediatR;
@@ -14,7 +15,7 @@ public class GetTreatmentRecordByIdValidatorTests(WebAppFactory factory)
     public async Task GetTreatmentRecordById_ShouldFailValidation_WhenTreatmentRecordIdIsEmpty()
     {
         // Arrange
-        var query = new GetTreatmentRecordByIdQuery(Guid.Empty);
+        var query = new GetTreatmentRecordByIdQuery(Guid.Empty, DoctorAccessScope.None);
 
         // Act
         var result = await _mediator.Send(query);

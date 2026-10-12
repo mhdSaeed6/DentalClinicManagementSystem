@@ -26,6 +26,28 @@ public class GetInvoiceByIdQueryHandler(
             return ApplicationErrors.InvoiceNotFound;
         }
 
-        return invoice.ToDto();
+        // Trusted, server-derived scope: a doctor may only read invoices tied to
+        // one of their own appointments.
+        if (request.Scope.IsRestricted)
+        {
+            var scopeDoctorId = request.Scope.DoctorId;
+            var canAccess = invoice.AppointmentId is { } appointmentId &&
+                await context.Appointments.AnyAsync(
+                    a => a.Id == appointmentId && a.DoctorId == scopeDoctorId,
+                    cancellationToken);
+
+            if (!canAccess)
+            {
+                logger.LogWarning("Invoice {InvoiceId} access denied for doctor {DoctorId}.", request.InvoiceId, scopeDoctorId);
+                return ApplicationErrors.InvoiceAccessForbidden;
+            }
+        }
+
+        var patientName = await context.Patients
+            .Where(p => p.Id == invoice.PatientId)
+            .Select(p => p.FirstName + " " + p.LastName)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        return invoice.ToDto(patientName);
     }
 }

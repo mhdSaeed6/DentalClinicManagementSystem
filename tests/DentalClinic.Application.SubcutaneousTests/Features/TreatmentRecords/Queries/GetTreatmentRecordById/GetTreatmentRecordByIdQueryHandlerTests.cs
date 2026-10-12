@@ -1,4 +1,5 @@
 using DentalClinic.Application.Common.Interfaces;
+using DentalClinic.Application.Common.Security;
 using DentalClinic.Application.Features.TreatmentRecords.Queries.GetTreatmentRecordById;
 using DentalClinic.Application.SubcutaneousTests.Common;
 using DentalClinic.Domain.Common.Enums;
@@ -22,7 +23,7 @@ public class GetTreatmentRecordByIdQueryHandlerTests(WebAppFactory factory)
     {
         // Arrange
         var record = await SeedTreatmentRecordAsync();
-        var query = new GetTreatmentRecordByIdQuery(record.Id);
+        var query = new GetTreatmentRecordByIdQuery(record.Id, DoctorAccessScope.None);
 
         // Act
         var result = await _mediator.Send(query);
@@ -39,7 +40,7 @@ public class GetTreatmentRecordByIdQueryHandlerTests(WebAppFactory factory)
     public async Task Handle_WithNonExistingRecordId_ShouldReturnTreatmentRecordNotFound()
     {
         // Arrange
-        var query = new GetTreatmentRecordByIdQuery(Guid.NewGuid());
+        var query = new GetTreatmentRecordByIdQuery(Guid.NewGuid(), DoctorAccessScope.None);
 
         // Act
         var result = await _mediator.Send(query);
