@@ -1,5 +1,6 @@
 using DentalClinic.Application.Common.Interfaces;
 using DentalClinic.Application.Common.Models;
+using DentalClinic.Application.Common.Security;
 using DentalClinic.Application.Features.Patients.Dtos;
 using DentalClinic.Application.Features.Patients.Mappers;
 using DentalClinic.Domain.Common.Results;
@@ -15,6 +16,27 @@ public class GetPatientsQueryHandler(IAppDbContext context) : IRequestHandler<Ge
     public async Task<Result<PaginatedList<PatientDto>>> Handle(GetPatientsQuery request, CancellationToken cancellationToken)
     {
         var query = context.Patients.AsNoTracking();
+
+        // 0. Trusted, server-derived scope. Applied before any client-supplied
+        //    filter so a doctor only sees patients linked to them.
+        if (request.Scope.IsRestricted)
+        {
+            var scopeDoctorId = request.Scope.DoctorId ?? Guid.Empty;
+            var scopeUserId = request.Scope.UserId;
+
+            if (!string.IsNullOrEmpty(scopeUserId))
+            {
+                var userId = scopeUserId;
+                query = query.Where(p =>
+                    p.CreatedBy == userId ||
+                    context.Appointments.Any(a => a.PatientId == p.Id && a.DoctorId == scopeDoctorId));
+            }
+            else
+            {
+                query = query.Where(p =>
+                    context.Appointments.Any(a => a.PatientId == p.Id && a.DoctorId == scopeDoctorId));
+            }
+        }
 
         // 1. فلترة بالاسم أو رقم الهاتف إذا كان المستخدم يبحث عن مريض
         if (!string.IsNullOrWhiteSpace(request.SearchTerm))

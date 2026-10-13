@@ -113,6 +113,21 @@ public class ApplicationDbContextInitialiser(
             await _userManager.AddToRoleAsync(doctor02User, "Doctor");
         }
 
+        // 3b. Receptionist Account
+        var receptionistUser = new AppUser
+        {
+            Id = "2f9c4a51-7b3e-4d0a-9c1e-5a6b7c8d9e0f",
+            Email = "reception@dentalclinic.com",
+            UserName = "reception@dentalclinic.com",
+            EmailConfirmed = true
+        };
+
+        if (_userManager.Users.All(u => u.Email != receptionistUser.Email))
+        {
+            await _userManager.CreateAsync(receptionistUser, "Reception123!");
+            await _userManager.AddToRoleAsync(receptionistUser, "Receptionist");
+        }
+
         // 4. Seed Doctors
         if (!await _context.Doctors.AnyAsync())
         {
@@ -131,6 +146,10 @@ public class ApplicationDbContextInitialiser(
             {
                 throw new Exception("Doctor Seeding Failed.");
             }
+
+            // ربط ملفات الطبيب بحسابات Identity الخاصة بهم
+            doc1Res.Value.AssignUser(doctor01User.Id);
+            doc2Res.Value.AssignUser(doctor02User.Id);
 
             // <-- هذا السطر كان مفقوداً لديكم
             _context.Doctors.AddRange([doc1Res.Value, doc2Res.Value]);
@@ -165,6 +184,26 @@ public class ApplicationDbContextInitialiser(
             ]);
         }
 
+        await _context.SaveChangesAsync();
+
+        // 4b. Ensure existing (previously unlinked) seeded doctor profiles are linked
+        //     to their identity accounts. Idempotent so re-running is safe.
+        var doctorProfiles = await _context.Doctors.ToListAsync();
+        var smithProfile = doctorProfiles.FirstOrDefault(d => d.FirstName == "John" && d.LastName == "Smith");
+        if (smithProfile is not null && string.IsNullOrEmpty(smithProfile.UserId))
+        {
+            smithProfile.AssignUser(doctor01User.Id);
+        }
+
+        var saraProfile = doctorProfiles.FirstOrDefault(d => d.FirstName == "Sara" && d.LastName == "Johnson");
+        if (saraProfile is not null && string.IsNullOrEmpty(saraProfile.UserId))
+        {
+            saraProfile.AssignUser(doctor02User.Id);
+        }
+
+        // Persist the back-filled doctor/account links before moving on; on an
+        // existing database the appointment seed below is skipped, so without
+        // this call the links would never be committed.
         await _context.SaveChangesAsync();
 
         // 7. Sample Appointments Seed

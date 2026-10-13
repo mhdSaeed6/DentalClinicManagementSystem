@@ -62,6 +62,9 @@ public sealed class AppUserDto
 
     public List<string> Roles { get; set; } = [];
 
+    /// <summary>Linked doctor profile id, when the signed-in account is a doctor.</summary>
+    public Guid? DoctorId { get; set; }
+
     // The API also returns a "claims" collection that the client does not need.
     [JsonIgnore]
     public JsonElement? Claims { get; set; }
@@ -209,6 +212,8 @@ public sealed class InvoiceDto
     public Guid Id { get; set; }
 
     public Guid PatientId { get; set; }
+
+    public string PatientName { get; set; } = string.Empty;
 
     public Guid? AppointmentId { get; set; }
 

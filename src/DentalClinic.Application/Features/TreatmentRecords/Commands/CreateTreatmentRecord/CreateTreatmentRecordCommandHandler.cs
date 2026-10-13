@@ -1,5 +1,6 @@
 using DentalClinic.Application.Common.Errors;
 using DentalClinic.Application.Common.Interfaces;
+using DentalClinic.Application.Common.Security;
 using DentalClinic.Application.Features.TreatmentRecords.Dtos;
 using DentalClinic.Application.Features.TreatmentRecords.Mappers;
 using DentalClinic.Domain.Common.Results;
@@ -16,11 +17,22 @@ namespace DentalClinic.Application.Features.TreatmentRecords.Commands.CreateTrea
 public class CreateTreatmentRecordCommandHandler(
     ILogger<CreateTreatmentRecordCommandHandler> logger,
     IAppDbContext context,
-    HybridCache cache)
+    HybridCache cache,
+    IUser user)
     : IRequestHandler<CreateTreatmentRecordCommand, Result<TreatmentRecordDto>>
 {
     public async Task<Result<TreatmentRecordDto>> Handle(CreateTreatmentRecordCommand request, CancellationToken cancellationToken)
     {
+        // 0. Authorization: only admins and doctors author clinical records, and a
+        //    doctor may only author records for their own profile.
+        if (!user.CanWriteClinicalRecords() || !user.CanAccessAppointment(request.DoctorId))
+        {
+            logger.LogWarning("Treatment record creation denied for user {UserId} (doctor {DoctorId}).", user.Id, request.DoctorId);
+            return user.CanWriteClinicalRecords()
+                ? ApplicationErrors.TreatmentRecordAccessForbidden
+                : ApplicationErrors.ClinicalWriteForbidden;
+        }
+
         var patientExists = await context.Patients.AnyAsync(p => p.Id == request.PatientId, cancellationToken);
         if (!patientExists)
         {

@@ -1,3 +1,4 @@
+using DentalClinic.Application.Common.Security;
 using DentalClinic.Application.Features.TreatmentRecords.Queries.GetTreatmentRecords;
 using DentalClinic.Application.SubcutaneousTests.Common;
 using MediatR;
@@ -16,7 +17,7 @@ public class GetTreatmentRecordsQueryValidatorTests(WebAppFactory factory)
     public async Task GetTreatmentRecords_ShouldFailValidation_WhenPageNumberIsInvalid(int pageNumber)
     {
         // Arrange
-        var query = new GetTreatmentRecordsQuery(PageNumber: pageNumber, PageSize: 10);
+        var query = new GetTreatmentRecordsQuery(Scope: DoctorAccessScope.None, PageNumber: pageNumber, PageSize: 10);
 
         // Act
         var result = await _mediator.Send(query);
@@ -32,7 +33,7 @@ public class GetTreatmentRecordsQueryValidatorTests(WebAppFactory factory)
     public async Task GetTreatmentRecords_ShouldFailValidation_WhenPageSizeIsInvalid(int pageSize)
     {
         // Arrange
-        var query = new GetTreatmentRecordsQuery(PageNumber: 1, PageSize: pageSize);
+        var query = new GetTreatmentRecordsQuery(Scope: DoctorAccessScope.None, PageNumber: 1, PageSize: pageSize);
 
         // Act
         var result = await _mediator.Send(query);

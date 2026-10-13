@@ -1,6 +1,8 @@
 using Asp.Versioning;
 
+using DentalClinic.Application.Common.Interfaces;
 using DentalClinic.Application.Common.Models;
+using DentalClinic.Application.Common.Security;
 using DentalClinic.Application.Features.Invoices.Commands.AddInvoicePayment;
 using DentalClinic.Application.Features.Invoices.Commands.CreateInvoice;
 using DentalClinic.Application.Features.Invoices.Dtos;
@@ -18,7 +20,7 @@ namespace DentalClinic.Api.Controllers;
 [Route("api/v{version:apiVersion}/invoices")]
 [ApiVersion("1.0")]
 [Authorize]
-public class InvoiceController(ISender sender) : ApiController
+public class InvoiceController(ISender sender, IUser user) : ApiController
 {
     [HttpGet]
     [ProducesResponseType(typeof(PaginatedList<InvoiceDto>), StatusCodes.Status200OK)]
@@ -32,6 +34,7 @@ public class InvoiceController(ISender sender) : ApiController
     public async Task<IActionResult> GetInvoices([FromQuery] GetInvoicesRequest request, CancellationToken ct)
     {
         var query = new GetInvoicesQuery(
+            Scope: user.DoctorScope(),
             PageNumber: request.PageNumber,
             PageSize: request.PageSize,
             PatientId: request.PatientId,
@@ -55,7 +58,7 @@ public class InvoiceController(ISender sender) : ApiController
     [ProducesDefaultResponseType]
     public async Task<IActionResult> GetInvoiceById(Guid id, CancellationToken ct)
     {
-        var result = await sender.Send(new GetInvoiceByIdQuery(id), ct);
+        var result = await sender.Send(new GetInvoiceByIdQuery(id, user.DoctorScope()), ct);
 
         return result.Match(
             response => Ok(response),

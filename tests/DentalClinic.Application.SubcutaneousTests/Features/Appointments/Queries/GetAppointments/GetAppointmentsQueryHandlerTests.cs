@@ -1,4 +1,5 @@
 using DentalClinic.Application.Common.Interfaces;
+using DentalClinic.Application.Common.Security;
 using DentalClinic.Application.Features.Appointments.Queries.GetAppointments;
 using DentalClinic.Application.SubcutaneousTests.Common;
 using DentalClinic.Domain.Appointments;
@@ -36,6 +37,7 @@ public class GetAppointmentsQueryHandlerTests(WebAppFactory factory)
         await _context.SaveChangesAsync(default);
 
         var query = new GetAppointmentsQuery(
+            Scope: DoctorAccessScope.None,
             PageNumber: 1,
             PageSize: 10,
             PatientId: patient.Id,
@@ -59,6 +61,7 @@ public class GetAppointmentsQueryHandlerTests(WebAppFactory factory)
     {
         // Arrange
         var query = new GetAppointmentsQuery(
+            Scope: DoctorAccessScope.None,
             PageNumber: 1,
             PageSize: 10,
             PatientId: Guid.NewGuid());

@@ -1,6 +1,8 @@
 using Asp.Versioning;
 
+using DentalClinic.Application.Common.Interfaces;
 using DentalClinic.Application.Common.Models;
+using DentalClinic.Application.Common.Security;
 using DentalClinic.Application.Features.TreatmentRecords.Commands.CreateTreatmentRecord;
 using DentalClinic.Application.Features.TreatmentRecords.Commands.UpdateTreatmentRecord;
 using DentalClinic.Application.Features.TreatmentRecords.Dtos;
@@ -17,8 +19,8 @@ namespace DentalClinic.Api.Controllers;
 
 [Route("api/v{version:apiVersion}/treatment-records")]
 [ApiVersion("1.0")]
-[Authorize]
-public class TreatmentRecordController(ISender sender) : ApiController
+[Authorize(Policy = "StaffOnly")]
+public class TreatmentRecordController(ISender sender, IUser user) : ApiController
 {
     [HttpGet]
     [ProducesResponseType(typeof(PaginatedList<TreatmentRecordDto>), StatusCodes.Status200OK)]
@@ -32,6 +34,7 @@ public class TreatmentRecordController(ISender sender) : ApiController
     public async Task<IActionResult> GetTreatmentRecords([FromQuery] GetTreatmentRecordsRequest request, CancellationToken ct)
     {
         var query = new GetTreatmentRecordsQuery(
+            Scope: user.DoctorScope(),
             PageNumber: request.PageNumber,
             PageSize: request.PageSize,
             PatientId: request.PatientId,
@@ -56,7 +59,7 @@ public class TreatmentRecordController(ISender sender) : ApiController
     [ProducesDefaultResponseType]
     public async Task<IActionResult> GetTreatmentRecordById(Guid id, CancellationToken ct)
     {
-        var result = await sender.Send(new GetTreatmentRecordByIdQuery(id), ct);
+        var result = await sender.Send(new GetTreatmentRecordByIdQuery(id, user.DoctorScope()), ct);
 
         return result.Match(
             response => Ok(response),
@@ -64,6 +67,7 @@ public class TreatmentRecordController(ISender sender) : ApiController
     }
 
     [HttpPost]
+    [Authorize(Policy = "ClinicalWrite")]
     [ProducesResponseType(typeof(TreatmentRecordDto), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
@@ -92,6 +96,7 @@ public class TreatmentRecordController(ISender sender) : ApiController
     }
 
     [HttpPut("{id:guid}")]
+    [Authorize(Policy = "ClinicalWrite")]
     [ProducesResponseType(typeof(TreatmentRecordDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]

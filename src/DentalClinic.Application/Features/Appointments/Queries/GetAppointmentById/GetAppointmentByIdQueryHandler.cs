@@ -26,6 +26,12 @@ public class GetAppointmentByIdQueryHandler(
             return ApplicationErrors.AppointmentNotFound;
         }
 
+        if (request.Scope.IsRestricted && appointment.DoctorId != request.Scope.DoctorId)
+        {
+            logger.LogWarning("Appointment {AppointmentId} is outside the caller's authorized scope.", request.AppointmentId);
+            return ApplicationErrors.AppointmentAccessForbidden;
+        }
+
         return appointment.ToDto();
     }
 }

@@ -1,12 +1,15 @@
 using DentalClinic.Application.Common.Errors;
 using DentalClinic.Application.Common.Interfaces;
+using DentalClinic.Application.Common.Security;
 using DentalClinic.Application.Features.Appointments.Dtos;
 using DentalClinic.Application.Features.Appointments.Mappers;
 using DentalClinic.Domain.Appointments;
+using DentalClinic.Domain.Appointments.Enums;
 using DentalClinic.Domain.Common.Results;
 
 using MediatR;
 
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Logging;
 
@@ -15,7 +18,8 @@ namespace DentalClinic.Application.Features.Appointments.Commands.RescheduleAppo
 public class RescheduleAppointmentCommandHandler(
     ILogger<RescheduleAppointmentCommandHandler> logger,
     IAppDbContext context,
-    HybridCache cache)
+    HybridCache cache,
+    IUser user)
     : IRequestHandler<RescheduleAppointmentCommand, Result<AppointmentDto>>
 {
     public async Task<Result<AppointmentDto>> Handle(RescheduleAppointmentCommand request, CancellationToken cancellationToken)
@@ -25,6 +29,32 @@ public class RescheduleAppointmentCommandHandler(
         {
             logger.LogWarning("Appointment reschedule failed. Appointment {AppointmentId} not found.", request.AppointmentId);
             return ApplicationErrors.AppointmentNotFound;
+        }
+
+        if (!user.CanAccessAppointment(appointment.DoctorId))
+        {
+            logger.LogWarning("Appointment reschedule denied for user {UserId} on appointment {AppointmentId}.", user.Id, request.AppointmentId);
+            return ApplicationErrors.AppointmentAccessForbidden;
+        }
+
+        // Prevent double-booking: the doctor must not have another scheduled
+        // appointment whose time range overlaps the requested one.
+        var requestedEnd = request.ScheduledDateTime.AddMinutes(request.DurationInMinutes);
+        var hasConflict = await context.Appointments.AnyAsync(
+            a => a.DoctorId == appointment.DoctorId &&
+                 a.Id != request.AppointmentId &&
+                 a.Status == AppointmentStatus.Scheduled &&
+                 a.ScheduledDateTime < requestedEnd &&
+                 request.ScheduledDateTime < a.ScheduledDateTime.AddMinutes(a.DurationInMinutes),
+            cancellationToken);
+
+        if (hasConflict)
+        {
+            logger.LogWarning(
+                "Appointment reschedule failed. Doctor {DoctorId} already has an appointment overlapping {ScheduledDateTime}.",
+                appointment.DoctorId,
+                request.ScheduledDateTime);
+            return ApplicationErrors.AppointmentSlotConflict;
         }
 
         var result = appointment.Reschedule(request.ScheduledDateTime, request.DurationInMinutes);

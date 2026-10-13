@@ -23,8 +23,11 @@ public class CreateInvoiceCommandHandler(
     {
         logger.LogInformation("Creating invoice for patient {PatientId}", request.PatientId);
 
-        var patientExists = await context.Patients.AnyAsync(p => p.Id == request.PatientId, cancellationToken);
-        if (!patientExists)
+        var patient = await context.Patients
+            .Where(p => p.Id == request.PatientId)
+            .Select(p => new { p.FirstName, p.LastName })
+            .FirstOrDefaultAsync(cancellationToken);
+        if (patient is null)
         {
             logger.LogWarning("Invoice creation failed. Patient {PatientId} not found.", request.PatientId);
             return ApplicationErrors.PatientNotFound;
@@ -56,6 +59,6 @@ public class CreateInvoiceCommandHandler(
 
         logger.LogInformation("Invoice created successfully with ID: {InvoiceId}", invoice.Id);
 
-        return invoice.ToDto();
+        return invoice.ToDto($"{patient.FirstName} {patient.LastName}");
     }
 }

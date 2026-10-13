@@ -11,9 +11,12 @@
         <button type="button" class="btn btn-outline" @onclick="LoadAsync" disabled="@_loading">
             <ClinicIcon Name="refresh" Class="sm" /><span>@Session.T("Refresh", "تحديث")</span>
         </button>
-        <button type="button" class="btn btn-primary" @onclick="OpenCreate">
-            <ClinicIcon Name="plus" Class="sm" /><span>@Session.T("New invoice", "فاتورة جديدة")</span>
-        </button>
+        @if (!Session.IsDoctor)
+        {
+            <button type="button" class="btn btn-primary" @onclick="OpenCreate">
+                <ClinicIcon Name="plus" Class="sm" /><span>@Session.T("New invoice", "فاتورة جديدة")</span>
+            </button>
+        }
     </Actions>
 </PageHeader>
 
@@ -71,7 +74,12 @@
     {
         <EmptyState Icon="invoice" Title="@Session.T("No invoices", "لا توجد فواتير")"
                     Message="@Session.T("Create an invoice to start tracking payments.", "أنشئ فاتورة لبدء تتبع المدفوعات.")">
-            <ActionContent><button type="button" class="btn btn-primary" @onclick="OpenCreate"><ClinicIcon Name="plus" Class="sm" /> @Session.T("New invoice", "فاتورة جديدة")</button></ActionContent>
+            <ActionContent>
+                @if (!Session.IsDoctor)
+                {
+                    <button type="button" class="btn btn-primary" @onclick="OpenCreate"><ClinicIcon Name="plus" Class="sm" /> @Session.T("New invoice", "فاتورة جديدة")</button>
+                }
+            </ActionContent>
         </EmptyState>
     }
     else
@@ -96,8 +104,8 @@
                             <td class="cell-main mono">#@invoice.Id.ToString()[..8]</td>
                             <td>
                                 <div class="cell-person">
-                                    <Avatar Name="@PatientName(invoice.PatientId)" Size="sm" />
-                                    <span class="cell-main">@PatientName(invoice.PatientId)</span>
+                                    <Avatar Name="@PatientName(invoice)" Size="sm" />
+                                    <span class="cell-main">@PatientName(invoice)</span>
                                 </div>
                             </td>
                             <td class="mono">@ClinicFormatting.Money(invoice.TotalAmount)</td>
@@ -164,7 +172,7 @@
 </Modal>
 
 <Drawer IsOpen="_drawerOpen" Title="@($"#{_selected?.Id.ToString()[..8]}")"
-        Subtitle="@(_selected is null ? null : PatientName(_selected.PatientId))" Icon="invoice"
+        Subtitle="@(_selected is null ? null : PatientName(_selected))" Icon="invoice"
         OnClose="() => _drawerOpen = false">
     @if (_selected is not null)
     {
@@ -208,7 +216,7 @@
             </div>
         }
 
-        @if (_selected.Status != PaymentStatus.Paid)
+        @if (_selected.Status != PaymentStatus.Paid && !Session.IsDoctor)
         {
             <div class="divider"></div>
             <h3 class="mb-2">@Session.T("Record a payment", "تسجيل دفعة")</h3>
@@ -411,8 +419,15 @@
 
     private string FullName(string? first, string? last) => ClinicFormatting.FullName(first, last);
 
-    private string PatientName(Guid id) =>
-        _patients.FirstOrDefault(p => p.Id == id) is { } patient
+    private string PatientName(InvoiceDto invoice)
+    {
+        if (!string.IsNullOrWhiteSpace(invoice.PatientName))
+        {
+            return invoice.PatientName;
+        }
+
+        return _patients.FirstOrDefault(p => p.Id == invoice.PatientId) is { } patient
             ? FullName(patient.FirstName, patient.LastName)
             : Session.T("Unknown patient", "مريض غير معروف");
+    }
 }

@@ -1,3 +1,4 @@
+using DentalClinic.Application.Common.Errors;
 using DentalClinic.Application.Common.Interfaces;
 using DentalClinic.Application.Features.Appointments.Commands.RescheduleAppointment;
 using DentalClinic.Application.SubcutaneousTests.Common;
@@ -55,6 +56,56 @@ public class RescheduleAppointmentCommandHandlerTests(WebAppFactory factory)
 
         // Assert
         Assert.True(result.IsError);
+    }
+
+    [Fact]
+    public async Task Handle_WithOverlappingAppointmentForSameDoctor_ShouldReturnSlotConflict()
+    {
+        // Arrange
+        var appointment = await SeedAppointmentAsync();
+        var blockerStart = DateTime.UtcNow.AddDays(3);
+
+        // Another scheduled appointment for the same doctor from 10:00 to 10:30.
+        var blocker = Appointment.Create(appointment.PatientId, appointment.DoctorId, appointment.ServiceId, blockerStart, 30, null).Value;
+        await _context.Appointments.AddAsync(blocker);
+        await _context.SaveChangesAsync(default);
+
+        // Try to move the first appointment into the blocker's slot (overlaps).
+        var command = new RescheduleAppointmentCommand(
+            appointment.Id,
+            blockerStart.AddMinutes(10),
+            DurationInMinutes: 60);
+
+        // Act
+        var result = await _mediator.Send(command);
+
+        // Assert
+        Assert.True(result.IsError);
+        Assert.Contains(ApplicationErrors.AppointmentSlotConflict, result.Errors);
+
+        // The appointment must be unchanged.
+        var dbAppointment = await _context.Appointments.AsNoTracking()
+            .FirstOrDefaultAsync(a => a.Id == appointment.Id);
+        Assert.NotNull(dbAppointment);
+        Assert.Equal(appointment.ScheduledDateTime, dbAppointment.ScheduledDateTime);
+        Assert.Equal(appointment.DurationInMinutes, dbAppointment.DurationInMinutes);
+    }
+
+    [Fact]
+    public async Task Handle_WhenReschedulingToItsOwnSlot_ShouldSucceed()
+    {
+        // Arrange
+        var appointment = await SeedAppointmentAsync();
+        var command = new RescheduleAppointmentCommand(
+            appointment.Id,
+            appointment.ScheduledDateTime,
+            appointment.DurationInMinutes);
+
+        // Act
+        var result = await _mediator.Send(command);
+
+        // Assert
+        Assert.True(result.IsSuccess);
     }
 
     private async Task<Appointment> SeedAppointmentAsync()

@@ -26,6 +26,12 @@ public class GetTreatmentRecordByIdQueryHandler(
             return ApplicationErrors.TreatmentRecordNotFound;
         }
 
+        if (request.Scope.IsRestricted && treatmentRecord.DoctorId != request.Scope.DoctorId)
+        {
+            logger.LogWarning("Treatment record {TreatmentRecordId} is outside the caller's authorized scope.", request.TreatmentRecordId);
+            return ApplicationErrors.TreatmentRecordAccessForbidden;
+        }
+
         return treatmentRecord.ToDto();
     }
 }

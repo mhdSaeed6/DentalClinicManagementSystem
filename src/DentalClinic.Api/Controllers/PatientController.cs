@@ -1,6 +1,8 @@
 using Asp.Versioning;
 
+using DentalClinic.Application.Common.Interfaces;
 using DentalClinic.Application.Common.Models;
+using DentalClinic.Application.Common.Security;
 using DentalClinic.Application.Features.Patients.Commands.CreatePatient;
 using DentalClinic.Application.Features.Patients.Commands.RemovePatient;
 using DentalClinic.Application.Features.Patients.Commands.UpdatePatient;
@@ -21,8 +23,8 @@ namespace DentalClinic.Api.Controllers;
 
 [Route("api/v{version:apiVersion}/patients")]
 [ApiVersion("1.0")]
-[Authorize]
-public class PatientController(ISender sender) : ApiController
+[Authorize(Policy = "StaffOnly")]
+public class PatientController(ISender sender, IUser user) : ApiController
 {
     [HttpGet]
     [ProducesResponseType(typeof(PaginatedList<PatientDto>), StatusCodes.Status200OK)]
@@ -36,6 +38,7 @@ public class PatientController(ISender sender) : ApiController
     public async Task<IActionResult> GetPatients([FromQuery] GetPatientsRequest request, CancellationToken ct)
     {
         var query = new GetPatientsQuery(
+            Scope: user.PatientScope(),
             PageNumber: request.PageNumber,
             PageSize: request.PageSize,
             SearchTerm: request.SearchTerm);
@@ -58,7 +61,7 @@ public class PatientController(ISender sender) : ApiController
     [ProducesDefaultResponseType]
     public async Task<IActionResult> GetPatientById(Guid id, CancellationToken ct)
     {
-        var result = await sender.Send(new GetPatientByIdQuery(id), ct);
+        var result = await sender.Send(new GetPatientByIdQuery(id, user.PatientScope()), ct);
 
         return result.Match(
             response => Ok(response),
@@ -163,6 +166,7 @@ public class PatientController(ISender sender) : ApiController
     }
 
     [HttpDelete("{id:guid}")]
+    [Authorize(Policy = "AdminOnly")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]

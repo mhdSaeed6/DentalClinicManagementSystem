@@ -1,5 +1,6 @@
 using DentalClinic.Application.Common.Errors;
 using DentalClinic.Application.Common.Interfaces;
+using DentalClinic.Application.Common.Security;
 using DentalClinic.Application.Features.Patients.Dtos;
 using DentalClinic.Application.Features.Patients.Mappers;
 using DentalClinic.Domain.Common.Results;
@@ -26,6 +27,12 @@ public class GetPatientByIdQueryHandler(
             return Error.NotFound(
                 code: "Patient.NotFound",
                 description: $"Patient with Id {request.PatientId} not found.");
+        }
+
+        if (!await PatientAccess.CanAccessAsync(context, request.Scope, patient, cancellationToken))
+        {
+            logger.LogWarning("Patient {PatientId} is outside the caller's authorized scope.", request.PatientId);
+            return ApplicationErrors.PatientAccessForbidden;
         }
 
         return patient.ToDto();

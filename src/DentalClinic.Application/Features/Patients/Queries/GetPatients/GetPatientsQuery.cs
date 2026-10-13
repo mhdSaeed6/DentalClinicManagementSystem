@@ -1,16 +1,18 @@
 using DentalClinic.Application.Common.Interfaces;
 using DentalClinic.Application.Common.Models;
+using DentalClinic.Application.Common.Security;
 using DentalClinic.Application.Features.Patients.Dtos;
 using DentalClinic.Domain.Common.Results;
 
 namespace DentalClinic.Application.Features.Patients.Queries.GetPatients;
 
 public sealed record GetPatientsQuery(
+    PatientAccessScope Scope,
     int PageNumber = 1,
     int PageSize = 10,
     string? SearchTerm = null) : ICachedQuery<Result<PaginatedList<PatientDto>>>
 {
-    public string CacheKey => $"patients-page-{PageNumber}-size-{PageSize}-search-{SearchTerm ?? "all"}";
+    public string CacheKey => $"patients-page-{PageNumber}-size-{PageSize}-search-{SearchTerm ?? "all"}-scope-{Scope.IsRestricted}-{Scope.DoctorId?.ToString() ?? "all"}-{Scope.UserId ?? "all"}";
 
     public string[] Tags => ["patient"];
 

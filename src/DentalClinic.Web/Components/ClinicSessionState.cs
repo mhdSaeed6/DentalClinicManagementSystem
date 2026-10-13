@@ -27,6 +27,9 @@ public sealed class ClinicSessionState
 
     public IReadOnlyList<string> Roles { get; private set; } = [];
 
+    /// <summary>Linked doctor profile id, when the signed-in account is a doctor.</summary>
+    public Guid? DoctorId { get; private set; }
+
     public StaffRole Role
     {
         get
@@ -49,6 +52,8 @@ public sealed class ClinicSessionState
             return StaffRole.Unknown;
         }
     }
+
+    public bool IsDoctor => Role == StaffRole.Doctor;
 
     // ------------------------------------------------------------ UI prefs
 
@@ -81,6 +86,7 @@ public sealed class ClinicSessionState
         UserEmail = user.Email;
         UserName = string.IsNullOrWhiteSpace(user.Email) ? "User" : user.Email.Split('@')[0];
         Roles = user.Roles;
+        DoctorId = user.DoctorId;
         NotifyChanged();
     }
 
@@ -92,6 +98,7 @@ public sealed class ClinicSessionState
         UserName = string.Empty;
         UserEmail = string.Empty;
         Roles = [];
+        DoctorId = null;
         MobileNavOpen = false;
         NotifyChanged();
     }

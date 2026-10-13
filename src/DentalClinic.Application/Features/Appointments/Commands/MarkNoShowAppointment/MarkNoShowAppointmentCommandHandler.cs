@@ -1,5 +1,6 @@
 using DentalClinic.Application.Common.Errors;
 using DentalClinic.Application.Common.Interfaces;
+using DentalClinic.Application.Common.Security;
 using DentalClinic.Domain.Common.Results;
 
 using MediatR;
@@ -12,7 +13,8 @@ namespace DentalClinic.Application.Features.Appointments.Commands.MarkNoShowAppo
 public class MarkNoShowAppointmentCommandHandler(
     ILogger<MarkNoShowAppointmentCommandHandler> logger,
     IAppDbContext context,
-    HybridCache cache)
+    HybridCache cache,
+    IUser user)
     : IRequestHandler<MarkNoShowAppointmentCommand, Result<Updated>>
 {
     public async Task<Result<Updated>> Handle(MarkNoShowAppointmentCommand request, CancellationToken cancellationToken)
@@ -22,6 +24,12 @@ public class MarkNoShowAppointmentCommandHandler(
         {
             logger.LogWarning("Appointment no-show failed. Appointment {AppointmentId} not found.", request.AppointmentId);
             return ApplicationErrors.AppointmentNotFound;
+        }
+
+        if (!user.CanAccessAppointment(appointment.DoctorId))
+        {
+            logger.LogWarning("Appointment no-show denied for user {UserId} on appointment {AppointmentId}.", user.Id, request.AppointmentId);
+            return ApplicationErrors.AppointmentAccessForbidden;
         }
 
         var result = appointment.MarkAsNoShow();

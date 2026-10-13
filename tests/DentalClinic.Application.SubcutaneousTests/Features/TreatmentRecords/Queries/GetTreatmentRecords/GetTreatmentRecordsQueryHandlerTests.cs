@@ -1,4 +1,5 @@
 using DentalClinic.Application.Common.Interfaces;
+using DentalClinic.Application.Common.Security;
 using DentalClinic.Application.Features.TreatmentRecords.Queries.GetTreatmentRecords;
 using DentalClinic.Application.SubcutaneousTests.Common;
 using DentalClinic.Domain.Common.Enums;
@@ -36,6 +37,7 @@ public class GetTreatmentRecordsQueryHandlerTests(WebAppFactory factory)
         await _context.SaveChangesAsync(default);
 
         var query = new GetTreatmentRecordsQuery(
+            Scope: DoctorAccessScope.None,
             PageNumber: 1,
             PageSize: 10,
             PatientId: patient.Id,
@@ -56,7 +58,7 @@ public class GetTreatmentRecordsQueryHandlerTests(WebAppFactory factory)
     public async Task Handle_WhenNoMatchingRecords_ShouldReturnEmptyPaginatedList()
     {
         // Arrange
-        var query = new GetTreatmentRecordsQuery(PageNumber: 1, PageSize: 10, PatientId: Guid.NewGuid());
+        var query = new GetTreatmentRecordsQuery(Scope: DoctorAccessScope.None, PageNumber: 1, PageSize: 10, PatientId: Guid.NewGuid());
 
         // Act
         var result = await _mediator.Send(query);

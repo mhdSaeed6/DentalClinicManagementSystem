@@ -27,6 +27,7 @@ public static class DependencyInjection
         // 1. Interceptors & DbContext Setup
         services.AddScoped<ISaveChangesInterceptor, AuditableEntityInterceptor>();
         services.AddScoped<ISaveChangesInterceptor, SoftDeleteInterceptor>();
+        services.AddScoped<ISaveChangesInterceptor, DispatchDomainEventsInterceptor>();
 
         services.AddDbContext<AppDbContext>((sp, options) =>
         {
@@ -84,7 +85,8 @@ public static class DependencyInjection
         services.AddAuthorizationBuilder()
             .AddPolicy("AdminOnly", policy => policy.RequireRole("Admin"))
             .AddPolicy("DoctorOnly", policy => policy.RequireRole("Doctor"))
-            .AddPolicy("StaffOnly", policy => policy.RequireRole("Admin", "Doctor", "Receptionist"));
+            .AddPolicy("StaffOnly", policy => policy.RequireRole("Admin", "Doctor", "Receptionist"))
+            .AddPolicy("ClinicalWrite", policy => policy.RequireRole("Admin", "Doctor"));
 
         // 6. Identity Services & Token Provider
         services.AddTransient<IIdentityService, IdentityService>();

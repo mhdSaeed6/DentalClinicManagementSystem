@@ -1,3 +1,4 @@
+using DentalClinic.Application.Common.Security;
 using DentalClinic.Application.Features.Appointments.Queries.GetAppointmentById;
 using DentalClinic.Application.SubcutaneousTests.Common;
 using MediatR;
@@ -14,7 +15,7 @@ public class GetAppointmentByIdQueryValidatorTests(WebAppFactory factory)
     public async Task GetAppointmentById_ShouldFailValidation_WhenAppointmentIdIsEmpty()
     {
         // Arrange
-        var query = new GetAppointmentByIdQuery(Guid.Empty);
+        var query = new GetAppointmentByIdQuery(Guid.Empty, DoctorAccessScope.None);
 
         // Act
         var result = await _mediator.Send(query);

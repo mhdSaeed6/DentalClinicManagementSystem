@@ -6,6 +6,7 @@ using DentalClinic.Application.Features.Identity;
 using DentalClinic.Application.Features.Identity.Queries.GenerateTokens;
 
 using DentalClinic.Infrastructure.Identity;
+using DentalClinic.Tests.Common.Security;
 
 namespace DentalClinic.Api.IntegrationTests.Common;
 
@@ -19,8 +20,11 @@ public class AppHttpClient
     }
 
     public async Task<string> GenerateTokenAsync(AppUser user)
+        => await GenerateTokenAsync(user.Email!, TestUsers.AdminPassword);
+
+    public async Task<string> GenerateTokenAsync(string email, string password)
     {
-        var generateTokenQuery = new GenerateTokenQuery(user.Email!, "Admin123!");
+        var generateTokenQuery = new GenerateTokenQuery(email, password);
 
         var response = await _httpClient.PostAsJsonAsync("api/v1/identity/token/generate", generateTokenQuery);
 

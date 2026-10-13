@@ -1,5 +1,6 @@
 using DentalClinic.Application.Common.Errors;
 using DentalClinic.Application.Common.Interfaces;
+using DentalClinic.Application.Common.Security;
 using DentalClinic.Application.Features.TreatmentRecords.Dtos;
 using DentalClinic.Application.Features.TreatmentRecords.Mappers;
 using DentalClinic.Domain.Common.Results;
@@ -13,7 +14,8 @@ namespace DentalClinic.Application.Features.TreatmentRecords.Commands.UpdateTrea
 public class UpdateTreatmentRecordCommandHandler(
     ILogger<UpdateTreatmentRecordCommandHandler> logger,
     IAppDbContext context,
-    HybridCache cache)
+    HybridCache cache,
+    IUser user)
     : IRequestHandler<UpdateTreatmentRecordCommand, Result<TreatmentRecordDto>>
 {
     public async Task<Result<TreatmentRecordDto>> Handle(UpdateTreatmentRecordCommand request, CancellationToken cancellationToken)
@@ -27,6 +29,16 @@ public class UpdateTreatmentRecordCommandHandler(
         {
             logger.LogWarning("Update failed. Treatment record with ID {TreatmentRecordId} not found.", request.TreatmentRecordId);
             return ApplicationErrors.TreatmentRecordNotFound;
+        }
+
+        // Authorization: only admins and doctors may modify clinical records; a
+        // doctor may only modify their own records and cannot reassign them.
+        if (!user.CanWriteClinicalRecords() || !user.CanAccessAppointment(treatmentRecord.DoctorId) || !user.CanAccessAppointment(request.DoctorId))
+        {
+            logger.LogWarning("Treatment record update denied for user {UserId} on record {TreatmentRecordId}.", user.Id, request.TreatmentRecordId);
+            return user.CanWriteClinicalRecords()
+                ? ApplicationErrors.TreatmentRecordAccessForbidden
+                : ApplicationErrors.ClinicalWriteForbidden;
         }
 
         var updateResult = treatmentRecord.Update(
