@@ -4,6 +4,7 @@ using DentalClinic.Application.Common.Security;
 using DentalClinic.Application.Features.Appointments.Dtos;
 using DentalClinic.Application.Features.Appointments.Mappers;
 using DentalClinic.Domain.Appointments;
+using DentalClinic.Domain.Appointments.Enums;
 using DentalClinic.Domain.Common.Results;
 using DentalClinic.Domain.Services;
 
@@ -69,7 +70,26 @@ public class CreateAppointmentCommandHandler(
             return ServiceErrors.ServiceInactive;
         }
 
-        // 4. Create Domain Entity
+        // 4. Prevent double-booking: the doctor must not have another scheduled
+        // appointment whose time range overlaps the requested one.
+        var requestedEnd = request.ScheduledDateTime.AddMinutes(request.DurationInMinutes);
+        var hasConflict = await context.Appointments.AnyAsync(
+            a => a.DoctorId == request.DoctorId &&
+                 a.Status == AppointmentStatus.Scheduled &&
+                 a.ScheduledDateTime < requestedEnd &&
+                 request.ScheduledDateTime < a.ScheduledDateTime.AddMinutes(a.DurationInMinutes),
+            cancellationToken);
+
+        if (hasConflict)
+        {
+            logger.LogWarning(
+                "Appointment creation failed. Doctor {DoctorId} already has an appointment overlapping {ScheduledDateTime}.",
+                request.DoctorId,
+                request.ScheduledDateTime);
+            return ApplicationErrors.AppointmentSlotConflict;
+        }
+
+        // 5. Create Domain Entity
         var appointmentResult = Appointment.Create(
             request.PatientId,
             request.DoctorId,
@@ -89,7 +109,7 @@ public class CreateAppointmentCommandHandler(
         context.Appointments.Add(appointment);
         await context.SaveChangesAsync(cancellationToken);
 
-        // 5. Invalidate Cache Tag
+        // 6. Invalidate Cache Tag
         await cache.RemoveByTagAsync("appointment", cancellationToken);
 
         logger.LogInformation("Appointment created successfully with ID: {AppointmentId}", appointment.Id);

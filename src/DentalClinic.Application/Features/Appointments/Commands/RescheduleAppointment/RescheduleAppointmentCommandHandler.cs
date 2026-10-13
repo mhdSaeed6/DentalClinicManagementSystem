@@ -4,10 +4,12 @@ using DentalClinic.Application.Common.Security;
 using DentalClinic.Application.Features.Appointments.Dtos;
 using DentalClinic.Application.Features.Appointments.Mappers;
 using DentalClinic.Domain.Appointments;
+using DentalClinic.Domain.Appointments.Enums;
 using DentalClinic.Domain.Common.Results;
 
 using MediatR;
 
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Logging;
 
@@ -33,6 +35,26 @@ public class RescheduleAppointmentCommandHandler(
         {
             logger.LogWarning("Appointment reschedule denied for user {UserId} on appointment {AppointmentId}.", user.Id, request.AppointmentId);
             return ApplicationErrors.AppointmentAccessForbidden;
+        }
+
+        // Prevent double-booking: the doctor must not have another scheduled
+        // appointment whose time range overlaps the requested one.
+        var requestedEnd = request.ScheduledDateTime.AddMinutes(request.DurationInMinutes);
+        var hasConflict = await context.Appointments.AnyAsync(
+            a => a.DoctorId == appointment.DoctorId &&
+                 a.Id != request.AppointmentId &&
+                 a.Status == AppointmentStatus.Scheduled &&
+                 a.ScheduledDateTime < requestedEnd &&
+                 request.ScheduledDateTime < a.ScheduledDateTime.AddMinutes(a.DurationInMinutes),
+            cancellationToken);
+
+        if (hasConflict)
+        {
+            logger.LogWarning(
+                "Appointment reschedule failed. Doctor {DoctorId} already has an appointment overlapping {ScheduledDateTime}.",
+                appointment.DoctorId,
+                request.ScheduledDateTime);
+            return ApplicationErrors.AppointmentSlotConflict;
         }
 
         var result = appointment.Reschedule(request.ScheduledDateTime, request.DurationInMinutes);

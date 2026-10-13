@@ -246,6 +246,54 @@ public class AppointmentsControllerTests(WebAppFactory webAppFactory)
     }
 
     [Fact]
+    public async Task CreateAppointment_WithOverlappingSlotForSameDoctor_ShouldReturnConflict()
+    {
+        // Arrange
+        await webAppFactory.ResetDatabaseAsync();
+        await EnsureUserExistsAsync();
+
+        var token = await _client.GenerateTokenAsync(TestUsers.Admin);
+        _client.SetAuthorizationHeader(token);
+
+        var patient = PatientTestDataBuilder.Create().Build();
+        var doctor = DoctorTestDataBuilder.Create().Build();
+        var service = DentalServiceTestDataBuilder.Create().Build();
+        var slotStart = DateTime.UtcNow.AddDays(2);
+
+        var appointment = AppointmentTestDataBuilder.Create()
+            .WithPatient(patient.Id)
+            .WithDoctor(doctor.Id)
+            .WithService(service.Id)
+            .ScheduledAt(slotStart)
+            .Build();
+
+        await webAppFactory.ExecuteDbContextAsync(async context =>
+        {
+            context.Patients.Add(patient);
+            context.Doctors.Add(doctor);
+            context.DentalServices.Add(service);
+            context.Appointments.Add(appointment);
+            await context.SaveChangesAsync(default);
+        });
+
+        var request = new CreateAppointmentRequest
+        {
+            PatientId = patient.Id,
+            DoctorId = doctor.Id,
+            ServiceId = service.Id,
+            ScheduledDateTime = slotStart.AddMinutes(15),
+            DurationInMinutes = 45,
+            Notes = null
+        };
+
+        // Act
+        var response = await _client.PostAsJsonAsync("/api/v1.0/appointments", request);
+
+        // Assert
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+    }
+
+    [Fact]
     public async Task CreateAppointment_WithoutAuthentication_ShouldReturnUnauthorized()
     {
         // Arrange
@@ -312,6 +360,60 @@ public class AppointmentsControllerTests(WebAppFactory webAppFactory)
 
         var result = await response.Content.ReadFromJsonAsync<AppointmentDto>();
         Assert.NotNull(result);
+    }
+
+    [Fact]
+    public async Task RescheduleAppointment_WithOverlappingSlotForSameDoctor_ShouldReturnConflict()
+    {
+        // Arrange
+        await webAppFactory.ResetDatabaseAsync();
+        await EnsureUserExistsAsync();
+
+        var token = await _client.GenerateTokenAsync(TestUsers.Admin);
+        _client.SetAuthorizationHeader(token);
+
+        var patient = PatientTestDataBuilder.Create().Build();
+        var doctor = DoctorTestDataBuilder.Create().Build();
+        var service = DentalServiceTestDataBuilder.Create().Build();
+        var blockerStart = DateTime.UtcNow.AddDays(3);
+        var targetStart = DateTime.UtcNow.AddDays(4);
+
+        var blocker = AppointmentTestDataBuilder.Create()
+            .WithPatient(patient.Id)
+            .WithDoctor(doctor.Id)
+            .WithService(service.Id)
+            .ScheduledAt(blockerStart)
+            .Build();
+
+        var toReschedule = AppointmentTestDataBuilder.Create()
+            .WithPatient(patient.Id)
+            .WithDoctor(doctor.Id)
+            .WithService(service.Id)
+            .ScheduledAt(targetStart)
+            .Build();
+
+        await webAppFactory.ExecuteDbContextAsync(async context =>
+        {
+            context.Patients.Add(patient);
+            context.Doctors.Add(doctor);
+            context.DentalServices.Add(service);
+            context.Appointments.Add(blocker);
+            context.Appointments.Add(toReschedule);
+            await context.SaveChangesAsync(default);
+        });
+
+        // Move the second appointment into the blocker's slot (overlaps).
+        var request = new RescheduleAppointmentRequest
+        {
+            NewScheduledDateTime = blockerStart.AddMinutes(10),
+            DurationInMinutes = 60
+        };
+
+        // Act
+        var response = await _client.PutAsJsonAsync($"/api/v1.0/appointments/{toReschedule.Id}/reschedule", request);
+
+        // Assert
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
     }
 
     [Fact]

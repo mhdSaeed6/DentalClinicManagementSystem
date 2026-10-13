@@ -32,6 +32,11 @@ public static class ApplicationErrors
             code: "Appointment.NotFound",
             description: "Appointment not found.");
 
+    public static Error AppointmentSlotConflict =>
+        Error.Conflict(
+            code: "Appointment.SlotConflict",
+            description: "The doctor already has an appointment that overlaps with the requested time slot.");
+
     public static Error InvoiceNotFound =>
         Error.NotFound(
             code: "Invoice.NotFound",
