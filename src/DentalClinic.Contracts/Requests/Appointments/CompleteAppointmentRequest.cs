@@ -5,12 +5,21 @@ namespace DentalClinic.Contracts.Requests.Appointments;
 /// <summary>
 /// Optional body for completing an appointment. When <see cref="Treatments"/> is
 /// empty or omitted, the appointment is completed as a consultation-only visit.
-/// The patient, doctor and appointment link are derived from the route
+/// When <see cref="ServiceId"/> is supplied it replaces the appointment's booked
+/// service (it must reference an existing, active service); when omitted, the
+/// current service is left unchanged. The service definition itself is never
+/// modified. The patient, doctor and appointment link are derived from the route
 /// appointment and are intentionally not accepted from the client.
 /// </summary>
 public class CompleteAppointmentRequest
 {
     public List<CompleteAppointmentTreatmentRequest>? Treatments { get; set; }
+
+    /// <summary>
+    /// The service actually carried out. Leave <c>null</c> to keep the appointment's
+    /// current service.
+    /// </summary>
+    public Guid? ServiceId { get; set; }
 }
 
 public class CompleteAppointmentTreatmentRequest

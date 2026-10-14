@@ -78,7 +78,15 @@ public class Appointment : AuditableEntity
         return appointment;
     }
 
-    public Result<Updated> Complete()
+    public Result<Updated> Complete() => Complete(ServiceId);
+
+    /// <summary>
+    /// Completes the appointment while recording the service that was actually
+    /// performed, replacing whatever was booked. Only the reference stored on this
+    /// appointment changes — the service definition (name/price) is never touched.
+    /// The parameterless overload keeps the current service unchanged.
+    /// </summary>
+    public Result<Updated> Complete(Guid? serviceId)
     {
         if (Status == AppointmentStatus.Completed)
         {
@@ -95,6 +103,7 @@ public class Appointment : AuditableEntity
             return AppointmentErrors.AlreadyNoShow;
         }
 
+        ServiceId = serviceId;
         Status = AppointmentStatus.Completed;
 
         AddDomainEvent(new AppointmentCompletedEvent(

@@ -337,6 +337,8 @@ public sealed class RescheduleAppointmentRequest
 public sealed class CompleteAppointmentRequest
 {
     public List<CompleteAppointmentTreatmentRequest>? Treatments { get; set; }
+
+    public Guid? ServiceId { get; set; }
 }
 
 public sealed class CompleteAppointmentTreatmentRequest

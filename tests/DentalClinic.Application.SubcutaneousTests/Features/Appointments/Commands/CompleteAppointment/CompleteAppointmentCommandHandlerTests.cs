@@ -243,6 +243,108 @@ public class CompleteAppointmentCommandHandlerTests(WebAppFactory factory) : IDi
         Assert.Equal(1, count);
     }
 
+    [Fact]
+    public async Task Handle_WithDifferentService_ShouldReplaceServiceAndLeaveDefinitionUnchanged()
+    {
+        // Arrange
+        var appointment = await SeedAppointmentAsync();
+        var performedService = await SeedServiceAsync("Teeth Whitening", 75m);
+
+        var command = new CompleteAppointmentCommand(appointment.Id, null, performedService.Id);
+
+        // Act
+        var result = await _mediator.Send(command);
+
+        // Assert
+        Assert.True(result.IsSuccess);
+
+        var dbAppointment = await _context.Appointments
+            .AsNoTracking()
+            .FirstOrDefaultAsync(a => a.Id == appointment.Id);
+        Assert.Equal(AppointmentStatus.Completed, dbAppointment!.Status);
+        Assert.Equal(performedService.Id, dbAppointment.ServiceId);
+
+        // Only the appointment's reference changes — the service definition is intact.
+        var dbService = await _context.DentalServices
+            .AsNoTracking()
+            .FirstOrDefaultAsync(s => s.Id == performedService.Id);
+        Assert.Equal("Teeth Whitening", dbService!.Name);
+        Assert.Equal(75m, dbService.Price);
+    }
+
+    [Fact]
+    public async Task Handle_WithoutService_ShouldKeepBookedService()
+    {
+        // Arrange
+        var appointment = await SeedAppointmentAsync();
+        var bookedServiceId = appointment.ServiceId;
+
+        // Act
+        var result = await _mediator.Send(new CompleteAppointmentCommand(appointment.Id));
+
+        // Assert
+        Assert.True(result.IsSuccess);
+
+        var dbAppointment = await _context.Appointments
+            .AsNoTracking()
+            .FirstOrDefaultAsync(a => a.Id == appointment.Id);
+        Assert.Equal(bookedServiceId, dbAppointment!.ServiceId);
+    }
+
+    [Fact]
+    public async Task Handle_WithUnknownService_ShouldFailAndNotComplete()
+    {
+        // Arrange
+        var appointment = await SeedAppointmentAsync();
+        var command = new CompleteAppointmentCommand(appointment.Id, null, Guid.NewGuid());
+
+        // Act
+        var result = await _mediator.Send(command);
+
+        // Assert
+        Assert.True(result.IsError);
+        Assert.Equal("Service.NotFound", result.TopError.Code);
+
+        var dbAppointment = await _context.Appointments
+            .AsNoTracking()
+            .FirstOrDefaultAsync(a => a.Id == appointment.Id);
+        Assert.Equal(AppointmentStatus.Scheduled, dbAppointment!.Status);
+    }
+
+    [Fact]
+    public async Task Handle_WithInactiveService_ShouldFailAndNotComplete()
+    {
+        // Arrange
+        var appointment = await SeedAppointmentAsync();
+        var inactiveService = await SeedServiceAsync("Retired Service", 20m);
+        inactiveService.Deactivate();
+        await _context.SaveChangesAsync(default);
+
+        var command = new CompleteAppointmentCommand(appointment.Id, null, inactiveService.Id);
+
+        // Act
+        var result = await _mediator.Send(command);
+
+        // Assert
+        Assert.True(result.IsError);
+        Assert.Equal("Service.ServiceInactive", result.TopError.Code);
+
+        var dbAppointment = await _context.Appointments
+            .AsNoTracking()
+            .FirstOrDefaultAsync(a => a.Id == appointment.Id);
+        Assert.Equal(AppointmentStatus.Scheduled, dbAppointment!.Status);
+    }
+
+    private async Task<DentalService> SeedServiceAsync(string name, decimal price)
+    {
+        var service = DentalService.Create(name, "Test service", price).Value;
+
+        await _context.DentalServices.AddAsync(service);
+        await _context.SaveChangesAsync(default);
+
+        return service;
+    }
+
     private async Task<Appointment> SeedAppointmentAsync()
     {
         var contactInfo = ContactInfo.Create("+963911111111", null, true, null).Value;

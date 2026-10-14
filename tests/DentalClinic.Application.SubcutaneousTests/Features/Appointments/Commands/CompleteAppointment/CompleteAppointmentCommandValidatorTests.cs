@@ -92,4 +92,28 @@ public class CompleteAppointmentCommandValidatorTests(WebAppFactory factory)
         Assert.True(result.IsError);
         Assert.Contains("Cost", result.TopError.Code);
     }
+
+    [Fact]
+    public void CompleteAppointment_ShouldPassValidation_WhenServiceIdIsNull()
+    {
+        // Replacing the service is optional; omitting it is valid.
+        var validator = new CompleteAppointmentCommandValidator();
+        var command = new CompleteAppointmentCommand(Guid.NewGuid(), null, null);
+
+        var result = validator.Validate(command);
+
+        Assert.True(result.IsValid);
+    }
+
+    [Fact]
+    public void CompleteAppointment_ShouldPassValidation_WhenServiceIdIsProvided()
+    {
+        // A real service identifier is accepted (existence is checked in the handler).
+        var validator = new CompleteAppointmentCommandValidator();
+        var command = new CompleteAppointmentCommand(Guid.NewGuid(), null, Guid.NewGuid());
+
+        var result = validator.Validate(command);
+
+        Assert.True(result.IsValid);
+    }
 }

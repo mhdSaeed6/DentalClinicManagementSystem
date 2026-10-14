@@ -518,6 +518,12 @@ public class AppointmentsControllerTests(WebAppFactory webAppFactory)
 
         // Assert
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        // The booked service is preserved when the caller sends no body.
+        var dbAppointment = await webAppFactory.ExecuteDbContextAsync(async context =>
+            await context.Appointments.FirstOrDefaultAsync(a => a.Id == appointment.Id));
+        Assert.Equal(AppointmentStatus.Completed, dbAppointment!.Status);
+        Assert.Equal(service.Id, dbAppointment.ServiceId);
     }
 
     [Fact]
@@ -601,6 +607,120 @@ public class AppointmentsControllerTests(WebAppFactory webAppFactory)
 
         Assert.NotNull(dbAppointment);
         Assert.Equal(AppointmentStatus.Completed, dbAppointment!.Status);
+    }
+
+    [Fact]
+    public async Task CompleteAppointment_WithDifferentService_ShouldReplaceAppointmentServiceOnly()
+    {
+        // Arrange
+        await webAppFactory.ResetDatabaseAsync();
+        await EnsureUserExistsAsync();
+
+        var token = await _client.GenerateTokenAsync(TestUsers.Admin);
+        _client.SetAuthorizationHeader(token);
+
+        var patient = PatientTestDataBuilder.Create().Build();
+        var doctor = DoctorTestDataBuilder.Create().Build();
+        var bookedService = DentalServiceTestDataBuilder.Create().Build();
+        var performedService = DentalServiceTestDataBuilder.Create()
+            .WithName("Teeth Whitening")
+            .WithCost(75m)
+            .Build();
+
+        var appointment = AppointmentTestDataBuilder.Create()
+            .WithPatient(patient.Id)
+            .WithDoctor(doctor.Id)
+            .WithService(bookedService.Id)
+            .Build();
+
+        await webAppFactory.ExecuteDbContextAsync(async context =>
+        {
+            context.Patients.Add(patient);
+            context.Doctors.Add(doctor);
+            context.DentalServices.Add(bookedService);
+            context.DentalServices.Add(performedService);
+            context.Appointments.Add(appointment);
+            await context.SaveChangesAsync(default);
+        });
+
+        var request = new CompleteAppointmentRequest
+        {
+            Treatments = [new CompleteAppointmentTreatmentRequest { ToothNumber = 11, ProcedureDetails = "Composite filling", Cost = 50m }],
+            ServiceId = performedService.Id,
+        };
+
+        // Act
+        var response = await _client.PatchAsJsonAsync(
+            $"/api/v1.0/appointments/{appointment.Id}/complete",
+            request,
+            CancellationToken.None);
+
+        // Assert
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var dbAppointment = await webAppFactory.ExecuteDbContextAsync(async context =>
+            await context.Appointments.FirstOrDefaultAsync(a => a.Id == appointment.Id));
+        Assert.Equal(AppointmentStatus.Completed, dbAppointment!.Status);
+        Assert.Equal(performedService.Id, dbAppointment.ServiceId);
+
+        // The service definitions themselves must remain untouched.
+        var services = await webAppFactory.ExecuteDbContextAsync(async context =>
+            await context.DentalServices
+                .Where(s => s.Id == bookedService.Id || s.Id == performedService.Id)
+                .ToListAsync());
+
+        var dbBooked = services.Single(s => s.Id == bookedService.Id);
+        Assert.Equal(bookedService.Name, dbBooked.Name);
+        Assert.Equal(bookedService.Price, dbBooked.Price);
+
+        var dbPerformed = services.Single(s => s.Id == performedService.Id);
+        Assert.Equal("Teeth Whitening", dbPerformed.Name);
+        Assert.Equal(75m, dbPerformed.Price);
+    }
+
+    [Fact]
+    public async Task CompleteAppointment_WithUnknownService_ShouldReturnNotFoundAndNotComplete()
+    {
+        // Arrange
+        await webAppFactory.ResetDatabaseAsync();
+        await EnsureUserExistsAsync();
+
+        var token = await _client.GenerateTokenAsync(TestUsers.Admin);
+        _client.SetAuthorizationHeader(token);
+
+        var patient = PatientTestDataBuilder.Create().Build();
+        var doctor = DoctorTestDataBuilder.Create().Build();
+        var service = DentalServiceTestDataBuilder.Create().Build();
+
+        var appointment = AppointmentTestDataBuilder.Create()
+            .WithPatient(patient.Id)
+            .WithDoctor(doctor.Id)
+            .WithService(service.Id)
+            .Build();
+
+        await webAppFactory.ExecuteDbContextAsync(async context =>
+        {
+            context.Patients.Add(patient);
+            context.Doctors.Add(doctor);
+            context.DentalServices.Add(service);
+            context.Appointments.Add(appointment);
+            await context.SaveChangesAsync(default);
+        });
+
+        var request = new CompleteAppointmentRequest { ServiceId = Guid.NewGuid() };
+
+        // Act
+        var response = await _client.PatchAsJsonAsync(
+            $"/api/v1.0/appointments/{appointment.Id}/complete",
+            request,
+            CancellationToken.None);
+
+        // Assert
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+
+        var dbAppointment = await webAppFactory.ExecuteDbContextAsync(async context =>
+            await context.Appointments.FirstOrDefaultAsync(a => a.Id == appointment.Id));
+        Assert.Equal(AppointmentStatus.Scheduled, dbAppointment!.Status);
     }
 
     [Fact]

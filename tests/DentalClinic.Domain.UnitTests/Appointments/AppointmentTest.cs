@@ -131,6 +131,38 @@ public class AppointmentTest
         Assert.Equal(AppointmentErrors.AlreadyCancelled.Code, result.TopError.Code);
     }
 
+    [Fact]
+    public void Complete_WithServiceId_ShouldReplaceAppointmentService()
+    {
+        // Arrange
+        var bookedServiceId = Guid.NewGuid();
+        var performedServiceId = Guid.NewGuid();
+        var appointment = AppointmentFactory.CreateAppointment(serviceId: bookedServiceId).Value;
+
+        // Act
+        var result = appointment.Complete(performedServiceId);
+
+        // Assert
+        Assert.True(result.IsSuccess);
+        Assert.Equal(AppointmentStatus.Completed, appointment.Status);
+        Assert.Equal(performedServiceId, appointment.ServiceId);
+    }
+
+    [Fact]
+    public void Complete_WithoutServiceId_ShouldKeepExistingService()
+    {
+        // Arrange
+        var bookedServiceId = Guid.NewGuid();
+        var appointment = AppointmentFactory.CreateAppointment(serviceId: bookedServiceId).Value;
+
+        // Act
+        var result = appointment.Complete();
+
+        // Assert
+        Assert.True(result.IsSuccess);
+        Assert.Equal(bookedServiceId, appointment.ServiceId);
+    }
+
     #endregion
 
     #region Cancel Tests
