@@ -10,8 +10,10 @@ public class CreateAppointmentRequest
     [Required(ErrorMessage = "Doctor ID is required.")]
     public Guid DoctorId { get; set; }
 
-    [Required(ErrorMessage = "Service ID is required.")]
-    public Guid ServiceId { get; set; }
+    /// <summary>
+    /// Optional service. When omitted (null) the appointment is booked without a service.
+    /// </summary>
+    public Guid? ServiceId { get; set; }
 
     [Required(ErrorMessage = "Scheduled date and time is required.")]
     public DateTime ScheduledDateTime { get; set; } = DateTime.UtcNow.AddDays(1);

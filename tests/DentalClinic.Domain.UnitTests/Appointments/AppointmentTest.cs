@@ -44,6 +44,19 @@ public class AppointmentTest
     }
 
     [Fact]
+    public void CreateAppointment_ShouldSucceed_WithoutService()
+    {
+        // Act: no service selected (null) is a valid appointment.
+        var result = AppointmentFactory.CreateAppointment(serviceId: null);
+
+        // Assert
+        Assert.True(result.IsSuccess);
+        Assert.NotNull(result.Value);
+        Assert.Null(result.Value.ServiceId);
+        Assert.Equal(AppointmentStatus.Scheduled, result.Value.Status);
+    }
+
+    [Fact]
     public void CreateAppointment_ShouldReturnError_WhenScheduledTimeIsInPast()
     {
         // Arrange

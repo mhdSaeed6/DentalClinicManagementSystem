@@ -294,7 +294,10 @@ else if (_patient is not null)
             ? ClinicFormatting.FullName(doctor.FirstName, doctor.LastName)
             : Session.T("Unassigned", "غير مُعيّن");
 
-    private string ServiceName(Guid id) => _services.FirstOrDefault(s => s.Id == id)?.Name ?? Session.T("Service", "خدمة");
+    private string ServiceName(Guid? id) =>
+        id is { } serviceId
+            ? _services.FirstOrDefault(s => s.Id == serviceId)?.Name ?? Session.T("Service", "خدمة")
+            : Session.T("No service", "بدون خدمة");
 
     private bool Med(string key) => key switch
     {

@@ -65,7 +65,7 @@ namespace DentalClinic.Infrastructure.Data.Migrations
                     b.Property<DateTime>("ScheduledDateTime")
                         .HasColumnType("datetime2");
 
-                    b.Property<Guid>("ServiceId")
+                    b.Property<Guid?>("ServiceId")
                         .HasColumnType("uniqueidentifier");
 
                     b.Property<string>("Status")
@@ -690,8 +690,7 @@ namespace DentalClinic.Infrastructure.Data.Migrations
                     b.HasOne("DentalClinic.Domain.Services.DentalService", "Service")
                         .WithMany()
                         .HasForeignKey("ServiceId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.Navigation("Doctor");
 

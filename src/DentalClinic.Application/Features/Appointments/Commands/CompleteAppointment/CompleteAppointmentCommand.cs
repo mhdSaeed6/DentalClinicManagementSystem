@@ -4,4 +4,22 @@ using MediatR;
 
 namespace DentalClinic.Application.Features.Appointments.Commands.CompleteAppointment;
 
-public sealed record CompleteAppointmentCommand(Guid AppointmentId) : IRequest<Result<Updated>>;
+/// <summary>
+/// A treatment performed during the visit, captured as part of completing the
+/// appointment. The patient, doctor and appointment link are always derived
+/// server-side from the appointment being completed, so they are intentionally
+/// not accepted from the caller.
+/// </summary>
+public sealed record CompleteAppointmentTreatment(
+    int ToothNumber,
+    string ProcedureDetails,
+    decimal Cost);
+
+/// <summary>
+/// Completes an appointment and, optionally, records the treatments performed
+/// during that visit. An empty (or omitted) <see cref="Treatments"/> collection
+/// completes a consultation-only visit without creating any treatment record.
+/// </summary>
+public sealed record CompleteAppointmentCommand(
+    Guid AppointmentId,
+    IReadOnlyList<CompleteAppointmentTreatment>? Treatments = null) : IRequest<Result<Updated>>;

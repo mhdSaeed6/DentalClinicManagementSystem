@@ -52,6 +52,37 @@ public class CreateAppointmentCommandHandlerTests(WebAppFactory factory)
     }
 
     [Fact]
+    public async Task Handle_WithoutService_ShouldCreateAppointment()
+    {
+        // Arrange
+        var (patient, doctor, _) = await SeedEntitiesAsync();
+        var command = new CreateAppointmentCommand(
+            PatientId: patient.Id,
+            DoctorId: doctor.Id,
+            ServiceId: null,
+            ScheduledDateTime: DateTime.UtcNow.AddDays(1),
+            DurationInMinutes: 30,
+            Notes: "No service selected");
+
+        // Act
+        var result = await _mediator.Send(command);
+
+        // Assert
+        Assert.True(result.IsSuccess);
+        Assert.NotNull(result.Value);
+        Assert.Null(result.Value.ServiceId);
+
+        var dbAppointment = await _context.Appointments
+            .AsNoTracking()
+            .FirstOrDefaultAsync(a => a.Id == result.Value.Id);
+
+        Assert.NotNull(dbAppointment);
+        Assert.Equal(patient.Id, dbAppointment.PatientId);
+        Assert.Equal(doctor.Id, dbAppointment.DoctorId);
+        Assert.Null(dbAppointment.ServiceId);
+    }
+
+    [Fact]
     public async Task Handle_WithNonExistingPatient_ShouldReturnPatientNotFound()
     {
         // Arrange

@@ -37,6 +37,18 @@ public class AppointmentDomainEventsTest
     }
 
     [Fact]
+    public void Create_WithoutService_ShouldRaiseCreatedEvent_WithNullService()
+    {
+        // Act
+        var appointment = AppointmentFactory.CreateAppointment(serviceId: null).Value;
+
+        // Assert
+        var created = Assert.IsType<AppointmentCreatedEvent>(Assert.Single(appointment.DomainEvents));
+        Assert.Equal(appointment.Id, created.AppointmentId);
+        Assert.Null(created.ServiceId);
+    }
+
+    [Fact]
     public void Complete_ShouldRaiseCompletedEvent()
     {
         // Arrange

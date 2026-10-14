@@ -44,6 +44,7 @@ public class AppointmentConfiguration : IEntityTypeConfiguration<Appointment>
         builder.HasOne(a => a.Service)
             .WithMany()
             .HasForeignKey(a => a.ServiceId)
+            .IsRequired(false)
             .OnDelete(DeleteBehavior.Restrict);
 
         // 4. Performance Indexes (مهمة جداً لجدول المواعيد)

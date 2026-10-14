@@ -98,7 +98,7 @@
                                 <div class="row-actions">
                                     @if (appt.Status == AppointmentStatus.Scheduled)
                                     {
-                                        <button type="button" class="btn btn-success-soft btn-sm" @onclick="() => CompleteAsync(appt)">
+                                        <button type="button" class="btn btn-success-soft btn-sm" @onclick="() => OpenComplete(appt)">
                                             <ClinicIcon Name="check" Class="sm" /> @Session.T("Complete", "إكمال")
                                         </button>
                                         <button type="button" class="btn btn-ghost btn-icon" title="@Session.T("Reschedule", "إعادة جدولة")" @onclick="() => OpenReschedule(appt)">
@@ -158,9 +158,9 @@
             </select>
         </div>
         <div class="field">
-            <label class="label">@Session.T("Service", "الخدمة") <span class="req">*</span></label>
+            <label class="label">@Session.T("Service (optional)", "الخدمة (اختياري)")</label>
             <select class="select" @bind="_form.ServiceId">
-                <option value="@Guid.Empty">@Session.T("— Select —", "— اختر —")</option>
+                <option value="">@Session.T("— No service —", "— بدون خدمة —")</option>
                 @foreach (var service in _services)
                 {
                     <option value="@service.Id">@service.Name (@ClinicFormatting.Money(service.Price))</option>
@@ -234,6 +234,108 @@
     </Footer>
 </Modal>
 
+<Modal IsOpen="_completeOpen" Size="lg" Title="@Session.T("Complete appointment", "إكمال الموعد")"
+       Subtitle="@CompleteSubtitle" OnClose="CloseComplete">
+    <ChildContent>
+    @if (!string.IsNullOrWhiteSpace(_completeError))
+    {
+        <div class="badge danger no-dot mb-2" style="display:flex;padding:10px 14px;border-radius:11px">
+            <ClinicIcon Name="alert" Class="sm" /><span>@_completeError</span>
+        </div>
+    }
+
+    @if (_completeAppointment is not null)
+    {
+        <div class="form-grid mb-3">
+            <div class="field">
+                <label class="label">@Session.T("Patient", "المريض")</label>
+                <div class="cell-main">@PatientName(_completeAppointment.PatientId)</div>
+            </div>
+            <div class="field">
+                <label class="label">@Session.T("Doctor", "الطبيب")</label>
+                <div class="cell-main">@Session.T("Dr.", "د.") @DoctorName(_completeAppointment.DoctorId)</div>
+            </div>
+            <div class="field">
+                <label class="label">@Session.T("When", "الموعد")</label>
+                <div class="cell-main">@ClinicFormatting.DateTimeLabel(_completeAppointment.ScheduledDateTime)</div>
+            </div>
+            <div class="field">
+                <label class="label">@Session.T("Service", "الخدمة")</label>
+                <div class="cell-main">@ServiceName(_completeAppointment.ServiceId)</div>
+            </div>
+            @if (!string.IsNullOrWhiteSpace(_completeAppointment.Notes))
+            {
+                <div class="field span-2">
+                    <label class="label">@Session.T("Notes", "ملاحظات")</label>
+                    <div class="cell-main">@_completeAppointment.Notes</div>
+                </div>
+            }
+        </div>
+
+        <hr class="mb-3" />
+
+        <h3 class="mb-2">@Session.T("Treatments performed", "العلاجات المنفذة")</h3>
+        <div class="mb-2 fs-xs text-soft">
+            @Session.T("Add every treatment performed during this visit. Leave it empty for a consultation-only visit.", "أضف كل علاج تم أثناء الزيارة. اتركه فارغاً لزيارة استشارية فقط.")
+        </div>
+
+        @if (_completeTreatments.Count == 0)
+        {
+            <div class="badge muted no-dot mb-3">@Session.T("No treatments yet — the visit will be recorded as consultation only.", "لا علاجات بعد — ستُسجَّل الزيارة كاستشارة فقط.")</div>
+        }
+        else
+        {
+            <div class="mb-3">
+                @for (var i = 0; i < _completeTreatments.Count; i++)
+                {
+                    var index = i;
+                    <div class="mb-1" style="display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--border);border-radius:11px">
+                        <span class="badge brand no-dot">@ClinicFormatting.ToothLabel(_completeTreatments[index].ToothNumber)</span>
+                        <span class="cell-main" style="flex:1">@_completeTreatments[index].ProcedureDetails</span>
+                        <span class="mono fw-600">@ClinicFormatting.Money(_completeTreatments[index].Cost)</span>
+                        <button type="button" class="btn btn-ghost btn-icon" title="@Session.T("Remove", "إزالة")" @onclick="() => RemoveCompleteTreatment(index)">
+                            <ClinicIcon Name="x" Class="sm" />
+                        </button>
+                    </div>
+                }
+            </div>
+        }
+
+        <h3 class="mb-2">@Session.T("Add a treatment", "إضافة علاج")</h3>
+        <div class="mb-2 fs-xs text-soft">
+            @Session.T("Selected tooth:", "السن المحدد:") <span class="badge brand no-dot">@ClinicFormatting.ToothLabel(_completeTooth)</span>
+        </div>
+        <ToothChart @bind-Value="_completeTooth" />
+        <div class="field mb-3">
+            <label class="label">@Session.T("Procedure details", "تفاصيل الإجراء") <span class="req">*</span></label>
+            <textarea class="textarea" @bind="_completeProcedure" placeholder="@Session.T("Describe what was performed…", "صف ما تم إجراؤه…")"></textarea>
+        </div>
+        <div class="field mb-3">
+            <label class="label">@Session.T("Cost (USD)", "التكلفة (دولار)")</label>
+            <input type="number" step="0.01" min="0" class="input" @bind="_completeCost" />
+        </div>
+        <button type="button" class="btn btn-outline" @onclick="AddCompleteTreatment">
+            <ClinicIcon Name="plus" Class="sm" /> @Session.T("Add treatment to this visit", "إضافة علاج للزيارة")
+        </button>
+    }
+    </ChildContent>
+
+    <Footer>
+        <button type="button" class="btn btn-ghost" @onclick="CloseComplete">@Session.T("Cancel", "إلغاء")</button>
+        <button type="button" class="btn btn-success-soft" @onclick="ConfirmCompleteAsync" disabled="@_saving">
+            @if (_saving)
+            {
+                <span class="spinner"></span>
+            }
+            else
+            {
+                <ClinicIcon Name="check" Class="sm" />
+            }
+            <span>@Session.T("Complete appointment", "إكمال الموعد")</span>
+        </button>
+    </Footer>
+</Modal>
+
 @code {
     private List<AppointmentDto> _appointments = [];
     private List<PatientDto> _patients = [];
@@ -258,6 +360,14 @@
     private Guid _rescheduleId;
     private AppointmentFormRequest _form = new();
     private RescheduleAppointmentRequest _reschedule = new();
+
+    private bool _completeOpen;
+    private AppointmentDto? _completeAppointment;
+    private string? _completeError;
+    private List<CompleteAppointmentTreatmentRequest> _completeTreatments = [];
+    private int _completeTooth = 11;
+    private string _completeProcedure = string.Empty;
+    private decimal _completeCost;
 
     private IEnumerable<(AppointmentStatus Status, string Label)> StatusChips =>
     [
@@ -400,9 +510,9 @@
     {
         _formError = null;
 
-        if (_form.PatientId == Guid.Empty || _form.DoctorId == Guid.Empty || _form.ServiceId == Guid.Empty)
+        if (_form.PatientId == Guid.Empty || _form.DoctorId == Guid.Empty)
         {
-            _formError = Session.T("Please select a patient, doctor and service.", "الرجاء اختيار المريض والطبيب والخدمة.");
+            _formError = Session.T("Please select a patient and doctor.", "الرجاء اختيار المريض والطبيب.");
             return;
         }
 
@@ -445,17 +555,86 @@
         }
     }
 
-    private async Task CompleteAsync(AppointmentDto appointment)
+    private string CompleteSubtitle => _completeAppointment is { } appointment
+        ? $"{PatientName(appointment.PatientId)} · {ClinicFormatting.DateTimeLabel(appointment.ScheduledDateTime)}"
+        : Session.T("Review the visit before completing it.", "راجع الزيارة قبل إكمالها.");
+
+    private void OpenComplete(AppointmentDto appointment)
     {
+        _completeAppointment = appointment;
+        _completeTreatments = [];
+        _completeTooth = 11;
+        _completeProcedure = string.Empty;
+        _completeCost = 0;
+        _completeError = null;
+        _completeOpen = true;
+    }
+
+    private void CloseComplete()
+    {
+        _completeOpen = false;
+        _completeAppointment = null;
+        _completeError = null;
+    }
+
+    private void AddCompleteTreatment()
+    {
+        _completeError = null;
+
+        if (string.IsNullOrWhiteSpace(_completeProcedure))
+        {
+            _completeError = Session.T("Procedure details are required.", "تفاصيل الإجراء مطلوبة.");
+            return;
+        }
+
+        _completeTreatments.Add(new CompleteAppointmentTreatmentRequest
+        {
+            ToothNumber = _completeTooth,
+            ProcedureDetails = _completeProcedure.Trim(),
+            Cost = _completeCost,
+        });
+
+        _completeProcedure = string.Empty;
+        _completeCost = 0;
+        _completeTooth = 11;
+    }
+
+    private void RemoveCompleteTreatment(int index)
+    {
+        if (index >= 0 && index < _completeTreatments.Count)
+        {
+            _completeTreatments.RemoveAt(index);
+        }
+    }
+
+    private async Task ConfirmCompleteAsync()
+    {
+        if (_completeAppointment is null)
+        {
+            return;
+        }
+
+        _saving = true;
+        _completeError = null;
         try
         {
-            await Api.CompleteAppointmentAsync(appointment.Id);
+            var request = new CompleteAppointmentRequest
+            {
+                Treatments = _completeTreatments.Count > 0 ? _completeTreatments : null,
+            };
+
+            await Api.CompleteAppointmentAsync(_completeAppointment.Id, request);
             Notifier.Success(Session.T("Appointment completed", "تم إكمال الموعد"));
+            CloseComplete();
             await LoadAsync();
         }
         catch (ApiException ex)
         {
-            Notifier.Error(Session.T("Action failed", "فشل الإجراء"), ex.Message);
+            _completeError = ex.Message;
+        }
+        finally
+        {
+            _saving = false;
         }
     }
 
@@ -499,5 +678,8 @@
             ? FullName(doctor.FirstName, doctor.LastName)
             : Session.T("Unassigned", "غير مُعيّن");
 
-    private string ServiceName(Guid id) => _services.FirstOrDefault(s => s.Id == id)?.Name ?? Session.T("Service", "خدمة");
+    private string ServiceName(Guid? id) =>
+        id is { } serviceId
+            ? _services.FirstOrDefault(s => s.Id == serviceId)?.Name ?? Session.T("Service", "خدمة")
+            : Session.T("No service", "بدون خدمة");
 }

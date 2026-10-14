@@ -12,6 +12,7 @@ using DentalClinic.Tests.Common.Builders;
 using DentalClinic.Tests.Common.Security;
 
 using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
 using Xunit;
@@ -218,6 +219,47 @@ public class AppointmentsControllerTests(WebAppFactory webAppFactory)
         var createdDto = await response.Content.ReadFromJsonAsync<AppointmentDto>();
         Assert.NotNull(createdDto);
         Assert.Equal(patient.Id, createdDto!.PatientId);
+    }
+
+    [Fact]
+    public async Task CreateAppointment_WithoutService_ShouldCreateAppointment()
+    {
+        // Arrange
+        await webAppFactory.ResetDatabaseAsync();
+        await EnsureUserExistsAsync();
+
+        var token = await _client.GenerateTokenAsync(TestUsers.Admin);
+        _client.SetAuthorizationHeader(token);
+
+        var patient = PatientTestDataBuilder.Create().Build();
+        var doctor = DoctorTestDataBuilder.Create().Build();
+
+        await webAppFactory.ExecuteDbContextAsync(async context =>
+        {
+            context.Patients.Add(patient);
+            context.Doctors.Add(doctor);
+            await context.SaveChangesAsync(default);
+        });
+
+        var request = new CreateAppointmentRequest
+        {
+            PatientId = patient.Id,
+            DoctorId = doctor.Id,
+            ServiceId = null,
+            ScheduledDateTime = DateTime.UtcNow.AddDays(2),
+            DurationInMinutes = 45,
+            Notes = "No service selected"
+        };
+
+        // Act
+        var response = await _client.PostAsJsonAsync("/api/v1.0/appointments", request);
+
+        // Assert
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+
+        var createdDto = await response.Content.ReadFromJsonAsync<AppointmentDto>();
+        Assert.NotNull(createdDto);
+        Assert.Null(createdDto!.ServiceId);
     }
 
     [Fact]
@@ -493,6 +535,217 @@ public class AppointmentsControllerTests(WebAppFactory webAppFactory)
 
         // Assert
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task CompleteAppointment_WithTreatments_ShouldCreateLinkedTreatmentRecords()
+    {
+        // Arrange
+        await webAppFactory.ResetDatabaseAsync();
+        await EnsureUserExistsAsync();
+
+        var token = await _client.GenerateTokenAsync(TestUsers.Admin);
+        _client.SetAuthorizationHeader(token);
+
+        var patient = PatientTestDataBuilder.Create().Build();
+        var doctor = DoctorTestDataBuilder.Create().Build();
+        var service = DentalServiceTestDataBuilder.Create().Build();
+
+        var appointment = AppointmentTestDataBuilder.Create()
+            .WithPatient(patient.Id)
+            .WithDoctor(doctor.Id)
+            .WithService(service.Id)
+            .Build();
+
+        await webAppFactory.ExecuteDbContextAsync(async context =>
+        {
+            context.Patients.Add(patient);
+            context.Doctors.Add(doctor);
+            context.DentalServices.Add(service);
+            context.Appointments.Add(appointment);
+            await context.SaveChangesAsync(default);
+        });
+
+        var request = new CompleteAppointmentRequest
+        {
+            Treatments =
+            [
+                new CompleteAppointmentTreatmentRequest { ToothNumber = 11, ProcedureDetails = "Composite filling", Cost = 50m },
+                new CompleteAppointmentTreatmentRequest { ToothNumber = 36, ProcedureDetails = "Extraction", Cost = 120m },
+            ],
+        };
+
+        // Act
+        var response = await _client.PatchAsJsonAsync(
+            $"/api/v1.0/appointments/{appointment.Id}/complete",
+            request,
+            CancellationToken.None);
+
+        // Assert
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var records = await webAppFactory.ExecuteDbContextAsync(async context =>
+            await context.TreatmentRecords
+                .Where(t => t.AppointmentId == appointment.Id)
+                .ToListAsync());
+
+        Assert.Equal(2, records.Count);
+        Assert.All(records, record =>
+        {
+            Assert.Equal(appointment.PatientId, record.PatientId);
+            Assert.Equal(appointment.DoctorId, record.DoctorId);
+        });
+
+        var dbAppointment = await webAppFactory.ExecuteDbContextAsync(async context =>
+            await context.Appointments.FirstOrDefaultAsync(a => a.Id == appointment.Id));
+
+        Assert.NotNull(dbAppointment);
+        Assert.Equal(AppointmentStatus.Completed, dbAppointment!.Status);
+    }
+
+    [Fact]
+    public async Task CompleteAppointment_WithEmptyTreatments_ShouldCompleteWithoutRecords()
+    {
+        // Arrange
+        await webAppFactory.ResetDatabaseAsync();
+        await EnsureUserExistsAsync();
+
+        var token = await _client.GenerateTokenAsync(TestUsers.Admin);
+        _client.SetAuthorizationHeader(token);
+
+        var patient = PatientTestDataBuilder.Create().Build();
+        var doctor = DoctorTestDataBuilder.Create().Build();
+        var service = DentalServiceTestDataBuilder.Create().Build();
+
+        var appointment = AppointmentTestDataBuilder.Create()
+            .WithPatient(patient.Id)
+            .WithDoctor(doctor.Id)
+            .WithService(service.Id)
+            .Build();
+
+        await webAppFactory.ExecuteDbContextAsync(async context =>
+        {
+            context.Patients.Add(patient);
+            context.Doctors.Add(doctor);
+            context.DentalServices.Add(service);
+            context.Appointments.Add(appointment);
+            await context.SaveChangesAsync(default);
+        });
+
+        var request = new CompleteAppointmentRequest { Treatments = [] };
+
+        // Act
+        var response = await _client.PatchAsJsonAsync(
+            $"/api/v1.0/appointments/{appointment.Id}/complete",
+            request,
+            CancellationToken.None);
+
+        // Assert
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var recordCount = await webAppFactory.ExecuteDbContextAsync(async context =>
+            await context.TreatmentRecords.CountAsync(t => t.AppointmentId == appointment.Id));
+        Assert.Equal(0, recordCount);
+    }
+
+    [Fact]
+    public async Task CompleteAppointment_WithInvalidToothNumber_ShouldReturnBadRequest()
+    {
+        // Arrange
+        await webAppFactory.ResetDatabaseAsync();
+        await EnsureUserExistsAsync();
+
+        var token = await _client.GenerateTokenAsync(TestUsers.Admin);
+        _client.SetAuthorizationHeader(token);
+
+        var patient = PatientTestDataBuilder.Create().Build();
+        var doctor = DoctorTestDataBuilder.Create().Build();
+        var service = DentalServiceTestDataBuilder.Create().Build();
+
+        var appointment = AppointmentTestDataBuilder.Create()
+            .WithPatient(patient.Id)
+            .WithDoctor(doctor.Id)
+            .WithService(service.Id)
+            .Build();
+
+        await webAppFactory.ExecuteDbContextAsync(async context =>
+        {
+            context.Patients.Add(patient);
+            context.Doctors.Add(doctor);
+            context.DentalServices.Add(service);
+            context.Appointments.Add(appointment);
+            await context.SaveChangesAsync(default);
+        });
+
+        var request = new CompleteAppointmentRequest
+        {
+            Treatments = [new CompleteAppointmentTreatmentRequest { ToothNumber = 99, ProcedureDetails = "Fill", Cost = 10m }],
+        };
+
+        // Act
+        var response = await _client.PatchAsJsonAsync(
+            $"/api/v1.0/appointments/{appointment.Id}/complete",
+            request,
+            CancellationToken.None);
+
+        // Assert
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+
+        var dbAppointment = await webAppFactory.ExecuteDbContextAsync(async context =>
+            await context.Appointments.FirstOrDefaultAsync(a => a.Id == appointment.Id));
+        Assert.Equal(AppointmentStatus.Scheduled, dbAppointment!.Status);
+    }
+
+    [Fact]
+    public async Task CompleteAppointment_WithTreatments_ShouldNotCreateInvoiceOrPayment()
+    {
+        // Arrange
+        await webAppFactory.ResetDatabaseAsync();
+        await EnsureUserExistsAsync();
+
+        var token = await _client.GenerateTokenAsync(TestUsers.Admin);
+        _client.SetAuthorizationHeader(token);
+
+        var patient = PatientTestDataBuilder.Create().Build();
+        var doctor = DoctorTestDataBuilder.Create().Build();
+        var service = DentalServiceTestDataBuilder.Create().Build();
+
+        var appointment = AppointmentTestDataBuilder.Create()
+            .WithPatient(patient.Id)
+            .WithDoctor(doctor.Id)
+            .WithService(service.Id)
+            .Build();
+
+        await webAppFactory.ExecuteDbContextAsync(async context =>
+        {
+            context.Patients.Add(patient);
+            context.Doctors.Add(doctor);
+            context.DentalServices.Add(service);
+            context.Appointments.Add(appointment);
+            await context.SaveChangesAsync(default);
+        });
+
+        var request = new CompleteAppointmentRequest
+        {
+            Treatments = [new CompleteAppointmentTreatmentRequest { ToothNumber = 11, ProcedureDetails = "Composite filling", Cost = 50m }],
+        };
+
+        // Act
+        var response = await _client.PatchAsJsonAsync(
+            $"/api/v1.0/appointments/{appointment.Id}/complete",
+            request,
+            CancellationToken.None);
+
+        // Assert
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var invoiceCount = await webAppFactory.ExecuteDbContextAsync(async context =>
+            await context.Invoices.CountAsync(i => i.AppointmentId == appointment.Id));
+        var paymentCount = await webAppFactory.ExecuteDbContextAsync(async context =>
+            await context.Payments.CountAsync());
+
+        Assert.Equal(0, invoiceCount);
+        Assert.Equal(0, paymentCount);
     }
 
     // -------------------------------------------------------------------------

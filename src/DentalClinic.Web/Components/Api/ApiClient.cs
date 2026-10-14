@@ -137,8 +137,8 @@ public sealed class ApiClient
     public Task<AppointmentDto> RescheduleAppointmentAsync(Guid id, RescheduleAppointmentRequest request, CancellationToken ct = default) =>
         PutAsync<AppointmentDto>($"appointments/{id}/reschedule", request, ct);
 
-    public Task<AppointmentDto> CompleteAppointmentAsync(Guid id, CancellationToken ct = default) =>
-        PatchAsync<AppointmentDto>($"appointments/{id}/complete", null, ct);
+    public Task<AppointmentDto> CompleteAppointmentAsync(Guid id, CompleteAppointmentRequest? request = null, CancellationToken ct = default) =>
+        PatchAsync<AppointmentDto>($"appointments/{id}/complete", request, ct);
 
     public Task<AppointmentDto> CancelAppointmentAsync(Guid id, CancellationToken ct = default) =>
         PatchAsync<AppointmentDto>($"appointments/{id}/cancel", null, ct);

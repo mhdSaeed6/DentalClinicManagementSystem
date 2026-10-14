@@ -10,5 +10,5 @@ public sealed record AppointmentCreatedEvent(
     Guid AppointmentId,
     Guid PatientId,
     Guid DoctorId,
-    Guid ServiceId,
+    Guid? ServiceId,
     DateTime ScheduledDateTime) : DomainEvent;

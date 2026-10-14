@@ -16,7 +16,7 @@ public static class AppointmentFactory
         return Appointment.Create(
             patientId ?? Guid.NewGuid(),
             doctorId ?? Guid.NewGuid(),
-            serviceId ?? Guid.NewGuid(),
+            serviceId,
             scheduledDateTime ?? DateTime.UtcNow.AddDays(1),
             durationInMinutes,
             notes);

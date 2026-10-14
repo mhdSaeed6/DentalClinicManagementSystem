@@ -6,7 +6,7 @@ public sealed record AppointmentDto(
     Guid Id,
     Guid PatientId,
     Guid DoctorId,
-    Guid ServiceId,
+    Guid? ServiceId,
     DateTime ScheduledDateTime,
     int DurationInMinutes,
     AppointmentStatus Status,

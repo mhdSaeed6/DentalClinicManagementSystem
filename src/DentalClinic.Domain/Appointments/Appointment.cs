@@ -11,7 +11,7 @@ public class Appointment : AuditableEntity
 {
     public Guid PatientId { get; private set; }
     public Guid DoctorId { get; private set; }
-    public Guid ServiceId { get; private set; }
+    public Guid? ServiceId { get; private set; }
     public Patient? Patient { get; set; }
     public Doctor? Doctor { get; set; }
     public DentalService? Service { get; set; }
@@ -26,7 +26,7 @@ public class Appointment : AuditableEntity
         Guid id,
         Guid patientId,
         Guid doctorId,
-        Guid serviceId,
+        Guid? serviceId,
         DateTime scheduledDateTime,
         int durationInMinutes,
         string? notes)
@@ -44,7 +44,7 @@ public class Appointment : AuditableEntity
     public static Result<Appointment> Create(
         Guid patientId,
         Guid doctorId,
-        Guid serviceId,
+        Guid? serviceId,
         DateTime scheduledDateTime,
         int durationInMinutes,
         string? notes = null)
