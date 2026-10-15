@@ -2,6 +2,7 @@
 @inject ApiClient Api
 @inject ClinicSessionState Session
 @inject NotificationService Notifier
+@inject NavigationManager Nav
 
 <PageTitle>@Session.T("Billing", "الفوترة") · @Session.T("Al Noor Dental", "عيادة النور")</PageTitle>
 
@@ -290,6 +291,21 @@
         }
 
         await LoadAsync();
+
+        // Deep link from an appointment ("Open invoice"): open that invoice's drawer.
+        var query = NavQuery.Parse(Nav.Uri);
+        if (query.TryGetValue("invoice", out var invoiceId) && Guid.TryParse(invoiceId, out var parsedInvoiceId))
+        {
+            try
+            {
+                var invoice = await Api.GetInvoiceAsync(parsedInvoiceId);
+                OpenDetails(invoice);
+            }
+            catch
+            {
+                // The invoice may be inaccessible or gone; the list is still shown.
+            }
+        }
     }
 
     private async Task LoadAsync()

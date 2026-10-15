@@ -172,6 +172,13 @@ public sealed class ApiClient
     public Task<InvoiceDto> CreateInvoiceAsync(InvoiceFormRequest request, CancellationToken ct = default) =>
         PostAsync<InvoiceDto>("invoices", request, ct);
 
+    /// <summary>
+    /// Generates (or returns the existing) invoice draft for an appointment.
+    /// The endpoint is idempotent, so a repeated call will not duplicate the draft.
+    /// </summary>
+    public Task<GenerateAppointmentInvoiceResultDto> GenerateAppointmentInvoiceAsync(Guid appointmentId, CancellationToken ct = default) =>
+        PostAsync<GenerateAppointmentInvoiceResultDto>($"invoices/from-appointment/{appointmentId}", null, ct);
+
     public Task<InvoiceDto> AddInvoicePaymentAsync(Guid invoiceId, InvoicePaymentRequest request, CancellationToken ct = default) =>
         PostAsync<InvoiceDto>($"invoices/{invoiceId}/payments", request, ct);
 

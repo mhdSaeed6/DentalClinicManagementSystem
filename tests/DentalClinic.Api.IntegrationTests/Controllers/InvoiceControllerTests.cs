@@ -6,11 +6,16 @@ using DentalClinic.Application.Common.Models;
 using DentalClinic.Application.Features.Invoices.Dtos;
 using DentalClinic.Application.SubcutaneousTests.Common;
 using DentalClinic.Contracts.Requests.Invoices;
+using DentalClinic.Domain.Appointments;
+using DentalClinic.Domain.Doctors;
+using DentalClinic.Domain.Patients;
+using DentalClinic.Domain.TreatmentRecords;
 using DentalClinic.Infrastructure.Identity;
 using DentalClinic.Tests.Common.Builders;
 using DentalClinic.Tests.Common.Security;
 
 using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
 using Xunit;
@@ -287,8 +292,276 @@ public class InvoiceControllerTests(WebAppFactory webAppFactory)
     }
 
     // -------------------------------------------------------------------------
+    // 5. POST /api/v1.0/invoices/from-appointment/{appointmentId}
+    // -------------------------------------------------------------------------
+
+    [Fact]
+    public async Task GenerateFromAppointment_WithServiceAndTreatments_ShouldCreateLinkedDraft()
+    {
+        // Arrange
+        await webAppFactory.ResetDatabaseAsync();
+        await EnsureUserExistsAsync();
+        var token = await _client.GenerateTokenAsync(TestUsers.Admin);
+        _client.SetAuthorizationHeader(token);
+
+        var (patient, _, appointment) = await SeedCompletedAppointmentAsync(servicePrice: 40m);
+        await SeedTreatmentAsync(appointment, 11, "Composite filling", 60m);
+        await SeedTreatmentAsync(appointment, 36, "Extraction", 100m);
+
+        // Act
+        var response = await PostGenerateAsync(appointment.Id);
+
+        // Assert
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var result = await response.Content.ReadFromJsonAsync<GenerateAppointmentInvoiceResult>();
+        Assert.NotNull(result);
+        Assert.False(result!.ReusedExisting);
+        Assert.Equal(40m, result.ServiceSubtotal);
+        Assert.Equal(160m, result.TreatmentSubtotal);
+        Assert.Equal(200m, result.TotalAmount);
+        Assert.Equal(patient.Id, result.PatientId);
+        Assert.Equal(appointment.Id, result.AppointmentId);
+        Assert.Equal(3, result.Lines.Count);
+
+        var persisted = await webAppFactory.ExecuteDbContextAsync(async context =>
+            await context.Invoices.AsNoTracking().FirstOrDefaultAsync(i => i.Id == result.InvoiceId));
+
+        Assert.NotNull(persisted);
+        Assert.Equal(appointment.Id, persisted!.AppointmentId);
+        Assert.Equal(patient.Id, persisted.PatientId);
+        Assert.Equal(200m, persisted.TotalAmount);
+    }
+
+    [Fact]
+    public async Task GenerateFromAppointment_ThenFilterByAppointment_ShouldReturnLinkedInvoice()
+    {
+        // Arrange
+        await webAppFactory.ResetDatabaseAsync();
+        await EnsureUserExistsAsync();
+        var token = await _client.GenerateTokenAsync(TestUsers.Admin);
+        _client.SetAuthorizationHeader(token);
+
+        var (_, _, appointment) = await SeedCompletedAppointmentAsync(servicePrice: 40m);
+        await SeedTreatmentAsync(appointment, 11, "Composite filling", 60m);
+
+        var generate = await PostGenerateAsync(appointment.Id);
+        Assert.Equal(HttpStatusCode.OK, generate.StatusCode);
+        var created = await generate.Content.ReadFromJsonAsync<GenerateAppointmentInvoiceResult>();
+
+        // Act
+        var listResponse = await _client.GetAsync(
+            $"/api/v1.0/invoices?pageNumber=1&pageSize=10&appointmentId={appointment.Id}");
+
+        // Assert
+        Assert.Equal(HttpStatusCode.OK, listResponse.StatusCode);
+
+        var list = await listResponse.Content.ReadFromJsonAsync<PaginatedList<InvoiceDto>>();
+        Assert.NotNull(list);
+        Assert.Contains(list!.Items!, i => i.Id == created!.InvoiceId);
+        Assert.All(list.Items!, i => Assert.Equal(appointment.Id, i.AppointmentId));
+    }
+
+    [Fact]
+    public async Task GenerateFromAppointment_WhenRepeated_ShouldReturnExistingDraftWithoutDuplicating()
+    {
+        // Arrange
+        await webAppFactory.ResetDatabaseAsync();
+        await EnsureUserExistsAsync();
+        var token = await _client.GenerateTokenAsync(TestUsers.Admin);
+        _client.SetAuthorizationHeader(token);
+
+        var (_, _, appointment) = await SeedCompletedAppointmentAsync(servicePrice: 40m);
+        await SeedTreatmentAsync(appointment, 11, "Composite filling", 60m);
+
+        // Act
+        var first = await PostGenerateAsync(appointment.Id);
+        var second = await PostGenerateAsync(appointment.Id);
+
+        // Assert
+        Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, second.StatusCode);
+
+        var firstResult = await first.Content.ReadFromJsonAsync<GenerateAppointmentInvoiceResult>();
+        var secondResult = await second.Content.ReadFromJsonAsync<GenerateAppointmentInvoiceResult>();
+
+        Assert.False(firstResult!.ReusedExisting);
+        Assert.True(secondResult!.ReusedExisting);
+        Assert.Equal(firstResult.InvoiceId, secondResult.InvoiceId);
+
+        var count = await webAppFactory.ExecuteDbContextAsync(async context =>
+            await context.Invoices.AsNoTracking().CountAsync(i => i.AppointmentId == appointment.Id));
+        Assert.Equal(1, count);
+    }
+
+    [Fact]
+    public async Task GenerateFromAppointment_WithUnknownAppointment_ShouldReturnNotFound()
+    {
+        // Arrange
+        await EnsureUserExistsAsync();
+        var token = await _client.GenerateTokenAsync(TestUsers.Admin);
+        _client.SetAuthorizationHeader(token);
+
+        // Act
+        var response = await PostGenerateAsync(Guid.NewGuid());
+
+        // Assert
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GenerateFromAppointment_ConsultationOnly_ShouldReturnBadRequestAndCreateNothing()
+    {
+        // Arrange
+        await webAppFactory.ResetDatabaseAsync();
+        await EnsureUserExistsAsync();
+        var token = await _client.GenerateTokenAsync(TestUsers.Admin);
+        _client.SetAuthorizationHeader(token);
+
+        var (_, _, appointment) = await SeedCompletedAppointmentAsync(servicePrice: null);
+
+        // Act
+        var response = await PostGenerateAsync(appointment.Id);
+
+        // Assert
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+
+        var count = await webAppFactory.ExecuteDbContextAsync(async context =>
+            await context.Invoices.AsNoTracking().CountAsync(i => i.AppointmentId == appointment.Id));
+        Assert.Equal(0, count);
+    }
+
+    [Fact]
+    public async Task GenerateFromAppointment_AsUnrelatedDoctor_ShouldReturnForbidden()
+    {
+        // Arrange
+        await webAppFactory.ResetDatabaseAsync();
+        await EnsureUserExistsAsync();
+
+        var (doctorEmail, _) = await EnsureDoctorUserAsync("invoice.authz.doctor@dentalclinic.com");
+        var token = await _client.GenerateTokenAsync(doctorEmail, TestUsers.DoctorPassword);
+        _client.SetAuthorizationHeader(token);
+
+        // The appointment is assigned to a different doctor than the caller.
+        var (_, _, appointment) = await SeedCompletedAppointmentAsync(servicePrice: 40m);
+        await SeedTreatmentAsync(appointment, 11, "Composite filling", 60m);
+
+        // Act
+        var response = await PostGenerateAsync(appointment.Id);
+
+        // Assert
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GenerateFromAppointment_WithoutAuthentication_ShouldReturnUnauthorized()
+    {
+        // Arrange
+        _client.ClearAuthorizationHeader();
+
+        // Act
+        var response = await PostGenerateAsync(Guid.NewGuid());
+
+        // Assert
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    // -------------------------------------------------------------------------
     // Private Helpers
     // -------------------------------------------------------------------------
+
+    private Task<HttpResponseMessage> PostGenerateAsync(Guid appointmentId) =>
+        _client.SendAsync(new HttpRequestMessage(
+            HttpMethod.Post,
+            $"/api/v1.0/invoices/from-appointment/{appointmentId}"));
+
+    private async Task<(Patient Patient, Doctor Doctor, Appointment Appointment)>
+        SeedCompletedAppointmentAsync(decimal? servicePrice)
+    {
+        var patient = PatientTestDataBuilder.Create().Build();
+        var doctor = DoctorTestDataBuilder.Create().Build();
+        var service = servicePrice is { } price
+            ? DentalServiceTestDataBuilder.Create().WithCost(price).Build()
+            : null;
+
+        var appointment = Appointment.Create(
+            patient.Id,
+            doctor.Id,
+            service?.Id,
+            DateTime.UtcNow.AddHours(1),
+            30).Value;
+
+        appointment.Complete();
+
+        await webAppFactory.ExecuteDbContextAsync(async context =>
+        {
+            context.Patients.Add(patient);
+            context.Doctors.Add(doctor);
+            if (service is not null)
+            {
+                context.DentalServices.Add(service);
+            }
+
+            context.Appointments.Add(appointment);
+            await context.SaveChangesAsync(default);
+        });
+
+        return (patient, doctor, appointment);
+    }
+
+    private async Task SeedTreatmentAsync(
+        Appointment appointment,
+        int toothNumber,
+        string procedure,
+        decimal cost)
+    {
+        var treatment = TreatmentRecord.Create(
+            appointment.PatientId,
+            appointment.DoctorId,
+            toothNumber,
+            procedure,
+            cost,
+            appointment.Id).Value;
+
+        await webAppFactory.ExecuteDbContextAsync(async context =>
+        {
+            context.TreatmentRecords.Add(treatment);
+            await context.SaveChangesAsync(default);
+        });
+    }
+
+    private async Task<(string Email, Doctor Doctor)> EnsureDoctorUserAsync(string email)
+    {
+        AppUser user;
+        using (var scope = webAppFactory.Services.CreateScope())
+        {
+            var userManager = scope.ServiceProvider.GetRequiredService<UserManager<AppUser>>();
+
+            user = (await userManager.FindByEmailAsync(email))!;
+            if (user is null)
+            {
+                user = new AppUser { Email = email, UserName = email, EmailConfirmed = true };
+                var created = await userManager.CreateAsync(user, TestUsers.DoctorPassword);
+                Assert.True(created.Succeeded, string.Join("; ", created.Errors.Select(e => e.Description)));
+            }
+
+            if (!await userManager.IsInRoleAsync(user, "Doctor"))
+            {
+                await userManager.AddToRoleAsync(user, "Doctor");
+            }
+        }
+
+        Doctor doctor = null!;
+        await webAppFactory.ExecuteDbContextAsync(async context =>
+        {
+            doctor = DoctorTestDataBuilder.Create().WithName("Invoice", "Authz").Build();
+            doctor.AssignUser(user.Id);
+            context.Doctors.Add(doctor);
+            await context.SaveChangesAsync(default);
+        });
+
+        return (email, doctor);
+    }
 
     private async Task EnsureUserExistsAsync()
     {

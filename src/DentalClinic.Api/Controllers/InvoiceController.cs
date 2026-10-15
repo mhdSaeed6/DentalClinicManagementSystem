@@ -5,6 +5,7 @@ using DentalClinic.Application.Common.Models;
 using DentalClinic.Application.Common.Security;
 using DentalClinic.Application.Features.Invoices.Commands.AddInvoicePayment;
 using DentalClinic.Application.Features.Invoices.Commands.CreateInvoice;
+using DentalClinic.Application.Features.Invoices.Commands.GenerateAppointmentInvoice;
 using DentalClinic.Application.Features.Invoices.Dtos;
 using DentalClinic.Application.Features.Invoices.Queries.GetInvoiceById;
 using DentalClinic.Application.Features.Invoices.Queries.GetInvoices;
@@ -87,6 +88,26 @@ public class InvoiceController(ISender sender, IUser user) : ApiController
 
         return result.Match(
             response => CreatedAtAction(nameof(GetInvoiceById), new { id = response.Id }, response),
+            Problem);
+    }
+
+    [HttpPost("from-appointment/{appointmentId:guid}")]
+    [ProducesResponseType(typeof(GenerateAppointmentInvoiceResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
+    [EndpointSummary("Generates the invoice draft for an appointment.")]
+    [EndpointDescription("Builds one invoice from the appointment's service charge and its performed treatments, linking it to the patient and visit. Repeated requests return the existing draft instead of creating a duplicate.")]
+    [EndpointName("GenerateAppointmentInvoice")]
+    [MapToApiVersion("1.0")]
+    [ProducesDefaultResponseType]
+    public async Task<IActionResult> GenerateFromAppointment(Guid appointmentId, CancellationToken ct)
+    {
+        var result = await sender.Send(new GenerateAppointmentInvoiceCommand(appointmentId), ct);
+
+        return result.Match(
+            response => Ok(response),
             Problem);
     }
 

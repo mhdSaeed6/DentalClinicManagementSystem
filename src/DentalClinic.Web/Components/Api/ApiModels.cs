@@ -228,6 +228,36 @@ public sealed class InvoiceDto
     public List<PaymentDto> Payments { get; set; } = [];
 }
 
+public sealed class InvoiceLineDto
+{
+    public string Description { get; set; } = string.Empty;
+
+    public decimal Amount { get; set; }
+}
+
+public sealed class GenerateAppointmentInvoiceResultDto
+{
+    public Guid InvoiceId { get; set; }
+
+    public Guid PatientId { get; set; }
+
+    public string PatientName { get; set; } = string.Empty;
+
+    public Guid AppointmentId { get; set; }
+
+    public decimal ServiceSubtotal { get; set; }
+
+    public decimal TreatmentSubtotal { get; set; }
+
+    public decimal TotalAmount { get; set; }
+
+    public PaymentStatus Status { get; set; }
+
+    public bool ReusedExisting { get; set; }
+
+    public List<InvoiceLineDto> Lines { get; set; } = [];
+}
+
 // ---------------------------------------------------------------------------
 // Treatment records
 // ---------------------------------------------------------------------------
