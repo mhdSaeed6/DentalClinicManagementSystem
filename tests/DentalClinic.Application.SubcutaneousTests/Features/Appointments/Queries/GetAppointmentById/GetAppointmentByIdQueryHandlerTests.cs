@@ -3,6 +3,7 @@ using DentalClinic.Application.Common.Security;
 using DentalClinic.Application.Features.Appointments.Queries.GetAppointmentById;
 using DentalClinic.Application.SubcutaneousTests.Common;
 using DentalClinic.Domain.Appointments;
+using DentalClinic.Domain.Appointments.Enums;
 using DentalClinic.Domain.Common.Enums;
 using DentalClinic.Domain.Common.ValueObjects;
 using DentalClinic.Domain.Doctors;
@@ -35,6 +36,27 @@ public class GetAppointmentByIdQueryHandlerTests(WebAppFactory factory)
         Assert.Equal(appointment.Id, result.Value.Id);
         Assert.Equal(appointment.PatientId, result.Value.PatientId);
         Assert.Equal(appointment.DoctorId, result.Value.DoctorId);
+    }
+
+    [Fact]
+    public async Task Handle_WithExistingAppointment_ShouldReturnScheduledStatusAndVisitDetails()
+    {
+        // Arrange
+        var appointment = await SeedAppointmentAsync();
+        var query = new GetAppointmentByIdQuery(appointment.Id, DoctorAccessScope.None);
+
+        // Act
+        var result = await _mediator.Send(query);
+
+        // Assert — the details drawer relies on these fields being populated.
+        Assert.True(result.IsSuccess);
+        var dto = result.Value;
+        Assert.NotNull(dto);
+        Assert.Equal(AppointmentStatus.Scheduled, dto.Status);
+        Assert.Equal(30, dto.DurationInMinutes);
+        Assert.Equal(appointment.ServiceId, dto.ServiceId);
+        Assert.NotNull(dto.ServiceId);
+        Assert.Equal("Query Check", dto.Notes);
     }
 
     [Fact]

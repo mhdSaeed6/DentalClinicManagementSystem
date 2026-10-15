@@ -80,7 +80,7 @@
                 <tbody>
                     @foreach (var appt in Filtered)
                     {
-                        <tr>
+                        <tr style="cursor:pointer" @onclick="() => OpenDetails(appt)">
                             <td>
                                 <div class="cell-main">@ClinicFormatting.ShortDate(appt.ScheduledDateTime)</div>
                                 <div class="cell-sub">@ClinicFormatting.TimeRange(appt.ScheduledDateTime, appt.DurationInMinutes)</div>
@@ -94,8 +94,11 @@
                             <td>@Session.T("Dr.", "د.") @DoctorName(appt.DoctorId)</td>
                             <td>@ServiceName(appt.ServiceId)</td>
                             <td><AppointmentStatusBadge Value="appt.Status" /></td>
-                            <td>
+                            <td @onclick:stopPropagation="true">
                                 <div class="row-actions">
+                                    <button type="button" class="btn btn-ghost btn-icon" title="@Session.T("View details", "عرض التفاصيل")" @onclick="() => OpenDetails(appt)">
+                                        <ClinicIcon Name="eye" Class="sm" />
+                                    </button>
                                     @if (appt.Status == AppointmentStatus.Scheduled)
                                     {
                                         <button type="button" class="btn btn-success-soft btn-sm" @onclick="() => OpenComplete(appt)">
@@ -126,6 +129,164 @@
         <Pager PageNumber="_page" PageSize="_pageSize" TotalCount="_total" TotalPages="_totalPages" OnPageChange="GoToPage" />
     }
 </div>
+
+<Drawer IsOpen="_detailsOpen" Title="@DetailsTitle" Subtitle="@DetailsSubtitle" Icon="calendar"
+        OnClose="CloseDetails">
+    @if (_detailsLoading)
+    {
+        <div class="skeleton title"></div>
+        @for (var i = 0; i < 6; i++)
+        {
+            <div class="skeleton row"></div>
+        }
+    }
+    else if (_detailsError is not null)
+    {
+        <EmptyState Icon="alert" Title="@Session.T("Could not load appointment", "تعذّر تحميل الموعد")" Message="@_detailsError">
+            <ActionContent>
+                <button type="button" class="btn btn-outline" @onclick="RetryDetails">
+                    <ClinicIcon Name="refresh" Class="sm" /> @Session.T("Retry", "إعادة المحاولة")
+                </button>
+            </ActionContent>
+        </EmptyState>
+    }
+    else if (_detailsAppointment is { } appt)
+    {
+        <div class="flex-between mb-3" style="gap:12px;flex-wrap:wrap">
+            <AppointmentStatusBadge Value="appt.Status" />
+            <button type="button" class="btn btn-ghost btn-sm" @onclick="ViewPatientFromDetails">
+                <ClinicIcon Name="user" Class="sm" /> @Session.T("View patient", "عرض المريض")
+            </button>
+        </div>
+
+        <div class="complete-summary mb-3">
+            <div class="summary-cell">
+                <div class="label">@Session.T("When", "الموعد")</div>
+                <div class="value">@ClinicFormatting.ShortDate(appt.ScheduledDateTime)</div>
+            </div>
+            <div class="summary-cell">
+                <div class="label">@Session.T("Time", "الوقت")</div>
+                <div class="value">@ClinicFormatting.TimeRange(appt.ScheduledDateTime, appt.DurationInMinutes)</div>
+            </div>
+            <div class="summary-cell">
+                <div class="label">@Session.T("Duration", "المدة")</div>
+                <div class="value">@appt.DurationInMinutes @Session.T("minutes", "دقيقة")</div>
+            </div>
+            <div class="summary-cell">
+                <div class="label">@Session.T("Doctor", "الطبيب")</div>
+                <div class="value">@Session.T("Dr.", "د.") @DoctorName(appt.DoctorId)</div>
+            </div>
+        </div>
+
+        @if (appt.Status == AppointmentStatus.Scheduled)
+        {
+            <div class="flex flex-wrap gap-1 mb-3">
+                <button type="button" class="btn btn-success-soft btn-sm" @onclick="CompleteFromDetails">
+                    <ClinicIcon Name="check" Class="sm" /> @Session.T("Complete", "إكمال")
+                </button>
+                <button type="button" class="btn btn-outline btn-sm" @onclick="RescheduleFromDetails">
+                    <ClinicIcon Name="refresh" Class="sm" /> @Session.T("Reschedule", "إعادة جدولة")
+                </button>
+                <button type="button" class="btn btn-warning-soft btn-sm" @onclick="NoShowFromDetails">
+                    <ClinicIcon Name="user-x" Class="sm" /> @Session.T("No-show", "لم يحضر")
+                </button>
+                <button type="button" class="btn btn-danger-soft btn-sm" @onclick="CancelFromDetails">
+                    <ClinicIcon Name="x" Class="sm" /> @Session.T("Cancel", "إلغاء")
+                </button>
+            </div>
+        }
+
+        <div class="card mb-3">
+            <div class="card-body">
+                <dl class="kv">
+                    <dt>@Session.T("Patient", "المريض")</dt>
+                    <dd>@PatientName(appt.PatientId)</dd>
+                    <dt>@Session.T("Doctor", "الطبيب")</dt>
+                    <dd>@Session.T("Dr.", "د.") @DoctorName(appt.DoctorId)</dd>
+                    <dt>@Session.T("Service", "الخدمة")</dt>
+                    <dd>
+                        @if (appt.ServiceId is null)
+                        {
+                            <span class="text-muted">@Session.T("No service", "بدون خدمة")</span>
+                        }
+                        else
+                        {
+                            @ServiceName(appt.ServiceId)
+                        }
+                    </dd>
+                    <dt>@Session.T("Date & time", "التاريخ والوقت")</dt>
+                    <dd>@ClinicFormatting.DateTimeLabel(appt.ScheduledDateTime)</dd>
+                    <dt>@Session.T("Duration", "المدة")</dt>
+                    <dd>@appt.DurationInMinutes @Session.T("minutes", "دقيقة")</dd>
+                    <dt>@Session.T("Notes", "ملاحظات")</dt>
+                    <dd>@(string.IsNullOrWhiteSpace(appt.Notes) ? "—" : appt.Notes)</dd>
+                </dl>
+            </div>
+        </div>
+
+        <div class="complete-section mb-3">
+            <div class="complete-section-title">
+                <span>@Session.T("Treatments performed", "العلاجات المنفذة")</span>
+                <span class="badge @(_detailsTreatments.Count > 0 ? "brand" : "muted") no-dot">@_detailsTreatments.Count</span>
+            </div>
+            @if (_treatmentsError is not null)
+            {
+                <div class="badge danger no-dot" style="display:flex;padding:10px 14px;border-radius:11px">
+                    <ClinicIcon Name="alert" Class="sm" /><span>@_treatmentsError</span>
+                </div>
+            }
+            else if (_detailsTreatments.Count == 0)
+            {
+                <div class="fs-xs text-soft">@Session.T("No treatments recorded for this appointment.", "لا توجد علاجات مسجّلة لهذا الموعد.")</div>
+            }
+            else
+            {
+                <div class="mb-2">
+                    @foreach (var treatment in _detailsTreatments)
+                    {
+                        <div class="complete-treatment mb-1">
+                            <span class="badge brand no-dot">@ClinicFormatting.ToothLabel(treatment.ToothNumber)</span>
+                            <span class="treat-proc">@treatment.ProcedureDetails</span>
+                            <span class="treat-cost">@ClinicFormatting.Money(treatment.Cost)</span>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+
+        <div class="complete-section">
+            <div class="complete-section-title">
+                <span>@Session.T("Linked invoices", "الفواتير المرتبطة")</span>
+                <span class="badge @(_detailsInvoices.Count > 0 ? "brand" : "muted") no-dot">@_detailsInvoices.Count</span>
+            </div>
+            @if (_invoicesError is not null)
+            {
+                <div class="badge danger no-dot" style="display:flex;padding:10px 14px;border-radius:11px">
+                    <ClinicIcon Name="alert" Class="sm" /><span>@_invoicesError</span>
+                </div>
+            }
+            else if (_detailsInvoices.Count == 0)
+            {
+                <div class="fs-xs text-soft">@Session.T("No invoices linked to this appointment.", "لا فواتير مرتبطة بهذا الموعد.")</div>
+            }
+            else
+            {
+                <div class="mb-2">
+                    @foreach (var invoice in _detailsInvoices)
+                    {
+                        <div class="list-row">
+                            <div class="list-body">
+                                <div class="list-title mono">#@invoice.Id.ToString()[..8]</div>
+                                <div class="list-sub">@ClinicFormatting.Money(invoice.TotalAmount) · @Session.T("Balance", "المتبقي") @ClinicFormatting.Money(invoice.RemainingAmount)</div>
+                            </div>
+                            <PaymentStatusBadge Value="invoice.Status" />
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    }
+</Drawer>
 
 <Modal IsOpen="_formOpen" Title="@Session.T("New appointment", "موعد جديد")"
        Subtitle="@Session.T("Pick a patient, doctor and time slot", "اختر المريض والطبيب والوقت")" OnClose="CloseForm">
@@ -393,6 +554,18 @@
     private string _completeProcedure = string.Empty;
     private decimal _completeCost;
     private Guid? _completeServiceId;
+
+    private bool _detailsOpen;
+    private bool _detailsLoading;
+    private AppointmentDto? _detailsAppointment;
+    private List<TreatmentRecordDto> _detailsTreatments = [];
+    private List<InvoiceDto> _detailsInvoices = [];
+    private string? _detailsError;
+    private string? _treatmentsError;
+    private string? _invoicesError;
+
+    /// <summary>Guards against a slow load for a previously selected appointment overwriting a newer one.</summary>
+    private int _detailsRequestId;
 
     private IEnumerable<(AppointmentStatus Status, string Label)> StatusChips =>
     [
@@ -691,6 +864,233 @@
         {
             Notifier.Error(Session.T("Action failed", "فشل الإجراء"), ex.Message);
         }
+    }
+
+    // ------------------------------------------------------- Details drawer
+
+    private string DetailsTitle => _detailsAppointment is { } appt
+        ? PatientName(appt.PatientId)
+        : Session.T("Appointment", "الموعد");
+
+    private string DetailsSubtitle => _detailsAppointment is { } appt
+        ? ClinicFormatting.DateTimeLabel(appt.ScheduledDateTime)
+        : Session.T("Appointment details", "تفاصيل الموعد");
+
+    private async Task OpenDetails(AppointmentDto appointment)
+    {
+        // Surface the known appointment immediately, then refresh from the API so a
+        // deleted or reassigned appointment is reported instead of silently stale data.
+        _detailsAppointment = appointment;
+        _detailsTreatments = [];
+        _detailsInvoices = [];
+        _detailsError = null;
+        _treatmentsError = null;
+        _invoicesError = null;
+        _detailsLoading = true;
+        _detailsOpen = true;
+        StateHasChanged();
+
+        await LoadDetailsAsync(appointment.Id);
+    }
+
+    private async Task RetryDetails()
+    {
+        if (_detailsAppointment is null)
+        {
+            return;
+        }
+
+        _detailsLoading = true;
+        StateHasChanged();
+        await LoadDetailsAsync(_detailsAppointment.Id);
+    }
+
+    private async Task LoadDetailsAsync(Guid appointmentId)
+    {
+        var requestId = ++_detailsRequestId;
+
+        _detailsError = null;
+        _treatmentsError = null;
+        _invoicesError = null;
+
+        try
+        {
+            var appointment = await Api.GetAppointmentAsync(appointmentId);
+            if (requestId != _detailsRequestId)
+            {
+                return;
+            }
+
+            _detailsAppointment = appointment;
+        }
+        catch (ApiException ex)
+        {
+            if (requestId != _detailsRequestId)
+            {
+                return;
+            }
+
+            _detailsError = ex.Message;
+            _detailsLoading = false;
+            return;
+        }
+        catch (Exception)
+        {
+            if (requestId != _detailsRequestId)
+            {
+                return;
+            }
+
+            _detailsError = Session.T("Unable to load this appointment.", "تعذّر تحميل هذا الموعد.");
+            _detailsLoading = false;
+            return;
+        }
+
+        // Only records that belong to this appointment are requested from the API.
+        try
+        {
+            var treatments = await Api.GetTreatmentRecordsAsync(1, 100, appointmentId: appointmentId);
+            if (requestId != _detailsRequestId)
+            {
+                return;
+            }
+
+            _detailsTreatments = treatments.Items ?? [];
+        }
+        catch (ApiException ex)
+        {
+            if (requestId != _detailsRequestId)
+            {
+                return;
+            }
+
+            _treatmentsError = ex.Message;
+        }
+        catch (Exception)
+        {
+            if (requestId != _detailsRequestId)
+            {
+                return;
+            }
+
+            _treatmentsError = Session.T("Unable to load treatments.", "تعذّر تحميل العلاجات.");
+        }
+
+        try
+        {
+            var invoices = await Api.GetInvoicesAsync(1, 100, appointmentId: appointmentId);
+            if (requestId != _detailsRequestId)
+            {
+                return;
+            }
+
+            _detailsInvoices = invoices.Items ?? [];
+        }
+        catch (ApiException ex)
+        {
+            if (requestId != _detailsRequestId)
+            {
+                return;
+            }
+
+            _invoicesError = ex.Message;
+        }
+        catch (Exception)
+        {
+            if (requestId != _detailsRequestId)
+            {
+                return;
+            }
+
+            _invoicesError = Session.T("Unable to load invoices.", "تعذّر تحميل الفواتير.");
+        }
+
+        if (requestId != _detailsRequestId)
+        {
+            return;
+        }
+
+        _detailsLoading = false;
+    }
+
+    private void CloseDetails()
+    {
+        // Invalidate any in-flight load so its result cannot repopulate a closed drawer.
+        _detailsRequestId++;
+        _detailsOpen = false;
+        _detailsLoading = false;
+        _detailsAppointment = null;
+        _detailsTreatments = [];
+        _detailsInvoices = [];
+        _detailsError = null;
+        _treatmentsError = null;
+        _invoicesError = null;
+    }
+
+    private void ViewPatientFromDetails()
+    {
+        if (_detailsAppointment is { } appt)
+        {
+            Nav.NavigateTo($"patients/{appt.PatientId}");
+        }
+    }
+
+    private void CompleteFromDetails()
+    {
+        if (_detailsAppointment is not { } appt)
+        {
+            return;
+        }
+
+        // Reuse the existing completion flow; close this drawer first so we never
+        // stack two overlays.
+        CloseDetails();
+        OpenComplete(appt);
+    }
+
+    private void RescheduleFromDetails()
+    {
+        if (_detailsAppointment is not { } appt)
+        {
+            return;
+        }
+
+        CloseDetails();
+        OpenReschedule(appt);
+    }
+
+    private async Task NoShowFromDetails()
+    {
+        if (_detailsAppointment is not { } appt)
+        {
+            return;
+        }
+
+        await NoShowAsync(appt);
+        await RefreshDetailsAsync(appt.Id);
+    }
+
+    private async Task CancelFromDetails()
+    {
+        if (_detailsAppointment is not { } appt)
+        {
+            return;
+        }
+
+        await CancelAsync(appt);
+        await RefreshDetailsAsync(appt.Id);
+    }
+
+    private async Task RefreshDetailsAsync(Guid appointmentId)
+    {
+        if (!_detailsOpen)
+        {
+            return;
+        }
+
+        _detailsLoading = true;
+        StateHasChanged();
+        await LoadDetailsAsync(appointmentId);
     }
 
     private string FullName(string? first, string? last) => ClinicFormatting.FullName(first, last);
