@@ -56,18 +56,21 @@ public class CreateAppointmentCommandHandler(
             return ApplicationErrors.DoctorInactive;
         }
 
-        // 3. Check Service Existence & Active State
-        var service = await context.DentalServices.FirstOrDefaultAsync(s => s.Id == request.ServiceId, cancellationToken);
-        if (service is null)
+        // 3. Check Service Existence & Active State (only when a service is selected)
+        if (request.ServiceId is { } serviceId)
         {
-            logger.LogWarning("Appointment creation failed. Service {ServiceId} not found.", request.ServiceId);
-            return ApplicationErrors.ServiceNotFound;
-        }
+            var service = await context.DentalServices.FirstOrDefaultAsync(s => s.Id == serviceId, cancellationToken);
+            if (service is null)
+            {
+                logger.LogWarning("Appointment creation failed. Service {ServiceId} not found.", serviceId);
+                return ApplicationErrors.ServiceNotFound;
+            }
 
-        if (!service.IsActive)
-        {
-            logger.LogWarning("Appointment creation failed. Service {ServiceId} is inactive.", request.ServiceId);
-            return ServiceErrors.ServiceInactive;
+            if (!service.IsActive)
+            {
+                logger.LogWarning("Appointment creation failed. Service {ServiceId} is inactive.", serviceId);
+                return ServiceErrors.ServiceInactive;
+            }
         }
 
         // 4. Prevent double-booking: the doctor must not have another scheduled

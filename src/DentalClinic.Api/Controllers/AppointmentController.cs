@@ -17,6 +17,7 @@ using MediatR;
 
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 
 namespace DentalClinic.Api.Controllers;
 
@@ -131,13 +132,20 @@ public class AppointmentController(ISender sender, IUser user) : ApiController
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
     [EndpointSummary("Marks an appointment as completed.")]
-    [EndpointDescription("This endpoint updates the appointment status to completed.")]
+    [EndpointDescription("This endpoint updates the appointment status to completed. An optional body may record the treatments performed during the visit and replace the appointment's booked service; when the body is omitted the visit is completed with the existing service and no treatment records.")]
     [EndpointName("CompleteAppointment")]
     [MapToApiVersion("1.0")]
     [ProducesDefaultResponseType]
-    public async Task<IActionResult> CompleteAppointment(Guid id, CancellationToken ct)
+    public async Task<IActionResult> CompleteAppointment(
+        Guid id,
+        [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] CompleteAppointmentRequest? request,
+        CancellationToken ct)
     {
-        var result = await sender.Send(new CompleteAppointmentCommand(id), ct);
+        var treatments = request?.Treatments?
+            .Select(t => new CompleteAppointmentTreatment(t.ToothNumber, t.ProcedureDetails, t.Cost))
+            .ToList();
+
+        var result = await sender.Send(new CompleteAppointmentCommand(id, treatments, request?.ServiceId), ct);
 
         return result.Match(
             response => Ok(response),

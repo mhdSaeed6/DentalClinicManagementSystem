@@ -130,8 +130,9 @@ public class TreatmentRecord : AuditableEntity
         return Result.Updated;
     }
 
-    // Private Helper Method للتحقق من أرقام الأسنان المقبولة (FDI)
-    private static bool IsValidToothNumber(int number)
+    // Helper Method للتحقق من أرقام الأسنان المقبولة (FDI).
+    // Public so application validators reuse the single source of truth.
+    public static bool IsValidToothNumber(int number)
     {
         bool isPermanent = (number >= 11 && number <= 18) ||
                             (number >= 21 && number <= 28) ||

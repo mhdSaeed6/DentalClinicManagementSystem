@@ -35,6 +35,17 @@ public class CreateAppointmentCommandValidatorTests(WebAppFactory factory)
     }
 
     [Fact]
+    public void CreateAppointment_ShouldPassValidation_WhenServiceIdIsNull()
+    {
+        var validator = new CreateAppointmentCommandValidator();
+        var command = CreateValidCommand() with { ServiceId = null };
+
+        var result = validator.Validate(command);
+
+        Assert.True(result.IsValid);
+    }
+
+    [Fact]
     public async Task CreateAppointment_ShouldFailValidation_WhenScheduledDateTimeIsInPast()
     {
         var command = CreateValidCommand() with { ScheduledDateTime = DateTime.UtcNow.AddMinutes(-10) };

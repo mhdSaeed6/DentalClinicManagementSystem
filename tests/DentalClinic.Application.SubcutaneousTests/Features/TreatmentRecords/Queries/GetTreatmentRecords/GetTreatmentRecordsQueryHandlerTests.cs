@@ -2,6 +2,7 @@ using DentalClinic.Application.Common.Interfaces;
 using DentalClinic.Application.Common.Security;
 using DentalClinic.Application.Features.TreatmentRecords.Queries.GetTreatmentRecords;
 using DentalClinic.Application.SubcutaneousTests.Common;
+using DentalClinic.Domain.Appointments;
 using DentalClinic.Domain.Common.Enums;
 using DentalClinic.Domain.Common.ValueObjects;
 using DentalClinic.Domain.Doctors;
@@ -62,6 +63,60 @@ public class GetTreatmentRecordsQueryHandlerTests(WebAppFactory factory)
 
         // Act
         var result = await _mediator.Send(query);
+
+        // Assert
+        Assert.True(result.IsSuccess);
+        Assert.NotNull(result.Value);
+        Assert.Empty(result.Value.Items!);
+        Assert.Equal(0, result.Value.TotalCount);
+    }
+
+    [Fact]
+    public async Task Handle_WithAppointmentFilter_ShouldReturnOnlyThatAppointmentsRecords()
+    {
+        // Arrange — two appointments for the same patient/doctor, with 2 and 1 records.
+        var (patient, doctor) = await SeedPatientAndDoctorAsync();
+
+        var appointmentOne = Appointment.Create(patient.Id, doctor.Id, null, DateTime.UtcNow.AddHours(1), 30, null).Value;
+        var appointmentTwo = Appointment.Create(patient.Id, doctor.Id, null, DateTime.UtcNow.AddHours(2), 30, null).Value;
+        await _context.Appointments.AddRangeAsync(appointmentOne, appointmentTwo);
+
+        var recordOneA = TreatmentRecord.Create(patient.Id, doctor.Id, 16, "Scaling & Polishing", 50, appointmentOne.Id).Value;
+        var recordOneB = TreatmentRecord.Create(patient.Id, doctor.Id, 21, "Composite Filling", 100, appointmentOne.Id).Value;
+        var recordTwo = TreatmentRecord.Create(patient.Id, doctor.Id, 11, "Extraction", 80, appointmentTwo.Id).Value;
+
+        await _context.TreatmentRecords.AddRangeAsync(recordOneA, recordOneB, recordTwo);
+        await _context.SaveChangesAsync(default);
+
+        // Act — ask only for the first appointment's records.
+        var result = await _mediator.Send(new GetTreatmentRecordsQuery(
+            Scope: DoctorAccessScope.None,
+            PageNumber: 1,
+            PageSize: 10,
+            AppointmentId: appointmentOne.Id));
+
+        // Assert — the other appointment's record is never returned.
+        Assert.True(result.IsSuccess);
+        Assert.NotNull(result.Value);
+        Assert.Equal(2, result.Value.TotalCount);
+        Assert.All(result.Value.Items!, item => Assert.Equal(appointmentOne.Id, item.AppointmentId));
+    }
+
+    [Fact]
+    public async Task Handle_WithAppointmentFilterWithoutRecords_ShouldReturnEmptyPaginatedList()
+    {
+        // Arrange — an appointment with no recorded treatments.
+        var (patient, doctor) = await SeedPatientAndDoctorAsync();
+        var appointment = Appointment.Create(patient.Id, doctor.Id, null, DateTime.UtcNow.AddHours(1), 30, null).Value;
+        await _context.Appointments.AddAsync(appointment);
+        await _context.SaveChangesAsync(default);
+
+        // Act
+        var result = await _mediator.Send(new GetTreatmentRecordsQuery(
+            Scope: DoctorAccessScope.None,
+            PageNumber: 1,
+            PageSize: 10,
+            AppointmentId: appointment.Id));
 
         // Assert
         Assert.True(result.IsSuccess);

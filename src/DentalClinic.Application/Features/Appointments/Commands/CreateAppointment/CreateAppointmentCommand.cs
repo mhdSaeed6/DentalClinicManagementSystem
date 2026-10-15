@@ -8,7 +8,7 @@ namespace DentalClinic.Application.Features.Appointments.Commands.CreateAppointm
 public sealed record CreateAppointmentCommand(
     Guid PatientId,
     Guid DoctorId,
-    Guid ServiceId,
+    Guid? ServiceId,
     DateTime ScheduledDateTime,
     int DurationInMinutes,
     string? Notes) : IRequest<Result<AppointmentDto>>;

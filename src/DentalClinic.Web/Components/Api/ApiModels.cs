@@ -172,7 +172,7 @@ public sealed class AppointmentDto
 
     public Guid DoctorId { get; set; }
 
-    public Guid ServiceId { get; set; }
+    public Guid? ServiceId { get; set; }
 
     public DateTime ScheduledDateTime { get; set; }
 
@@ -318,7 +318,7 @@ public sealed class AppointmentFormRequest
 
     public Guid DoctorId { get; set; }
 
-    public Guid ServiceId { get; set; }
+    public Guid? ServiceId { get; set; }
 
     public DateTime ScheduledDateTime { get; set; } = DateTime.Now.AddHours(2);
 
@@ -332,6 +332,22 @@ public sealed class RescheduleAppointmentRequest
     public DateTime NewScheduledDateTime { get; set; } = DateTime.Now.AddDays(1);
 
     public int DurationInMinutes { get; set; } = 30;
+}
+
+public sealed class CompleteAppointmentRequest
+{
+    public List<CompleteAppointmentTreatmentRequest>? Treatments { get; set; }
+
+    public Guid? ServiceId { get; set; }
+}
+
+public sealed class CompleteAppointmentTreatmentRequest
+{
+    public int ToothNumber { get; set; } = 11;
+
+    public string ProcedureDetails { get; set; } = string.Empty;
+
+    public decimal Cost { get; set; }
 }
 
 public sealed class DentalServiceFormRequest

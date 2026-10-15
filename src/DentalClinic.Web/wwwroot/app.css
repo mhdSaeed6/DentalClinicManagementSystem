@@ -1093,6 +1093,111 @@ table.table tbody tr:last-child td { border-bottom: none; }
 .tooth.treated { background: var(--brand-soft); color: var(--brand); border-color: transparent; }
 .tooth.selected { background: var(--brand); color: var(--brand-contrast); border-color: var(--brand); }
 
+/* ------------------------------------------------ Complete appointment modal */
+
+.complete-summary {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px 18px;
+    padding: 14px 16px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+}
+
+.complete-summary .summary-cell { min-width: 0; }
+
+.complete-summary .label {
+    margin-bottom: 3px;
+    font-size: 0.74rem;
+    color: var(--text-muted);
+}
+
+.complete-summary .value {
+    font-size: 0.9rem;
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}
+
+.complete-summary .span-all { grid-column: 1 / -1; }
+
+.complete-summary .service-cell .label { color: var(--text); font-size: 0.82rem; }
+
+.complete-note {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 9px 12px;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    background: var(--brand-soft);
+    border-radius: var(--radius-sm);
+}
+
+.complete-note .icon { flex: none; color: var(--brand); }
+
+.complete-section {
+    padding-top: 16px;
+    border-top: 1px dashed var(--border);
+}
+
+.complete-section-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.95rem;
+    font-weight: 700;
+    margin-bottom: 4px;
+}
+
+.complete-hint {
+    font-size: 0.76rem;
+    color: var(--text-muted);
+    margin-bottom: 10px;
+}
+
+.complete-treatment {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface-2);
+}
+
+.complete-treatment .treat-proc {
+    flex: 1;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.complete-treatment .treat-cost {
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.complete-add-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    margin-bottom: 8px;
+}
+
+.complete-add {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 150px;
+    gap: 0 16px;
+}
+
+.complete-actions {
+    display: flex;
+    justify-content: flex-end;
+}
+
 /* ---------------------------------------------------------------- Login */
 
 .auth-shell {
@@ -1287,4 +1392,6 @@ table.table tbody tr:last-child td { border-bottom: none; }
     .auth-shell { grid-template-columns: 1fr; }
     .auth-aside { display: none; }
     .tooth-grid { grid-template-columns: repeat(8, 1fr); }
+    .complete-summary { grid-template-columns: 1fr; }
+    .complete-add { grid-template-columns: 1fr; }
 }

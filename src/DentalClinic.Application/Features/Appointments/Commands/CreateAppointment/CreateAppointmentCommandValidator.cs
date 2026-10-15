@@ -12,8 +12,13 @@ public sealed class CreateAppointmentCommandValidator : AbstractValidator<Create
         RuleFor(x => x.DoctorId)
             .NotEmpty().WithMessage("DoctorId is required.");
 
-        RuleFor(x => x.ServiceId)
-            .NotEmpty().WithMessage("ServiceId is required.");
+        // Service selection is optional. When a value is supplied it must be a
+        // valid, non-empty identifier; existence/active-state is checked in the handler.
+        When(x => x.ServiceId.HasValue, () =>
+        {
+            RuleFor(x => x.ServiceId)
+                .NotEmpty().WithMessage("ServiceId must be a valid identifier when provided.");
+        });
 
         RuleFor(x => x.ScheduledDateTime)
             .GreaterThan(DateTime.UtcNow).WithMessage("Scheduled date and time must be in the future.");

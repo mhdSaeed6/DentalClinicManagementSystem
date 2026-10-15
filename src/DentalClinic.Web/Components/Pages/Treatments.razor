@@ -113,18 +113,7 @@
     <div class="mb-2 fs-xs text-soft">
         @Session.T("Selected tooth:", "السن المحدد:") <span class="badge brand no-dot">@ClinicFormatting.ToothLabel(_form.ToothNumber)</span>
     </div>
-    <div class="tooth-grid mb-3">
-        @foreach (var tooth in UpperTeeth)
-        {
-            <button type="button" class="tooth @(_form.ToothNumber == tooth ? "selected" : "")" @onclick="() => _form.ToothNumber = tooth">@tooth</button>
-        }
-    </div>
-    <div class="tooth-grid mb-3">
-        @foreach (var tooth in LowerTeeth)
-        {
-            <button type="button" class="tooth @(_form.ToothNumber == tooth ? "selected" : "")" @onclick="() => _form.ToothNumber = tooth">@tooth</button>
-        }
-    </div>
+    <ToothChart @bind-Value="_form.ToothNumber" />
 
     <div class="form-grid">
         <div class="field">
@@ -203,12 +192,6 @@
 
     private Guid? _doctorFilter;
     private Guid? _patientFilter;
-
-    private static readonly int[] UpperTeethList = [18, 17, 16, 15, 14, 13, 12, 11, 21, 22, 23, 24, 25, 26, 27, 28];
-    private static readonly int[] LowerTeethList = [48, 47, 46, 45, 44, 43, 42, 41, 31, 32, 33, 34, 35, 36, 37, 38];
-
-    private int[] UpperTeeth => UpperTeethList;
-    private int[] LowerTeeth => LowerTeethList;
 
     private string FormTitle => _editingId is null ? Session.T("New treatment", "علاج جديد") : Session.T("Edit treatment", "تعديل العلاج");
 
