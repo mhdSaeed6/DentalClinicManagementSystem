@@ -106,6 +106,24 @@ public static class ClinicFormatting
         _ => "muted",
     };
 
+    /// <summary>
+    /// Lifecycle (Draft/Issued) is a separate concern from payment status, so it
+    /// gets its own label and colour.
+    /// </summary>
+    public static string LifecycleLabel(InvoiceLifecycleStatus status, bool arabic) => status switch
+    {
+        InvoiceLifecycleStatus.Draft => arabic ? "مسودة" : "Draft",
+        InvoiceLifecycleStatus.Issued => arabic ? "صادرة" : "Issued",
+        _ => arabic ? "غير معروف" : "Unknown",
+    };
+
+    public static string LifecycleCss(InvoiceLifecycleStatus status) => status switch
+    {
+        InvoiceLifecycleStatus.Draft => "warning",
+        InvoiceLifecycleStatus.Issued => "info",
+        _ => "muted",
+    };
+
     /// <summary>Friendly FDI tooth label, e.g. "UR 1" style segmentation.</summary>
     public static string ToothLabel(int toothNumber)
     {

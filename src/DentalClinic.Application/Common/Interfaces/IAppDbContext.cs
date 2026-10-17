@@ -20,6 +20,7 @@ public interface IAppDbContext
     public DbSet<DentalService> DentalServices { get; }
     public DbSet<RefreshToken> RefreshTokens { get; }
     public DbSet<Invoice> Invoices { get; }
+    public DbSet<InvoiceLine> InvoiceLines { get; }
     public DbSet<Payment> Payments { get; }
     public DbSet<TreatmentRecord> TreatmentRecords { get; }
     Task<int> SaveChangesAsync(CancellationToken cancellationToken);

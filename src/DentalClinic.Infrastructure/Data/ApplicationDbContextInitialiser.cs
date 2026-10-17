@@ -35,7 +35,15 @@ public class ApplicationDbContextInitialiser(
     {
         try
         {
-            await _context.Database.EnsureCreatedAsync();
+            // Migrations (not EnsureCreated) so schema changes actually reach an
+            // existing database. EnsureCreated is a no-op once the database
+            // exists, which left the app querying columns that were never added.
+            await _context.Database.MigrateAsync();
+
+            if (!await _context.Database.CanConnectAsync())
+            {
+                throw new InvalidOperationException("Cannot connect to the clinic database.");
+            }
         }
         catch (Exception ex)
         {

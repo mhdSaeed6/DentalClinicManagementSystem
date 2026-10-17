@@ -194,6 +194,12 @@ public enum PaymentStatus
     Paid = 3,
 }
 
+public enum InvoiceLifecycleStatus
+{
+    Draft = 1,
+    Issued = 2,
+}
+
 public sealed class PaymentDto
 {
     public Guid Id { get; set; }
@@ -225,11 +231,17 @@ public sealed class InvoiceDto
 
     public PaymentStatus Status { get; set; }
 
+    public InvoiceLifecycleStatus LifecycleStatus { get; set; }
+
+    public List<InvoiceLineDto> Lines { get; set; } = [];
+
     public List<PaymentDto> Payments { get; set; } = [];
 }
 
 public sealed class InvoiceLineDto
 {
+    public Guid Id { get; set; }
+
     public string Description { get; set; } = string.Empty;
 
     public decimal Amount { get; set; }
@@ -253,9 +265,41 @@ public sealed class GenerateAppointmentInvoiceResultDto
 
     public PaymentStatus Status { get; set; }
 
+    public InvoiceLifecycleStatus LifecycleStatus { get; set; }
+
     public bool ReusedExisting { get; set; }
 
     public List<InvoiceLineDto> Lines { get; set; } = [];
+}
+
+public sealed class AppointmentInvoiceBreakdownDto
+{
+    public Guid AppointmentId { get; set; }
+
+    public string? ServiceName { get; set; }
+
+    public decimal ServiceSubtotal { get; set; }
+
+    public decimal TreatmentSubtotal { get; set; }
+
+    public decimal EstimatedTotal { get; set; }
+
+    public int TreatmentCount { get; set; }
+
+    public bool HasBillableItems { get; set; }
+}
+
+public sealed class CompleteAppointmentWithDraftResultDto
+{
+    public Guid AppointmentId { get; set; }
+
+    public Guid? InvoiceId { get; set; }
+
+    public bool DraftCreated { get; set; }
+
+    public bool AlreadyHadInvoice { get; set; }
+
+    public string? Reason { get; set; }
 }
 
 // ---------------------------------------------------------------------------
@@ -403,6 +447,25 @@ public sealed class InvoicePaymentRequest
     public decimal Amount { get; set; }
 
     public string? Notes { get; set; }
+}
+
+public sealed class InvoiceLineFormRequest
+{
+    public Guid Id { get; set; }
+
+    public string Description { get; set; } = string.Empty;
+
+    public decimal Amount { get; set; }
+}
+
+public sealed class InvoiceDraftUpdateRequest
+{
+    public List<InvoiceLineFormRequest> Lines { get; set; } = [];
+}
+
+public sealed class InvoiceDraftRefreshRequest
+{
+    public bool ConfirmDiscardManualAdjustments { get; set; }
 }
 
 public sealed class TreatmentRecordFormRequest

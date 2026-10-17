@@ -30,6 +30,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> contextOptions) : Ident
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
 
     public DbSet<Invoice> Invoices => Set<Invoice>();
+    public DbSet<InvoiceLine> InvoiceLines => Set<InvoiceLine>();
 
     public DbSet<Payment> Payments => Set<Payment>();
 

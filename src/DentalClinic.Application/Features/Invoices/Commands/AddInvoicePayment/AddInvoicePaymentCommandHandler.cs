@@ -22,6 +22,7 @@ public class AddInvoicePaymentCommandHandler(
     {
         // 1. جلب الفاتورة فقط (دون الحاجة لـ Include الخاص بالـ Payments)
         var invoice = await context.Invoices
+            .Include(i => i.Lines)
             .FirstOrDefaultAsync(i => i.Id == request.InvoiceId, cancellationToken);
 
         if (invoice is null)

@@ -1,0 +1,10 @@
+@namespace DentalClinic.Web.Components.Shared
+@inject ClinicSessionState Session
+
+<span class="badge @ClinicFormatting.LifecycleCss(Value)">
+    @ClinicFormatting.LifecycleLabel(Value, Session.IsRtl)
+</span>
+
+@code {
+    [Parameter] public InvoiceLifecycleStatus Value { get; set; }
+}

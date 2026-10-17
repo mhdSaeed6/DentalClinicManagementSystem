@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
 
 using DentalClinic.Api.IntegrationTests.Common;
 using DentalClinic.Application.Common.Models;
@@ -8,6 +9,7 @@ using DentalClinic.Application.SubcutaneousTests.Common;
 using DentalClinic.Contracts.Requests.Invoices;
 using DentalClinic.Domain.Appointments;
 using DentalClinic.Domain.Doctors;
+using DentalClinic.Domain.Invoices.Enums;
 using DentalClinic.Domain.Patients;
 using DentalClinic.Domain.TreatmentRecords;
 using DentalClinic.Infrastructure.Identity;
@@ -467,8 +469,414 @@ public class InvoiceControllerTests(WebAppFactory webAppFactory)
     }
 
     // -------------------------------------------------------------------------
+    // 6. Invoice lifecycle: draft -> issued, editing, refresh, payment
+    // -------------------------------------------------------------------------
+
+    [Fact]
+    public async Task GeneratedDraft_ShouldStartAsDraftWithPersistedLinesAndIssuedTotal()
+    {
+        // Arrange
+        await webAppFactory.ResetDatabaseAsync();
+        await EnsureUserExistsAsync();
+        await AuthenticateAdminAsync();
+
+        var (_, _, appointment) = await SeedCompletedAppointmentAsync(servicePrice: 40m);
+        await SeedTreatmentAsync(appointment, 11, "Composite filling", 60m);
+
+        // Act
+        var generate = await PostGenerateAsync(appointment.Id);
+        Assert.Equal(HttpStatusCode.OK, generate.StatusCode);
+        var generated = await generate.Content.ReadFromJsonAsync<GenerateAppointmentInvoiceResult>();
+
+        // Assert
+        Assert.Equal(InvoiceLifecycleStatus.Draft, generated!.LifecycleStatus);
+
+        var detail = await GetInvoiceAsync(generated.InvoiceId);
+        Assert.Equal(HttpStatusCode.OK, detail.StatusCode);
+
+        var invoice = await detail.Content.ReadFromJsonAsync<InvoiceDto>();
+        Assert.Equal(InvoiceLifecycleStatus.Draft, invoice!.LifecycleStatus);
+        Assert.Equal(PaymentStatus.Unpaid, invoice.Status);
+
+        // The breakdown must still be reviewable after the request completes.
+        Assert.Equal(2, invoice.Lines.Count);
+        Assert.Equal(100m, invoice.Lines.Sum(l => l.Amount));
+        Assert.Equal(100m, invoice.TotalAmount);
+    }
+
+    [Fact]
+    public async Task Payment_AgainstDraft_ShouldBeRejected()
+    {
+        // Arrange
+        await webAppFactory.ResetDatabaseAsync();
+        await EnsureUserExistsAsync();
+        await AuthenticateAdminAsync();
+
+        var (_, _, appointment) = await SeedCompletedAppointmentAsync(servicePrice: 40m);
+        var generated = await (await PostGenerateAsync(appointment.Id))
+            .Content.ReadFromJsonAsync<GenerateAppointmentInvoiceResult>();
+
+        // Act - a draft must not accept money before it is issued.
+        var pay = new AddInvoicePaymentRequest { Amount = 10m, Notes = "should fail" };
+        var response = await _client.PostAsJsonAsync($"/api/v1.0/invoices/{generated!.InvoiceId}/payments", pay);
+
+        // Assert
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+
+        var unchanged = await (await GetInvoiceAsync(generated.InvoiceId))
+            .Content.ReadFromJsonAsync<InvoiceDto>();
+        Assert.Equal(0m, unchanged!.PaidAmount);
+        Assert.Equal(PaymentStatus.Unpaid, unchanged.Status);
+    }
+
+    [Fact]
+    public async Task Issue_Draft_ShouldBecomeIssuedAndRemainUnpaid()
+    {
+        // Arrange
+        await webAppFactory.ResetDatabaseAsync();
+        await EnsureUserExistsAsync();
+        await AuthenticateAdminAsync();
+
+        var (_, _, appointment) = await SeedCompletedAppointmentAsync(servicePrice: 40m);
+        await SeedTreatmentAsync(appointment, 11, "Composite filling", 60m);
+
+        var generated = await (await PostGenerateAsync(appointment.Id))
+            .Content.ReadFromJsonAsync<GenerateAppointmentInvoiceResult>();
+
+        // Act
+        var response = await PostIssueAsync(generated!.InvoiceId);
+
+        // Assert
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var issued = await response.Content.ReadFromJsonAsync<InvoiceDto>();
+
+        Assert.Equal(InvoiceLifecycleStatus.Issued, issued!.LifecycleStatus);
+        Assert.Equal(100m, issued.TotalAmount);
+
+        // Issuance must never register a payment.
+        Assert.Equal(0m, issued.PaidAmount);
+        Assert.Equal(PaymentStatus.Unpaid, issued.Status);
+    }
+
+    [Fact]
+    public async Task Issue_WhenRepeated_ShouldBeIdempotent()
+    {
+        // Arrange
+        await webAppFactory.ResetDatabaseAsync();
+        await EnsureUserExistsAsync();
+        await AuthenticateAdminAsync();
+
+        var (_, _, appointment) = await SeedCompletedAppointmentAsync(servicePrice: 40m);
+        var generated = await (await PostGenerateAsync(appointment.Id))
+            .Content.ReadFromJsonAsync<GenerateAppointmentInvoiceResult>();
+
+        // Act
+        var first = await PostIssueAsync(generated!.InvoiceId);
+        var second = await PostIssueAsync(generated.InvoiceId);
+
+        // Assert
+        Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, second.StatusCode);
+
+        var issued = await second.Content.ReadFromJsonAsync<InvoiceDto>();
+        Assert.Equal(InvoiceLifecycleStatus.Issued, issued!.LifecycleStatus);
+        Assert.Equal(issued.TotalAmount, issued.PaidAmount + issued.RemainingAmount);
+    }
+
+    [Fact]
+    public async Task Issue_ThenPayment_ShouldSucceed()
+    {
+        // Arrange
+        await webAppFactory.ResetDatabaseAsync();
+        await EnsureUserExistsAsync();
+        await AuthenticateAdminAsync();
+
+        var (_, _, appointment) = await SeedCompletedAppointmentAsync(servicePrice: 40m);
+        var generated = await (await PostGenerateAsync(appointment.Id))
+            .Content.ReadFromJsonAsync<GenerateAppointmentInvoiceResult>();
+        await PostIssueAsync(generated!.InvoiceId);
+
+        // Act
+        var pay = new AddInvoicePaymentRequest { Amount = 15m };
+        var response = await _client.PostAsJsonAsync($"/api/v1.0/invoices/{generated.InvoiceId}/payments", pay);
+
+        // Assert
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var updated = await response.Content.ReadFromJsonAsync<InvoiceDto>();
+        Assert.Equal(15m, updated!.PaidAmount);
+        Assert.Equal(PaymentStatus.PartiallyPaid, updated.Status);
+    }
+
+    [Fact]
+    public async Task UpdateDraft_ShouldRecalculateTotalOnServer()
+    {
+        // Arrange
+        await webAppFactory.ResetDatabaseAsync();
+        await EnsureUserExistsAsync();
+        await AuthenticateAdminAsync();
+
+        var (_, _, appointment) = await SeedCompletedAppointmentAsync(servicePrice: 40m);
+        await SeedTreatmentAsync(appointment, 11, "Composite filling", 60m);
+
+        var generated = await (await PostGenerateAsync(appointment.Id))
+            .Content.ReadFromJsonAsync<GenerateAppointmentInvoiceResult>();
+        var draft = await (await GetInvoiceAsync(generated!.InvoiceId))
+            .Content.ReadFromJsonAsync<InvoiceDto>();
+        var draftLines = draft!.Lines.ToList();
+
+        // Act - the client sends lines only; it never supplies a total.
+        var request = new
+        {
+            lines = new[]
+            {
+                new { lineId = draftLines[0].Id, description = "Teeth Cleaning", amount = 50m },
+                new { lineId = draftLines[1].Id, description = "Composite filling", amount = 75m },
+            }
+        };
+
+        var response = await PutJsonAsync($"/api/v1.0/invoices/{generated.InvoiceId}/draft", request);
+
+        // Assert
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var updated = await response.Content.ReadFromJsonAsync<InvoiceDto>();
+
+        Assert.Equal(125m, updated!.TotalAmount);
+        Assert.Equal(2, updated.Lines.Count);
+        Assert.Equal(InvoiceLifecycleStatus.Draft, updated.LifecycleStatus);
+    }
+
+    [Fact]
+    public async Task UpdateDraft_OnIssuedInvoice_ShouldBeRejected()
+    {
+        // Arrange
+        await webAppFactory.ResetDatabaseAsync();
+        await EnsureUserExistsAsync();
+        await AuthenticateAdminAsync();
+
+        var (_, _, appointment) = await SeedCompletedAppointmentAsync(servicePrice: 40m);
+        var generated = await (await PostGenerateAsync(appointment.Id))
+            .Content.ReadFromJsonAsync<GenerateAppointmentInvoiceResult>();
+        var draft = await (await GetInvoiceAsync(generated!.InvoiceId))
+            .Content.ReadFromJsonAsync<InvoiceDto>();
+        var draftLines = draft!.Lines.ToList();
+
+        await PostIssueAsync(generated.InvoiceId);
+
+        // Act - editing after issuance must be refused.
+        var request = new
+        {
+            lines = new[]
+            {
+                new { lineId = draftLines[0].Id, description = "Teeth Cleaning", amount = 999m },
+            }
+        };
+
+        var response = await PutJsonAsync($"/api/v1.0/invoices/{generated.InvoiceId}/draft", request);
+
+        // Assert
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+
+        var unchanged = await (await GetInvoiceAsync(generated.InvoiceId))
+            .Content.ReadFromJsonAsync<InvoiceDto>();
+        Assert.Equal(draftLines[0].Amount, unchanged!.Lines.First().Amount);
+        Assert.Equal(draft.TotalAmount, unchanged.TotalAmount);
+    }
+
+    [Fact]
+    public async Task UpdateDraft_OnIssuedInvoice_WithPartialLineSet_ShouldReportConflictNotNotFound()
+    {
+        // Regression guard: the invoice state must be validated before the line
+        // set, otherwise editing an issued invoice reports a misleading 404
+        // when the client submits fewer lines than the invoice has.
+        await webAppFactory.ResetDatabaseAsync();
+        await EnsureUserExistsAsync();
+        await AuthenticateAdminAsync();
+
+        var (_, _, appointment) = await SeedCompletedAppointmentAsync(servicePrice: 40m);
+        await SeedTreatmentAsync(appointment, 11, "Composite filling", 60m);
+
+        var generated = await (await PostGenerateAsync(appointment.Id))
+            .Content.ReadFromJsonAsync<GenerateAppointmentInvoiceResult>();
+        var draft = await (await GetInvoiceAsync(generated!.InvoiceId))
+            .Content.ReadFromJsonAsync<InvoiceDto>();
+        var draftLines = draft!.Lines.ToList();
+
+        Assert.Equal(2, draftLines.Count);
+        await PostIssueAsync(generated.InvoiceId);
+
+        // Deliberately send only one of the two lines.
+        var response = await PutJsonAsync($"/api/v1.0/invoices/{generated.InvoiceId}/draft", new
+        {
+            lines = new[]
+            {
+                new { lineId = draftLines[0].Id, description = "Teeth Cleaning", amount = 1m },
+            }
+        });
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+
+        var unchanged = await (await GetInvoiceAsync(generated.InvoiceId))
+            .Content.ReadFromJsonAsync<InvoiceDto>();
+        Assert.Equal(InvoiceLifecycleStatus.Issued, unchanged!.LifecycleStatus);
+        Assert.Equal(draft.TotalAmount, unchanged.TotalAmount);
+    }
+
+    [Fact]
+    public async Task UpdateDraft_WithPartialLineSet_ShouldRemoveTheOmittedLine()
+    {
+        await webAppFactory.ResetDatabaseAsync();
+        await EnsureUserExistsAsync();
+        await AuthenticateAdminAsync();
+
+        var (_, _, appointment) = await SeedCompletedAppointmentAsync(servicePrice: 40m);
+        await SeedTreatmentAsync(appointment, 11, "Composite filling", 60m);
+
+        var generated = await (await PostGenerateAsync(appointment.Id))
+            .Content.ReadFromJsonAsync<GenerateAppointmentInvoiceResult>();
+        var draft = await (await GetInvoiceAsync(generated!.InvoiceId))
+            .Content.ReadFromJsonAsync<InvoiceDto>();
+        var draftLines = draft!.Lines.ToList();
+
+        // Keep only the service line.
+        var response = await PutJsonAsync($"/api/v1.0/invoices/{generated.InvoiceId}/draft", new
+        {
+            lines = new[]
+            {
+                new { lineId = draftLines[0].Id, description = "Teeth Cleaning", amount = 40m },
+            }
+        });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var updated = await response.Content.ReadFromJsonAsync<InvoiceDto>();
+
+        Assert.Single(updated!.Lines);
+        Assert.Equal(40m, updated.TotalAmount);
+    }
+
+    [Fact]
+    public async Task RefreshDraft_WithManualAdjustments_ShouldRequireConfirmation()
+    {
+        // Arrange
+        await webAppFactory.ResetDatabaseAsync();
+        await EnsureUserExistsAsync();
+        await AuthenticateAdminAsync();
+
+        var (_, _, appointment) = await SeedCompletedAppointmentAsync(servicePrice: 40m);
+        await SeedTreatmentAsync(appointment, 11, "Composite filling", 60m);
+
+        var generated = await (await PostGenerateAsync(appointment.Id))
+            .Content.ReadFromJsonAsync<GenerateAppointmentInvoiceResult>();
+        var draft = await (await GetInvoiceAsync(generated!.InvoiceId))
+            .Content.ReadFromJsonAsync<InvoiceDto>();
+        var draftLines = draft!.Lines.ToList();
+
+        // Introduce a manual adjustment.
+        await PutJsonAsync($"/api/v1.0/invoices/{generated.InvoiceId}/draft", new
+        {
+            lines = new[]
+            {
+                new { lineId = draftLines[0].Id, description = "Teeth Cleaning (negotiated)", amount = 25m },
+                new { lineId = draftLines[1].Id, description = "Composite filling", amount = 60m },
+            }
+        });
+
+        // Act - refreshing without confirmation must not discard the manual work.
+        var refused = await PostRefreshAsync(generated.InvoiceId, confirm: false);
+
+        // Assert
+        Assert.Equal(HttpStatusCode.Conflict, refused.StatusCode);
+
+        var preserved = await (await GetInvoiceAsync(generated.InvoiceId))
+            .Content.ReadFromJsonAsync<InvoiceDto>();
+        Assert.Equal(85m, preserved!.TotalAmount);
+        Assert.Contains(preserved.Lines, l => l.Description == "Teeth Cleaning (negotiated)");
+
+        // Act - confirmed refresh recalculates from the appointment.
+        var confirmed = await PostRefreshAsync(generated.InvoiceId, confirm: true);
+
+        Assert.Equal(HttpStatusCode.OK, confirmed.StatusCode);
+        var refreshed = await confirmed.Content.ReadFromJsonAsync<InvoiceDto>();
+        Assert.Equal(100m, refreshed!.TotalAmount);
+        Assert.DoesNotContain(refreshed.Lines, l => l.Description == "Teeth Cleaning (negotiated)");
+    }
+
+    [Fact]
+    public async Task RefreshDraft_WithoutManualAdjustments_ShouldSucceedImmediately()
+    {
+        // Arrange
+        await webAppFactory.ResetDatabaseAsync();
+        await EnsureUserExistsAsync();
+        await AuthenticateAdminAsync();
+
+        var (_, _, appointment) = await SeedCompletedAppointmentAsync(servicePrice: 40m);
+        await SeedTreatmentAsync(appointment, 11, "Composite filling", 60m);
+
+        var generated = await (await PostGenerateAsync(appointment.Id))
+            .Content.ReadFromJsonAsync<GenerateAppointmentInvoiceResult>();
+
+        // Act
+        var response = await PostRefreshAsync(generated!.InvoiceId, confirm: false);
+
+        // Assert
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var refreshed = await response.Content.ReadFromJsonAsync<InvoiceDto>();
+        Assert.Equal(100m, refreshed!.TotalAmount);
+    }
+
+    [Fact]
+    public async Task Generate_ForAppointmentThatAlreadyHasIssuedInvoice_ShouldReturnConflict()
+    {
+        // Arrange
+        await webAppFactory.ResetDatabaseAsync();
+        await EnsureUserExistsAsync();
+        await AuthenticateAdminAsync();
+
+        var (_, _, appointment) = await SeedCompletedAppointmentAsync(servicePrice: 40m);
+        var generated = await (await PostGenerateAsync(appointment.Id))
+            .Content.ReadFromJsonAsync<GenerateAppointmentInvoiceResult>();
+        await PostIssueAsync(generated!.InvoiceId);
+
+        // Act
+        var response = await PostGenerateAsync(appointment.Id);
+
+        // Assert - an issued invoice is never regenerated or downgraded.
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+
+        var unchanged = await (await GetInvoiceAsync(generated.InvoiceId))
+            .Content.ReadFromJsonAsync<InvoiceDto>();
+        Assert.Equal(InvoiceLifecycleStatus.Issued, unchanged!.LifecycleStatus);
+    }
+
+    // -------------------------------------------------------------------------
     // Private Helpers
     // -------------------------------------------------------------------------
+
+    private Task AuthenticateAdminAsync()
+    {
+        EnsureUserExistsAsync().GetAwaiter().GetResult();
+        var token = _client.GenerateTokenAsync(TestUsers.Admin).GetAwaiter().GetResult();
+        _client.SetAuthorizationHeader(token);
+        return Task.CompletedTask;
+    }
+
+    private Task<HttpResponseMessage> GetInvoiceAsync(Guid invoiceId) =>
+        _client.GetAsync($"/api/v1.0/invoices/{invoiceId}");
+
+    private Task<HttpResponseMessage> PostIssueAsync(Guid invoiceId) =>
+        _client.SendAsync(new HttpRequestMessage(
+            HttpMethod.Post,
+            $"/api/v1.0/invoices/{invoiceId}/issue"));
+
+    private Task<HttpResponseMessage> PostRefreshAsync(Guid invoiceId, bool confirm) =>
+        _client.PostAsJsonAsync(
+            $"/api/v1.0/invoices/{invoiceId}/draft/refresh",
+            new { confirmDiscardManualAdjustments = confirm });
+
+    private Task<HttpResponseMessage> PutJsonAsync<T>(string url, T body) =>
+        _client.SendAsync(new HttpRequestMessage(HttpMethod.Put, url)
+        {
+            Content = JsonContent.Create(body),
+        });
 
     private Task<HttpResponseMessage> PostGenerateAsync(Guid appointmentId) =>
         _client.SendAsync(new HttpRequestMessage(

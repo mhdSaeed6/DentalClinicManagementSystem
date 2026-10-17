@@ -44,6 +44,7 @@ public class GetInvoicesQueryHandler(IAppDbContext context) : IRequestHandler<Ge
         var totalCount = await query.CountAsync(cancellationToken);
 
         var invoices = await query
+            .Include(i => i.Lines)
             .Include(i => i.Payments)
             .OrderByDescending(i => i.CreatedAtUtc)
             .Skip((request.PageNumber - 1) * request.PageSize)

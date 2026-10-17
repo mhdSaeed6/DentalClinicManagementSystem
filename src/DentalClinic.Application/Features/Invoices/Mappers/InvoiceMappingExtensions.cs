@@ -18,7 +18,16 @@ public static class InvoiceMappingExtensions
             entity.PaidAmount,
             entity.RemainingAmount,
             entity.Status,
+            entity.LifecycleStatus,
+            [.. entity.Lines.Select(line => line.ToDto())],
             [.. entity.Payments.Select(payment => payment.ToDto())]);
+    }
+
+    public static InvoiceLineDto ToDto(this InvoiceLine entity)
+    {
+        ArgumentNullException.ThrowIfNull(entity);
+
+        return new InvoiceLineDto(entity.Id, entity.Description, entity.Amount);
     }
 
     public static PaymentDto ToDto(this Payment entity)

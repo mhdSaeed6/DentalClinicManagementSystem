@@ -27,3 +27,20 @@ public sealed record CompleteAppointmentCommand(
     Guid AppointmentId,
     IReadOnlyList<CompleteAppointmentTreatment>? Treatments = null,
     Guid? ServiceId = null) : IRequest<Result<Updated>>;
+
+/// <summary>
+/// Outcome of the "complete and create invoice draft" option. The appointment is
+/// completed even when no invoice could be produced, so the UI can tell the user
+/// precisely what happened rather than showing a generic failure.
+/// </summary>
+public sealed record CompleteAppointmentWithDraftResult(
+    Guid AppointmentId,
+    Guid? InvoiceId,
+    bool DraftCreated,
+    bool AlreadyHadInvoice,
+    string? Reason);
+
+public sealed record CompleteAppointmentWithDraftCommand(
+    Guid AppointmentId,
+    IReadOnlyList<CompleteAppointmentTreatment>? Treatments = null,
+    Guid? ServiceId = null) : IRequest<Result<CompleteAppointmentWithDraftResult>>;

@@ -15,5 +15,6 @@ public sealed record GenerateAppointmentInvoiceResult(
     decimal TreatmentSubtotal,
     decimal TotalAmount,
     PaymentStatus Status,
+    InvoiceLifecycleStatus LifecycleStatus,
     bool ReusedExisting,
     IReadOnlyCollection<InvoiceLineDto> Lines);

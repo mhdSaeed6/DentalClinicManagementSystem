@@ -96,8 +96,13 @@ public class GenerateAppointmentInvoiceCommandHandler(
             .Where(i => i.AppointmentId == appointment.Id)
             .ToListAsync(cancellationToken);
 
-        // An unpaid, untouched invoice for this visit is the reusable draft.
-        var reusableDraft = existing.FirstOrDefault(i => i.Status == PaymentStatus.Unpaid && i.PaidAmount == 0);
+        // An existing draft (unpaid, zero payments) created for this appointment is reusable.
+        // Only reuse invoices that are still Draft lifecycle and untouched.
+        var reusableDraft = existing.FirstOrDefault(i =>
+            i.LifecycleStatus == InvoiceLifecycleStatus.Draft &&
+            i.Status == PaymentStatus.Unpaid &&
+            i.PaidAmount == 0);
+
         if (reusableDraft is not null)
         {
             logger.LogInformation(
@@ -110,17 +115,17 @@ public class GenerateAppointmentInvoiceCommandHandler(
             return await BuildResultAsync(reusableDraft, serviceSubtotal, treatmentSubtotal, lines, reusedExisting: true, cancellationToken);
         }
 
-        // Anything else linked to this visit has payments recorded; regenerating
-        // would silently modify a settled invoice, so it is refused.
+        // Anything else linked to this visit has payments recorded or is issued; regenerating
+        // would silently modify it, so it is refused.
         if (existing.Count > 0)
         {
-            logger.LogWarning("Invoice generation refused. Appointment {AppointmentId} already has a settled invoice.", request.AppointmentId);
+            logger.LogWarning("Invoice generation refused. Appointment {AppointmentId} already has an existing invoice.", request.AppointmentId);
             return InvoiceErrors.ExistingInvoiceForAppointment;
         }
 
         // 5. The total is persisted on the invoice as a price snapshot, so later
         //    catalog or treatment edits never rewrite an already generated invoice.
-        var invoiceResult = Invoice.Create(appointment.PatientId, totalAmount, appointment.Id);
+        var invoiceResult = Invoice.Create(appointment.PatientId, totalAmount, appointment.Id, InvoiceLifecycleStatus.Draft);
         if (invoiceResult.IsError)
         {
             logger.LogWarning("Invoice generation failed for appointment {AppointmentId}. Errors: {@Errors}", request.AppointmentId, invoiceResult.Errors);
@@ -128,6 +133,14 @@ public class GenerateAppointmentInvoiceCommandHandler(
         }
 
         var invoice = invoiceResult.Value;
+
+        foreach (var line in lines)
+        {
+            invoice.AddLineImmediate(line.Description, line.Amount);
+        }
+
+        // The total is derived from the persisted lines, never from the request.
+        invoice.RecalculateFromLines();
 
         context.Invoices.Add(invoice);
         await context.SaveChangesAsync(cancellationToken);
@@ -146,7 +159,7 @@ public class GenerateAppointmentInvoiceCommandHandler(
     /// carries a positive cost. A missing or soft-deleted service is reported as
     /// an error instead of silently billing without it.
     /// </summary>
-    private static Result<(List<InvoiceLineDto> Lines, decimal ServiceSubtotal, decimal TreatmentSubtotal)> BuildLines(
+    internal static Result<(List<InvoiceLineDto> Lines, decimal ServiceSubtotal, decimal TreatmentSubtotal)> BuildLines(
         Appointment appointment,
         IReadOnlyList<TreatmentRecord> treatments)
     {
@@ -166,7 +179,7 @@ public class GenerateAppointmentInvoiceCommandHandler(
 
             if (service.Price > 0)
             {
-                lines.Add(new InvoiceLineDto(service.Name, service.Price));
+                lines.Add(new InvoiceLineDto(Guid.Empty, service.Name, service.Price));
                 serviceSubtotal = service.Price;
             }
         }
@@ -178,7 +191,10 @@ public class GenerateAppointmentInvoiceCommandHandler(
                 continue;
             }
 
-            lines.Add(new InvoiceLineDto($"{treatment.ProcedureDetails} (Tooth {treatment.ToothNumber})", treatment.Cost));
+            lines.Add(new InvoiceLineDto(
+                Guid.Empty,
+                $"{treatment.ProcedureDetails} (Tooth {treatment.ToothNumber})",
+                treatment.Cost));
             treatmentSubtotal += treatment.Cost;
         }
 
@@ -198,8 +214,7 @@ public class GenerateAppointmentInvoiceCommandHandler(
             .Select(p => p.FirstName + " " + p.LastName)
             .FirstOrDefaultAsync(cancellationToken);
 
-        // A reused draft keeps its own persisted total; the freshly computed
-        // breakdown is only reported for an invoice created in this request.
+        // A reused draft keeps its own persisted total; breakdown is only reported for the newly created one.
         return new GenerateAppointmentInvoiceResult(
             invoice.Id,
             invoice.PatientId,
@@ -209,6 +224,7 @@ public class GenerateAppointmentInvoiceCommandHandler(
             reusedExisting ? 0 : treatmentSubtotal,
             invoice.TotalAmount,
             invoice.Status,
+            invoice.LifecycleStatus,
             reusedExisting,
             reusedExisting ? [] : lines);
     }
