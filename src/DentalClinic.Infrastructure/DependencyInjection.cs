@@ -32,7 +32,15 @@ public static class DependencyInjection
         services.AddDbContext<AppDbContext>((sp, options) =>
         {
             options.AddInterceptors(sp.GetServices<ISaveChangesInterceptor>());
-            options.UseSqlServer(connectionString);
+
+            options.UseSqlServer(connectionString, sql =>
+            {
+                // Split queries by default. Loading two collection navigations in a
+                // single query cartesian-joins them, which duplicates tracked
+                // entities and corrupts change tracking on save (e.g. an invoice
+                // with both Lines and Payments).
+                sql.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery);
+            });
         });
 
         services.AddScoped<IAppDbContext>(provider => provider.GetRequiredService<AppDbContext>());

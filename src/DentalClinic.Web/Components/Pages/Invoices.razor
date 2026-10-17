@@ -2,6 +2,7 @@
 @inject ApiClient Api
 @inject ClinicSessionState Session
 @inject NotificationService Notifier
+@inject NavigationManager Nav
 
 <PageTitle>@Session.T("Billing", "الفوترة") · @Session.T("Al Noor Dental", "عيادة النور")</PageTitle>
 
@@ -140,7 +141,7 @@
     }
     <div class="field">
         <label class="label">@Session.T("Patient", "المريض") <span class="req">*</span></label>
-        <select class="select" @bind="_form.PatientId">
+        <select class="select" @bind="_form.PatientId" @bind:after="OnFormPatientChangedAsync">
             <option value="@Guid.Empty">@Session.T("— Select patient —", "— اختر المريض —")</option>
             @foreach (var patient in _patients)
             {
@@ -148,11 +149,63 @@
             }
         </select>
     </div>
+
+    @* Optional appointment linkage. Only this patient's eligible appointments are
+       offered, and the total is derived from the appointment's charges on the
+       server rather than trusted from this form. *@
+    <div class="field">
+        <label class="label">@Session.T("Link to an appointment (optional)", "ربط بموعد (اختياري)")</label>
+        <select class="select" @bind="_form.AppointmentId" @bind:after="OnFormAppointmentChangedAsync" disabled="@(_formAppointments.Count == 0)">
+            <option value="">@Session.T("— Standalone invoice —", "— فاتورة مستقلة —")</option>
+            @foreach (var appointment in _formAppointments)
+            {
+                <option value="@appointment.Id">
+                    @ClinicFormatting.DateTimeLabel(appointment.ScheduledDateTime) · @ServiceNameOrNone(appointment.ServiceId)
+                </option>
+            }
+        </select>
+    </div>
+
+    @if (_formBreakdown is { HasBillableItems: true })
+    {
+        <div class="card mb-2">
+            <div class="card-body" style="padding:12px">
+                <div class="fs-xs text-soft">@Session.T("Charges for this appointment", "رسوم هذا الموعد")</div>
+                @if (_formBreakdown.ServiceSubtotal > 0)
+                {
+                    <div class="flex-between fs-sm">
+                        <span>@(_formBreakdown.ServiceName ?? Session.T("Service", "الخدمة"))</span>
+                        <span class="mono">@ClinicFormatting.Money(_formBreakdown.ServiceSubtotal)</span>
+                    </div>
+                }
+                <div class="flex-between fs-sm">
+                    <span>@Session.T("Treatments", "العلاجات") (@_formBreakdown.TreatmentCount)</span>
+                    <span class="mono">@ClinicFormatting.Money(_formBreakdown.TreatmentSubtotal)</span>
+                </div>
+                <div class="flex-between fw-700" style="border-top:1px solid var(--border);padding-top:6px;margin-top:6px">
+                    <span>@Session.T("Server-calculated total", "الإجمالي المحسوب")</span>
+                    <span class="mono">@ClinicFormatting.Money(_formBreakdown.EstimatedTotal)</span>
+                </div>
+            </div>
+        </div>
+    }
+
     <div class="field">
         <label class="label">@Session.T("Total amount (USD)", "المبلغ الإجمالي (دولار)") <span class="req">*</span></label>
-        <input type="number" step="0.01" min="0.01" class="input" @bind="_form.TotalAmount" />
+        <input type="number" step="0.01" min="0.01" class="input" @bind="_form.TotalAmount" disabled="@(_form.AppointmentId is not null)" />
     </div>
-    <p class="text-muted fs-sm">@Session.T("An appointment linkage is optional and can be added later.", "ربط الموعد اختياري ويمكن إضافته لاحقاً.")</p>
+    @if (_form.AppointmentId is not null)
+    {
+        <p class="text-muted fs-sm">
+            @Session.T(
+                "This invoice is derived from the appointment, so the amount is calculated on the server.",
+                "تُشتق هذه الفاتورة من الموعد، لذلك يُحتسب المبلغ على الخادم.")
+        </p>
+    }
+    else
+    {
+        <p class="text-muted fs-sm">@Session.T("Leave the appointment empty to create a standalone invoice.", "اترك الموعد فارغاً لإنشاء فاتورة مستقلة.")</p>
+    }
     </ChildContent>
 
     <Footer>
@@ -216,7 +269,73 @@
             </div>
         }
 
-        @if (_selected.Status != PaymentStatus.Paid && !Session.IsDoctor)
+        <div class="flex-between mb-2" style="margin-top:18px">
+            <h3 style="margin:0">@Session.T("Invoice lines", "بنود الفاتورة")</h3>
+            <LifecycleStatusBadge Value="_selected.LifecycleStatus" />
+        </div>
+
+        @if (_selected.Lines.Count == 0)
+        {
+            <p class="text-muted fs-sm mb-3">@Session.T("No itemised lines on this invoice.", "لا توجد بنود مفصّلة لهذه الفاتورة.")</p>
+        }
+        else
+        {
+            <div class="mb-3">
+                @foreach (var line in _selected.Lines)
+                {
+                    <div class="list-row">
+                        <div class="list-body">
+                            <div class="list-title">@line.Description</div>
+                            <div class="list-sub mono">@ClinicFormatting.Money(line.Amount)</div>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+
+        @if (_selected.LifecycleStatus == InvoiceLifecycleStatus.Draft && !Session.IsDoctor)
+        {
+            <div class="divider"></div>
+            @if (!string.IsNullOrWhiteSpace(_draftError))
+            {
+                <div class="badge danger no-dot mb-2" style="display:flex;padding:10px 14px;border-radius:11px">
+                    <ClinicIcon Name="alert" Class="sm" /><span>@_draftError</span>
+                </div>
+            }
+            <div class="flex" style="gap:8px">
+                <button type="button" class="btn btn-outline btn-block" @onclick="RefreshDraftAsync" disabled="@_saving">
+                    <ClinicIcon Name="refresh" Class="sm" />
+                    <span>@Session.T("Refresh from appointment", "تحديث من الموعد")</span>
+                </button>
+                <button type="button" class="btn btn-primary btn-block" @onclick="IssueAsync" disabled="@_saving">
+                    @if (_saving)
+                    {
+                        <span class="spinner"></span>
+                    }
+                    else
+                    {
+                        <ClinicIcon Name="check" Class="sm" />
+                    }
+                    <span>@Session.T("Issue invoice", "إصدار الفاتورة")</span>
+                </button>
+            </div>
+            <p class="text-muted fs-xs mt-2">@Session.T("A draft cannot accept payments until it is issued.", "لا يمكن استلام دفعات على مسودة قبل إصدارها.")</p>
+        }
+
+        <ConfirmDialog IsOpen="_confirmRefreshOpen"
+                       Title="@Session.T("Discard manual adjustments?", "استبدال التعديلات اليدوية؟")"
+                       Message="@Session.T("This draft has manual adjustments.", "تحتوي هذه المسودة على تعديلات يدوية.")"
+                       Detail="@Session.T("Recalculating from the appointment will replace them.", "ستُستبدل عند إعادة الحساب من الموعد.")"
+                       ConfirmLabel="@Session.T("Discard and refresh", "استبدال وتحديث")"
+                       CancelLabel="@Session.T("Keep my changes", "إبقاء تعديلاتي")"
+                       OnConfirm="ConfirmRefreshAsync"
+                       OnCancel="() => _confirmRefreshOpen = false" />
+
+        @if (_selected.LifecycleStatus == InvoiceLifecycleStatus.Draft)
+        {
+            @* Payments are never offered for a draft; the backend rejects them too. *@
+        }
+        else if (_selected.Status != PaymentStatus.Paid && !Session.IsDoctor)
         {
             <div class="divider"></div>
             <h3 class="mb-2">@Session.T("Record a payment", "تسجيل دفعة")</h3>
@@ -254,6 +373,7 @@
 @code {
     private List<InvoiceDto> _invoices = [];
     private List<PatientDto> _patients = [];
+    private List<DentalServiceDto> _services = [];
     private int _page = 1;
     private int _pageSize = 10;
     private int _total;
@@ -270,8 +390,11 @@
 
     private bool _drawerOpen;
     private string? _paymentError;
+    private string? _draftError;
     private InvoiceDto? _selected;
     private InvoicePaymentRequest _payment = new();
+    private List<AppointmentDto> _formAppointments = [];
+    private AppointmentInvoiceBreakdownDto? _formBreakdown;
 
     private List<InvoiceDto> Filtered => _statusFilter is null
         ? _invoices
@@ -283,6 +406,17 @@
         {
             var patients = await Api.GetPatientsAsync(1, 100, null);
             _patients = patients.Items ?? [];
+
+            // Service names are needed to label the appointment selector.
+            try
+            {
+                var services = await Api.GetServicesAsync(1, 100, null);
+                _services = services.Items ?? [];
+            }
+            catch
+            {
+                // lookup best-effort
+            }
         }
         catch
         {
@@ -290,6 +424,21 @@
         }
 
         await LoadAsync();
+
+        // Deep link from an appointment ("Open invoice"): open that invoice's drawer.
+        var query = NavQuery.Parse(Nav.Uri);
+        if (query.TryGetValue("invoice", out var invoiceId) && Guid.TryParse(invoiceId, out var parsedInvoiceId))
+        {
+            try
+            {
+                var invoice = await Api.GetInvoiceAsync(parsedInvoiceId);
+                OpenDetails(invoice);
+            }
+            catch
+            {
+                // The invoice may be inaccessible or gone; the list is still shown.
+            }
+        }
     }
 
     private async Task LoadAsync()
@@ -330,13 +479,87 @@
     {
         _form = new InvoiceFormRequest { TotalAmount = 50 };
         _formError = null;
+        _formAppointments = [];
+        _formBreakdown = null;
         _formOpen = true;
+    }
+
+    /// <summary>
+    /// Loads only this patient's eligible appointments, so the selector cannot
+    /// offer a visit belonging to somebody else.
+    /// </summary>
+    private async Task OnFormPatientChangedAsync()
+    {
+        _form.AppointmentId = null;
+        _formBreakdown = null;
+        _formAppointments = [];
+
+        if (_form.PatientId == Guid.Empty)
+        {
+            return;
+        }
+
+        try
+        {
+            var result = await Api.GetAppointmentsAsync(1, 50, _form.PatientId);
+            _formAppointments = (result.Items ?? [])
+                .Where(a => a.Status == AppointmentStatus.Completed || a.Status == AppointmentStatus.Scheduled)
+                .ToList();
+        }
+        catch (ApiException ex)
+        {
+            _formError = ex.Message;
+        }
+    }
+
+    private async Task OnFormAppointmentChangedAsync()
+    {
+        _formBreakdown = null;
+
+        if (_form.AppointmentId is not { } appointmentId)
+        {
+            return;
+        }
+
+        try
+        {
+            _formBreakdown = await Api.GetAppointmentInvoiceBreakdownAsync(appointmentId);
+
+            if (_formBreakdown.HasBillableItems)
+            {
+                // Show the authoritative figure; the server recalculates anyway.
+                _form.TotalAmount = _formBreakdown.EstimatedTotal;
+            }
+            else
+            {
+                _formError = Session.T(
+                    "This appointment has nothing billable, so it cannot be invoiced.",
+                    "لا يوجد في هذا الموعد عناصر قابلة للفوترة.");
+            }
+        }
+        catch (ApiException ex)
+        {
+            _formError = ex.Message;
+        }
+    }
+
+    private string ServiceNameOrNone(Guid? serviceId)
+    {
+        if (serviceId is null || serviceId == Guid.Empty)
+        {
+            return Session.T("No service", "بدون خدمة");
+        }
+
+        var service = _services.FirstOrDefault(s => s.Id == serviceId);
+        return service?.Name ?? Session.T("No service", "بدون خدمة");
     }
 
     private void CloseForm()
     {
         _formOpen = false;
         _formError = null;
+        _formAppointments = [];
+        _formBreakdown = null;
     }
 
     private async Task SaveAsync()
@@ -348,7 +571,13 @@
             return;
         }
 
-        if (_form.TotalAmount <= 0)
+        if (_form.AppointmentId is not null)
+        {
+            // The server derives the total and revalidates the patient/appointment
+            // pairing, so the form's amount is only a display value here.
+            _formError = null;
+        }
+        else if (_form.TotalAmount <= 0)
         {
             _formError = Session.T("Total amount must be greater than zero.", "يجب أن يكون المبلغ أكبر من صفر.");
             return;
@@ -368,6 +597,101 @@
         }
         finally
         {
+            _saving = false;
+        }
+    }
+
+    /// <summary>
+    /// Issues the draft. The server treats an already-issued invoice as a
+    /// no-op, so this is safe to press twice.
+    /// </summary>
+    private async Task IssueAsync()
+    {
+        if (_selected is null)
+        {
+            return;
+        }
+
+        _draftError = null;
+        _saving = true;
+        try
+        {
+            var updated = await Api.IssueInvoiceAsync(_selected.Id);
+            _selected = updated;
+            Notifier.Success(Session.T("Invoice issued", "تم إصدار الفاتورة"));
+            await LoadAsync();
+        }
+        catch (ApiException ex)
+        {
+            _draftError = ex.Message;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    /// <summary>
+    /// Recalculates the draft from its appointment. If the draft carries manual
+    /// adjustments the server refuses; the user is asked to confirm first so
+    /// their work is never silently discarded.
+    /// </summary>
+    private async Task RefreshDraftAsync()
+    {
+        if (_selected is null)
+        {
+            return;
+        }
+
+        _draftError = null;
+        _saving = true;
+        try
+        {
+            var updated = await Api.RefreshInvoiceDraftAsync(_selected.Id);
+            _selected = updated;
+            Notifier.Success(Session.T("Draft refreshed from the appointment", "تم تحديث المسودة من الموعد"));
+            await LoadAsync();
+        }
+        catch (ApiException ex)
+        {
+            // The server signals that manual adjustments exist. Ask before
+            // discarding them rather than retrying automatically.
+            if (ex.Message.Contains("ManualAdjustments", StringComparison.OrdinalIgnoreCase))
+            {
+                _confirmRefreshOpen = true;
+                return;
+            }
+
+            _draftError = ex.Message;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private bool _confirmRefreshOpen;
+    private bool _confirmingRefresh;
+
+    private async Task ConfirmRefreshAsync()
+    {
+        _confirmingRefresh = true;
+        try
+        {
+            var updated = await Api.RefreshInvoiceDraftAsync(_selected!.Id, confirmDiscardManualAdjustments: true);
+            _selected = updated;
+            _confirmRefreshOpen = false;
+            Notifier.Success(Session.T("Draft refreshed from the appointment", "تم تحديث المسودة من الموعد"));
+            await LoadAsync();
+        }
+        catch (ApiException ex)
+        {
+            _draftError = ex.Message;
+            _confirmRefreshOpen = false;
+        }
+        finally
+        {
+            _confirmingRefresh = false;
             _saving = false;
         }
     }

@@ -5,6 +5,7 @@ using DentalClinic.Application.Common.Models;
 using DentalClinic.Application.Common.Security;
 using DentalClinic.Application.Features.Appointments.Commands.CancelAppointment;
 using DentalClinic.Application.Features.Appointments.Commands.CompleteAppointment;
+using DentalClinic.Application.Features.Appointments.Commands.CompleteAppointmentWithDraft;
 using DentalClinic.Application.Features.Appointments.Commands.CreateAppointment;
 using DentalClinic.Application.Features.Appointments.Commands.MarkNoShowAppointment;
 using DentalClinic.Application.Features.Appointments.Commands.RescheduleAppointment;
@@ -146,6 +147,35 @@ public class AppointmentController(ISender sender, IUser user) : ApiController
             .ToList();
 
         var result = await sender.Send(new CompleteAppointmentCommand(id, treatments, request?.ServiceId), ct);
+
+        return result.Match(
+            response => Ok(response),
+            Problem);
+    }
+
+    [HttpPatch("{id:guid}/complete-with-draft")]
+    [ProducesResponseType(typeof(CompleteAppointmentWithDraftResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
+    [EndpointSummary("Completes an appointment and creates its invoice draft.")]
+    [EndpointDescription("Completes the visit exactly like the standard complete endpoint, then generates an invoice draft from the persisted appointment. If nothing is billable the appointment is still completed and the response explains that no invoice was created. Nothing is issued and no payment is registered.")]
+    [EndpointName("CompleteAppointmentWithDraft")]
+    [MapToApiVersion("1.0")]
+    [ProducesDefaultResponseType]
+    public async Task<IActionResult> CompleteWithDraft(
+        Guid id,
+        [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] CompleteAppointmentRequest? request,
+        CancellationToken ct)
+    {
+        var treatments = request?.Treatments?
+            .Select(t => new CompleteAppointmentTreatment(t.ToothNumber, t.ProcedureDetails, t.Cost))
+            .ToList();
+
+        var result = await sender.Send(
+            new CompleteAppointmentWithDraftCommand(id, treatments, request?.ServiceId),
+            ct);
 
         return result.Match(
             response => Ok(response),

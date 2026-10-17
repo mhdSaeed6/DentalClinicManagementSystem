@@ -140,6 +140,18 @@ public sealed class ApiClient
     public Task<AppointmentDto> CompleteAppointmentAsync(Guid id, CompleteAppointmentRequest? request = null, CancellationToken ct = default) =>
         PatchAsync<AppointmentDto>($"appointments/{id}/complete", request, ct);
 
+    /// <summary>
+    /// Completes the appointment and creates its invoice draft in one step.
+    /// The appointment is completed even when no invoice could be produced;
+    /// inspect <see cref="CompleteAppointmentWithDraftResultDto.DraftCreated"/>
+    /// and <c>Reason</c> to report that accurately.
+    /// </summary>
+    public Task<CompleteAppointmentWithDraftResultDto> CompleteAppointmentWithDraftAsync(
+        Guid id,
+        CompleteAppointmentRequest? request = null,
+        CancellationToken ct = default) =>
+        PatchAsync<CompleteAppointmentWithDraftResultDto>($"appointments/{id}/complete-with-draft", request, ct);
+
     public Task<AppointmentDto> CancelAppointmentAsync(Guid id, CancellationToken ct = default) =>
         PatchAsync<AppointmentDto>($"appointments/{id}/cancel", null, ct);
 
@@ -172,8 +184,49 @@ public sealed class ApiClient
     public Task<InvoiceDto> CreateInvoiceAsync(InvoiceFormRequest request, CancellationToken ct = default) =>
         PostAsync<InvoiceDto>("invoices", request, ct);
 
+    /// <summary>
+    /// Generates (or returns the existing) invoice draft for an appointment.
+    /// The endpoint is idempotent, so a repeated call will not duplicate the draft.
+    /// </summary>
+    public Task<GenerateAppointmentInvoiceResultDto> GenerateAppointmentInvoiceAsync(Guid appointmentId, CancellationToken ct = default) =>
+        PostAsync<GenerateAppointmentInvoiceResultDto>($"invoices/from-appointment/{appointmentId}", null, ct);
+
     public Task<InvoiceDto> AddInvoicePaymentAsync(Guid invoiceId, InvoicePaymentRequest request, CancellationToken ct = default) =>
         PostAsync<InvoiceDto>($"invoices/{invoiceId}/payments", request, ct);
+
+    /// <summary>
+    /// Returns the charges that would be billed for an appointment, using the same
+    /// server-side pricing rules as draft generation.
+    /// </summary>
+    public Task<AppointmentInvoiceBreakdownDto> GetAppointmentInvoiceBreakdownAsync(Guid appointmentId, CancellationToken ct = default) =>
+        GetAsync<AppointmentInvoiceBreakdownDto>($"invoices/breakdown/{appointmentId}", ct);
+
+    /// <summary>
+    /// Issues a draft invoice. Safe to call repeatedly; the server treats an
+    /// already-issued invoice as a no-op.
+    /// </summary>
+    public Task<InvoiceDto> IssueInvoiceAsync(Guid invoiceId, CancellationToken ct = default) =>
+        PostAsync<InvoiceDto>($"invoices/{invoiceId}/issue", null, ct);
+
+    /// <summary>
+    /// Replaces a draft's line items. The total is recalculated on the server;
+    /// only Draft invoices can be edited.
+    /// </summary>
+    public Task<InvoiceDto> UpdateInvoiceDraftAsync(Guid invoiceId, InvoiceDraftUpdateRequest request, CancellationToken ct = default) =>
+        PutAsync<InvoiceDto>($"invoices/{invoiceId}/draft", request, ct);
+
+    /// <summary>
+    /// Recalculates a draft from its appointment. Manual adjustments are only
+    /// discarded when explicitly confirmed.
+    /// </summary>
+    public Task<InvoiceDto> RefreshInvoiceDraftAsync(
+        Guid invoiceId,
+        bool confirmDiscardManualAdjustments = false,
+        CancellationToken ct = default) =>
+        PostAsync<InvoiceDto>(
+            $"invoices/{invoiceId}/draft/refresh",
+            new InvoiceDraftRefreshRequest { ConfirmDiscardManualAdjustments = confirmDiscardManualAdjustments },
+            ct);
 
     // -----------------------------------------------------------------------
     // Treatment records

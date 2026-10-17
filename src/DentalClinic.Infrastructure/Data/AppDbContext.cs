@@ -1,3 +1,5 @@
+using System.Data;
+
 using DentalClinic.Application.Common.Interfaces;
 using DentalClinic.Domain.Appointments;
 using DentalClinic.Domain.Doctors;
@@ -28,6 +30,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> contextOptions) : Ident
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
 
     public DbSet<Invoice> Invoices => Set<Invoice>();
+    public DbSet<InvoiceLine> InvoiceLines => Set<InvoiceLine>();
 
     public DbSet<Payment> Payments => Set<Payment>();
 
@@ -36,6 +39,12 @@ public class AppDbContext(DbContextOptions<AppDbContext> contextOptions) : Ident
     public override async Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
     {
         return await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+    }
+
+    public async Task<IAppTransaction> BeginTransactionAsync(IsolationLevel isolationLevel, CancellationToken cancellationToken)
+    {
+        var transaction = await Database.BeginTransactionAsync(isolationLevel, cancellationToken);
+        return new EfAppTransaction(transaction);
     }
 
     protected override void OnModelCreating(ModelBuilder builder)

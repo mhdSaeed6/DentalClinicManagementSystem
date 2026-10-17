@@ -44,8 +44,21 @@ public class InvoiceConfiguration : IEntityTypeConfiguration<Invoice>
         builder.Navigation(i => i.Payments)
             .UsePropertyAccessMode(PropertyAccessMode.Field);
 
+        builder.Navigation(i => i.Lines)
+            .UsePropertyAccessMode(PropertyAccessMode.Field);
+
+        builder.Property(i => i.LifecycleStatus)
+            .HasConversion<string>()
+            .HasMaxLength(20)
+            .IsRequired();
+
+        builder.Property(i => i.HasManualAdjustments)
+            .HasColumnName("HasManualAdjustments")
+            .IsRequired();
+
         builder.HasIndex(i => i.PatientId);
         builder.HasIndex(i => i.AppointmentId);
         builder.HasIndex(i => i.Status);
+        builder.HasIndex(i => i.LifecycleStatus);
     }
 }

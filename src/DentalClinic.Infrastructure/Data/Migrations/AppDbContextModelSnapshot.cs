@@ -139,11 +139,19 @@ namespace DentalClinic.Infrastructure.Data.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
 
+                    b.Property<string>("UserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
                     b.HasKey("Id");
 
                     SqlServerKeyBuilderExtensions.IsClustered(b.HasKey("Id"));
 
                     b.HasIndex("IsActive");
+
+                    b.HasIndex("UserId")
+                        .IsUnique()
+                        .HasFilter("[UserId] IS NOT NULL");
 
                     b.HasIndex("LastName", "FirstName");
 
@@ -223,6 +231,10 @@ namespace DentalClinic.Infrastructure.Data.Migrations
                     b.Property<string>("DeletedBy")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<bool>("HasManualAdjustments")
+                        .HasColumnType("bit")
+                        .HasColumnName("HasManualAdjustments");
+
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("bit");
 
@@ -231,6 +243,11 @@ namespace DentalClinic.Infrastructure.Data.Migrations
 
                     b.Property<DateTimeOffset?>("LastModifiedUtc")
                         .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("LifecycleStatus")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
 
                     b.Property<decimal>("PaidAmount")
                         .HasPrecision(18, 2)
@@ -254,11 +271,61 @@ namespace DentalClinic.Infrastructure.Data.Migrations
 
                     b.HasIndex("AppointmentId");
 
+                    b.HasIndex("LifecycleStatus");
+
                     b.HasIndex("PatientId");
 
                     b.HasIndex("Status");
 
                     b.ToTable("Invoices", (string)null);
+                });
+
+            modelBuilder.Entity("DentalClinic.Domain.Invoices.InvoiceLine", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTimeOffset?>("DeletedAtUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<Guid>("InvoiceId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("LastModifiedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTimeOffset?>("LastModifiedUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.HasKey("Id");
+
+                    SqlServerKeyBuilderExtensions.IsClustered(b.HasKey("Id"));
+
+                    b.HasIndex("InvoiceId");
+
+                    b.ToTable("InvoiceLines", (string)null);
                 });
 
             modelBuilder.Entity("DentalClinic.Domain.Invoices.Payment", b =>
@@ -743,6 +810,15 @@ namespace DentalClinic.Infrastructure.Data.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("DentalClinic.Domain.Invoices.InvoiceLine", b =>
+                {
+                    b.HasOne("DentalClinic.Domain.Invoices.Invoice", null)
+                        .WithMany("Lines")
+                        .HasForeignKey("InvoiceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("DentalClinic.Domain.Invoices.Payment", b =>
                 {
                     b.HasOne("DentalClinic.Domain.Invoices.Invoice", null)
@@ -909,6 +985,8 @@ namespace DentalClinic.Infrastructure.Data.Migrations
 
             modelBuilder.Entity("DentalClinic.Domain.Invoices.Invoice", b =>
                 {
+                    b.Navigation("Lines");
+
                     b.Navigation("Payments");
                 });
 #pragma warning restore 612, 618

@@ -254,6 +254,93 @@
             }
         </div>
 
+        <div class="complete-section mb-3">
+            <div class="complete-section-title">
+                <span>@Session.T("Billing", "الفاتورة")</span>
+            </div>
+
+            @if (_billingError is not null)
+            {
+                <div class="badge danger no-dot mb-2" style="display:flex;padding:10px 14px;border-radius:11px">
+                    <ClinicIcon Name="alert" Class="sm" /><span>@_billingError</span>
+                </div>
+            }
+
+            @if (_generatedInvoiceId is { } generatedInvoiceId)
+            {
+                <div class="badge success no-dot mb-2" style="display:flex;padding:10px 14px;border-radius:11px">
+                    <ClinicIcon Name="check" Class="sm" />
+                    <span>@Session.T("Invoice draft is ready.", "مسودة الفاتورة جاهزة.")</span>
+                </div>
+                <button type="button" class="btn btn-outline btn-sm mb-2" @onclick="() => OpenGeneratedInvoice(generatedInvoiceId)">
+                    <ClinicIcon Name="invoice" Class="sm" /> @Session.T("Open invoice", "فتح الفاتورة")
+                </button>
+            }
+
+            <div class="list-row">
+                <div class="list-body">
+                    <div class="list-title">@ServiceName(appt.ServiceId)</div>
+                    <div class="list-sub">@Session.T("Service charge", "قيمة الخدمة")</div>
+                </div>
+                <div class="treat-cost">@ServiceChargeLabel(appt.ServiceId)</div>
+            </div>
+
+            <div class="list-row">
+                <div class="list-body">
+                    <div class="list-title">@Session.T("Treatments", "العلاجات")</div>
+                    <div class="list-sub">@_detailsTreatments.Count @Session.T("item(s)", "عنصر")</div>
+                </div>
+                <div class="treat-cost">@ClinicFormatting.Money(TreatmentSubtotal)</div>
+            </div>
+
+            <div class="list-row">
+                <div class="list-body">
+                    <div class="list-title fw-700">@Session.T("Estimated total", "الإجمالي التقديري")</div>
+                    <div class="list-sub">@Session.T("Not yet invoiced", "لم تُفوتر بعد")</div>
+                </div>
+                <div class="treat-cost fw-700">@ClinicFormatting.Money(EstimatedTotal)</div>
+            </div>
+
+            @* The action shown depends on the linked invoice's state. The backend is the
+               real enforcement boundary; this only avoids offering a request that
+               would be refused. *@
+            @{
+                var blockingInvoice = _detailsInvoices.FirstOrDefault();
+            }
+            @if (blockingInvoice is not null)
+            {
+                <div class="fs-xs text-soft mt-2">
+                    @Session.T(
+                        "This appointment already has an invoice, so no new draft can be created.",
+                        "يوجد بالفعل فاتورة لهذا الموعد، لذا لا يمكن إنشاء مسودة جديدة.")
+                </div>
+                <button type="button" class="btn btn-outline btn-block mt-2" @onclick="() => OpenGeneratedInvoice(blockingInvoice.Id)">
+                    <ClinicIcon Name="invoice" Class="sm" />
+                    <span>@(blockingInvoice.LifecycleStatus == InvoiceLifecycleStatus.Draft
+                        ? Session.T("Open draft", "فتح المسودة")
+                        : Session.T("View invoice", "عرض الفاتورة"))</span>
+                </button>
+            }
+            else if (appt.Status == AppointmentStatus.Completed)
+            {
+                <button type="button" class="btn btn-primary btn-block mt-2" @onclick="GenerateInvoiceFromDetailsAsync" disabled="@_generatingInvoice">
+                    @if (_generatingInvoice)
+                    {
+                        <span class="spinner"></span>
+                    }
+                    else
+                    {
+                        <ClinicIcon Name="invoice" Class="sm" />
+                    }
+                    <span>@Session.T("Generate invoice draft", "إنشاء مسودة الفاتورة")</span>
+                </button>
+            }
+            else
+            {
+                <div class="fs-xs text-soft mt-2">@Session.T("Complete the appointment to generate its invoice.", "أكمل الموعد لإنشاء فاتورته.")</div>
+            }
+        </div>
+
         <div class="complete-section">
             <div class="complete-section-title">
                 <span>@Session.T("Linked invoices", "الفواتير المرتبطة")</span>
@@ -278,8 +365,16 @@
                             <div class="list-body">
                                 <div class="list-title mono">#@invoice.Id.ToString()[..8]</div>
                                 <div class="list-sub">@ClinicFormatting.Money(invoice.TotalAmount) · @Session.T("Balance", "المتبقي") @ClinicFormatting.Money(invoice.RemainingAmount)</div>
+                                <div class="list-sub">
+                                    <LifecycleStatusBadge Value="invoice.LifecycleStatus" />
+                                    <span style="margin-inline-start:6px"><PaymentStatusBadge Value="invoice.Status" /></span>
+                                </div>
                             </div>
-                            <PaymentStatusBadge Value="invoice.Status" />
+                            <button type="button" class="btn btn-outline btn-sm" @onclick="() => OpenGeneratedInvoice(invoice.Id)">
+                                <span>@(invoice.LifecycleStatus == InvoiceLifecycleStatus.Draft
+                                    ? Session.T("Open draft", "فتح المسودة")
+                                    : Session.T("View invoice", "عرض الفاتورة"))</span>
+                            </button>
                         </div>
                     }
                 </div>
@@ -507,6 +602,14 @@
 
     <Footer>
         <button type="button" class="btn btn-ghost" @onclick="CloseComplete">@Session.T("Cancel", "إلغاء")</button>
+
+        @* Consultation-only visits stay possible: the plain complete button is
+           always offered, and creating a draft is an explicit extra choice. *@
+        <label class="check-row" style="display:flex;align-items:center;gap:8px;margin-inline-end:auto">
+            <input type="checkbox" @bind="_completeCreateDraft" />
+            <span class="fs-sm">@Session.T("Also create the invoice draft", "إنشاء مسودة الفاتورة أيضاً")</span>
+        </label>
+
         <button type="button" class="btn btn-success-soft" @onclick="ConfirmCompleteAsync" disabled="@_saving">
             @if (_saving)
             {
@@ -516,7 +619,9 @@
             {
                 <ClinicIcon Name="check" Class="sm" />
             }
-            <span>@Session.T("Complete appointment", "إكمال الموعد")</span>
+            <span>@(_completeCreateDraft
+                ? Session.T("Complete and create draft", "إكمال وإنشاء مسودة")
+                : Session.T("Complete appointment", "إكمال الموعد"))</span>
         </button>
     </Footer>
 </Modal>
@@ -563,6 +668,22 @@
     private string? _detailsError;
     private string? _treatmentsError;
     private string? _invoicesError;
+
+    /// <summary>Billing block: live estimate, the generate action and its result.</summary>
+    private string? _billingError;
+    private bool _generatingInvoice;
+    private Guid? _generatedInvoiceId;
+
+    /// <summary>Estimated service charge from the selected service's current price (0 when none).</summary>
+    private decimal ServiceSubtotal =>
+        _detailsAppointment?.ServiceId is { } serviceId
+            ? _services.FirstOrDefault(s => s.Id == serviceId)?.Price ?? 0m
+            : 0m;
+
+    /// <summary>Sum of this appointment's treatment costs.</summary>
+    private decimal TreatmentSubtotal => _detailsTreatments.Sum(t => t.Cost);
+
+    private decimal EstimatedTotal => ServiceSubtotal + TreatmentSubtotal;
 
     /// <summary>Guards against a slow load for a previously selected appointment overwriting a newer one.</summary>
     private int _detailsRequestId;
@@ -774,6 +895,7 @@
         _completeOpen = false;
         _completeAppointment = null;
         _completeError = null;
+        _completeCreateDraft = false;
     }
 
     private void AddCompleteTreatment()
@@ -806,6 +928,13 @@
         }
     }
 
+    private bool _completeCreateDraft;
+
+    /// <summary>
+    /// Completes the visit, optionally creating its invoice draft. The two
+    /// outcomes are reported separately: the appointment can be completed even
+    /// when there was nothing billable to invoice.
+    /// </summary>
     private async Task ConfirmCompleteAsync()
     {
         if (_completeAppointment is null)
@@ -823,8 +952,37 @@
                 ServiceId = _completeServiceId,
             };
 
-            await Api.CompleteAppointmentAsync(_completeAppointment.Id, request);
-            Notifier.Success(Session.T("Appointment completed", "تم إكمال الموعد"));
+            if (!_completeCreateDraft)
+            {
+                await Api.CompleteAppointmentAsync(_completeAppointment.Id, request);
+                Notifier.Success(Session.T("Appointment completed", "تم إكمال الموعد"));
+                CloseComplete();
+                await LoadAsync();
+                return;
+            }
+
+            var result = await Api.CompleteAppointmentWithDraftAsync(_completeAppointment.Id, request);
+
+            // The appointment is completed in every success case; only the
+            // invoicing outcome varies.
+            if (result.DraftCreated)
+            {
+                Notifier.Success(Session.T("Appointment completed and invoice draft created.", "تم إكمال الموعد وإنشاء مسودة الفاتورة."));
+            }
+            else if (result.AlreadyHadInvoice)
+            {
+                Notifier.Info(Session.T(
+                    "Appointment completed. An invoice already exists for this visit.",
+                    "تم إكمال الموعد. توجد فاتورة بالفعل لهذا الموعد."));
+            }
+            else
+            {
+                // Completed, but nothing billable: say so explicitly.
+                Notifier.Warning(Session.T(
+                    "Appointment completed, but no invoice was created because there was nothing to bill.",
+                    "تم إكمال الموعد، لكن لم تُنشأ فاتورة لعدم وجود عناصر قابلة للفوترة."));
+            }
+
             CloseComplete();
             await LoadAsync();
         }
@@ -886,6 +1044,8 @@
         _detailsError = null;
         _treatmentsError = null;
         _invoicesError = null;
+        _billingError = null;
+        _generatedInvoiceId = null;
         _detailsLoading = true;
         _detailsOpen = true;
         StateHasChanged();
@@ -912,6 +1072,7 @@
         _detailsError = null;
         _treatmentsError = null;
         _invoicesError = null;
+        _billingError = null;
 
         try
         {
@@ -1025,6 +1186,9 @@
         _detailsError = null;
         _treatmentsError = null;
         _invoicesError = null;
+        _billingError = null;
+        _generatingInvoice = false;
+        _generatedInvoiceId = null;
     }
 
     private void ViewPatientFromDetails()
@@ -1093,6 +1257,61 @@
         await LoadDetailsAsync(appointmentId);
     }
 
+    /// <summary>
+    /// Generates (or returns) the invoice draft for this appointment. The call is
+    /// guarded against double submits and the endpoint is idempotent server-side.
+    /// </summary>
+    private async Task GenerateInvoiceFromDetailsAsync()
+    {
+        if (_detailsAppointment is not { } appt || _generatingInvoice)
+        {
+            return;
+        }
+
+        _generatingInvoice = true;
+        _billingError = null;
+        _generatedInvoiceId = null;
+        StateHasChanged();
+
+        try
+        {
+            var result = await Api.GenerateAppointmentInvoiceAsync(appt.Id);
+            _generatedInvoiceId = result.InvoiceId;
+
+            if (result.ReusedExisting)
+            {
+                // A draft already exists. Show it rather than reporting a
+                // misleading "already generated" error.
+                Notifier.Info(Session.T(
+                    "An invoice already exists for this visit. Opening it now.",
+                    "توجد فاتورة بالفعل لهذا الموعد. سيتم فتحها الآن."));
+            }
+            else
+            {
+                Notifier.Success(Session.T("Invoice draft created.", "تم إنشاء مسودة الفاتورة."));
+            }
+
+            // Refresh the linked-invoice list so the new draft appears immediately.
+            await LoadDetailsAsync(appt.Id);
+        }
+        catch (ApiException ex)
+        {
+            _billingError = ex.Message;
+        }
+        catch (Exception)
+        {
+            _billingError = Session.T("Unable to generate the invoice.", "تعذّر إنشاء الفاتورة.");
+        }
+        finally
+        {
+            _generatingInvoice = false;
+            StateHasChanged();
+        }
+    }
+
+    private void OpenGeneratedInvoice(Guid invoiceId) =>
+        Nav.NavigateTo($"invoices?invoice={invoiceId}");
+
     private string FullName(string? first, string? last) => ClinicFormatting.FullName(first, last);
 
     private string PatientName(Guid id) =>
@@ -1109,4 +1328,15 @@
         id is { } serviceId
             ? _services.FirstOrDefault(s => s.Id == serviceId)?.Name ?? Session.T("Service", "خدمة")
             : Session.T("No service", "بدون خدمة");
+
+    /// <summary>
+    /// The known service charge, or an em dash when there is no service or its
+    /// price cannot be resolved — never a fabricated amount.
+    /// </summary>
+    private string ServiceChargeLabel(Guid? id) =>
+        id is { } serviceId
+            ? _services.FirstOrDefault(s => s.Id == serviceId) is { } service
+                ? ClinicFormatting.Money(service.Price)
+                : "—"
+            : "—";
 }

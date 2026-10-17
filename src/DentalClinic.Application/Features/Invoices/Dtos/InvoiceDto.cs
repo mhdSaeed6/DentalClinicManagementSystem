@@ -11,4 +11,6 @@ public sealed record InvoiceDto(
     decimal PaidAmount,
     decimal RemainingAmount,
     PaymentStatus Status,
+    InvoiceLifecycleStatus LifecycleStatus,
+    IReadOnlyCollection<InvoiceLineDto> Lines,
     IReadOnlyCollection<PaymentDto> Payments);

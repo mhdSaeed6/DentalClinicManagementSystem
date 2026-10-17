@@ -1,5 +1,6 @@
 using DentalClinic.Application.Common.Errors;
 using DentalClinic.Application.Common.Interfaces;
+using DentalClinic.Application.Features.Invoices.Commands.GenerateAppointmentInvoice;
 using DentalClinic.Application.Features.Invoices.Dtos;
 using DentalClinic.Application.Features.Invoices.Mappers;
 using DentalClinic.Domain.Common.Results;
@@ -33,16 +34,49 @@ public class CreateInvoiceCommandHandler(
             return ApplicationErrors.PatientNotFound;
         }
 
-        if (request.AppointmentId.HasValue)
+        // 1. An appointment-linked manual invoice must belong to the patient being
+        //    billed. This is validated server-side; the form's selector is only
+        //    a convenience and is never trusted.
+        if (request.AppointmentId is { } appointmentId)
         {
-            var appointmentExists = await context.Appointments.AnyAsync(a => a.Id == request.AppointmentId.Value, cancellationToken);
-            if (!appointmentExists)
+            var appointment = await context.Appointments
+                .AsNoTracking()
+                .Where(a => a.Id == appointmentId)
+                .Select(a => new { a.PatientId })
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (appointment is null)
             {
-                logger.LogWarning("Invoice creation failed. Appointment {AppointmentId} not found.", request.AppointmentId);
+                logger.LogWarning("Invoice creation failed. Appointment {AppointmentId} not found.", appointmentId);
                 return ApplicationErrors.AppointmentNotFound;
+            }
+
+            if (appointment.PatientId != request.PatientId)
+            {
+                logger.LogWarning(
+                    "Invoice creation refused. Appointment {AppointmentId} belongs to patient {OwnerId}, not {PatientId}.",
+                    appointmentId,
+                    appointment.PatientId,
+                    request.PatientId);
+                return InvoiceErrors.AppointmentPatientMismatch;
+            }
+
+            // Guard against billing the same visit twice through the manual form.
+            var alreadyInvoiced = await context.Invoices
+                .AnyAsync(i => i.AppointmentId == appointmentId, cancellationToken);
+
+            if (alreadyInvoiced)
+            {
+                logger.LogWarning(
+                    "Invoice creation refused. Appointment {AppointmentId} already has an invoice.",
+                    appointmentId);
+                return InvoiceErrors.ExistingInvoiceForAppointment;
             }
         }
 
+        // 2. Standalone invoices stay a flat, immediately payable invoice. An
+        //    appointment-derived invoice is built from its persisted charges
+        //    instead, so the client's total is never trusted.
         var invoiceResult = Invoice.Create(request.PatientId, request.TotalAmount, request.AppointmentId);
         if (invoiceResult.IsError)
         {
@@ -51,6 +85,42 @@ public class CreateInvoiceCommandHandler(
         }
 
         var invoice = invoiceResult.Value;
+
+        if (request.AppointmentId is { } sourceAppointmentId)
+        {
+            var appointment = await context.Appointments
+                .Include(a => a.Service)
+                .AsNoTracking()
+                .FirstAsync(a => a.Id == sourceAppointmentId, cancellationToken);
+
+            var treatments = await context.TreatmentRecords
+                .AsNoTracking()
+                .Where(t => t.AppointmentId == sourceAppointmentId)
+                .ToListAsync(cancellationToken);
+
+            var built = GenerateAppointmentInvoiceCommandHandler.BuildLines(appointment, treatments);
+            if (built.IsError)
+            {
+                return built.Errors;
+            }
+
+            var (lines, _, _) = built.Value;
+            if (lines.Count == 0)
+            {
+                logger.LogWarning(
+                    "Invoice creation refused. Appointment {AppointmentId} has no billable items.",
+                    sourceAppointmentId);
+                return InvoiceErrors.NoBillableItems;
+            }
+
+            foreach (var line in lines)
+            {
+                invoice.AddLineImmediate(line.Description, line.Amount);
+            }
+
+            // The authoritative total comes from the persisted charges.
+            invoice.RecalculateFromLines();
+        }
 
         context.Invoices.Add(invoice);
         await context.SaveChangesAsync(cancellationToken);
