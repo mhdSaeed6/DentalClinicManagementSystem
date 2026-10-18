@@ -1,3 +1,5 @@
+using System.Data;
+
 using DentalClinic.Application.Common.Errors;
 using DentalClinic.Application.Common.Interfaces;
 using DentalClinic.Application.Features.Invoices.Commands.AddInvoicePayment;
@@ -20,6 +22,14 @@ public class AddInvoicePaymentCommandHandler(
 {
     public async Task<Result<InvoiceDto>> Handle(AddInvoicePaymentCommand request, CancellationToken cancellationToken)
     {
+        // The balance check below is read-modify-write, so the read and the write
+        // must be one atomic unit. Under SERIALIZABLE the range lock taken by the
+        // read is held until commit, so a competing payment either blocks or is
+        // rejected by SQL Server rather than silently overpaying.
+        await using var transaction = await context.BeginTransactionAsync(
+            IsolationLevel.Serializable,
+            cancellationToken);
+
         // 1. جلب الفاتورة فقط (دون الحاجة لـ Include الخاص بالـ Payments)
         var invoice = await context.Invoices
             .Include(i => i.Lines)
@@ -50,7 +60,22 @@ public class AddInvoicePaymentCommandHandler(
         await context.Payments.AddAsync(paymentResult.Value, cancellationToken);
 
         // 5. حفظ التغييرات (تحديث الفاتورة + إضافة السطر الجديد في الدفعات)
-        await context.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await context.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            // The invoice RowVersion no longer matches: another request paid or
+            // edited this invoice while we held the stale copy. Surface a 409
+            // instead of reporting a payment that was never persisted.
+            logger.LogWarning(
+                "Concurrent modification detected while registering a payment for invoice {InvoiceId}.",
+                request.InvoiceId);
+
+            return InvoiceErrors.ConcurrentModification;
+        }
 
         // 6. تفريغ الـ Cache
         await cache.RemoveAsync($"invoice-{request.InvoiceId}", cancellationToken);

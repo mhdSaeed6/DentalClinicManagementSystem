@@ -56,6 +56,15 @@ public class InvoiceConfiguration : IEntityTypeConfiguration<Invoice>
             .HasColumnName("HasManualAdjustments")
             .IsRequired();
 
+        // Optimistic concurrency token. Without it two concurrent payment
+        // requests both read the same PaidAmount, both pass the
+        // "amount <= RemainingAmount" check in memory, and the last writer wins
+        // — silently losing a payment or overpaying an invoice. EF now includes
+        // RowVersion in the UPDATE's WHERE clause and throws DbUpdateConcurrencyException
+        // on the loser instead.
+        builder.Property(i => i.RowVersion)
+            .IsRowVersion();
+
         builder.HasIndex(i => i.PatientId);
         builder.HasIndex(i => i.AppointmentId);
         builder.HasIndex(i => i.Status);
