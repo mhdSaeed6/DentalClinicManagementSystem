@@ -1,4 +1,3 @@
-using System.Security.Cryptography;
 using System.Text;
 using DentalClinic.Application.Common.Interfaces;
 using DentalClinic.Infrastructure.Data;
@@ -12,6 +11,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 
 namespace Microsoft.Extensions.DependencyInjection;
@@ -80,8 +80,18 @@ public static class DependencyInjection
         // The signing secret is deliberately absent from appsettings.json. A
         // committed secret lets anyone with repo access mint an Admin token, so
         // it must come from user-secrets, an env var, or a secret store.
-        var jwtSettings = configuration.GetSection("JwtSettings");
-        var jwtSecret = ResolveJwtSecret(configuration, jwtSettings);
+        //
+        // The secret is resolved LAZILY (see JwtSecretProvider): reading it here
+        // during registration would capture configuration before the host is
+        // built, missing anything a test host or late configuration source adds.
+        // The provider is constructed here over the same live IConfiguration so
+        // it observes configuration sources registered later.
+        var jwtSecretProvider = new JwtSecretProvider(configuration);
+
+        services.AddSingleton<IJwtSecretProvider>(jwtSecretProvider);
+
+        // Fail fast at startup rather than on the first authenticated request.
+        services.AddHostedService<JwtSecretValidationService>();
 
         services.AddAuthentication(options =>
         {
@@ -90,6 +100,11 @@ public static class DependencyInjection
         })
         .AddJwtBearer(options =>
         {
+            // AddJwtBearer's action is applied lazily via services.Configure, so
+            // reading configuration here (rather than at registration time) sees
+            // the final, fully-built configuration.
+            var jwtSettings = configuration.GetSection("JwtSettings");
+
             options.TokenValidationParameters = new TokenValidationParameters
             {
                 ValidateIssuer = true,
@@ -99,7 +114,7 @@ public static class DependencyInjection
                 ValidateIssuerSigningKey = true,
                 ValidIssuer = jwtSettings["Issuer"],
                 ValidAudience = jwtSettings["Audience"],
-                IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret)),
+                IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecretProvider.GetSecret())),
             };
         });
 
@@ -122,41 +137,5 @@ public static class DependencyInjection
         });
 
         return services;
-    }
-
-    /// <summary>
-    /// Resolves the JWT signing secret. Outside Development the secret must be
-    /// supplied explicitly (env var <c>JwtSettings__Secret</c>, user-secrets, or
-    /// a vault); the process refuses to start without it. In Development an
-    /// ephemeral in-memory secret is generated so a fresh clone runs without
-    /// setup, and so no usable secret ever lives in git.
-    /// </summary>
-    private static string ResolveJwtSecret(IConfiguration configuration, IConfigurationSection jwtSettings)
-    {
-        var configured = jwtSettings["Secret"];
-
-        if (!string.IsNullOrWhiteSpace(configured))
-        {
-            return configured;
-        }
-
-        var isDevelopment = string.Equals(
-            configuration["ASPNETCORE_ENVIRONMENT"],
-            "Development",
-            StringComparison.OrdinalIgnoreCase);
-
-        if (!isDevelopment)
-        {
-            throw new InvalidOperationException(
-                "JwtSettings:Secret is not configured. Set it via the JwtSettings__Secret " +
-                "environment variable, user-secrets, or your secret manager. Refusing to start.");
-        }
-
-        var developmentSecret = Convert.ToBase64String(RandomNumberGenerator.GetBytes(64));
-
-        // Back-fill so TokenProvider reads the identical value.
-        configuration["JwtSettings:Secret"] = developmentSecret;
-
-        return developmentSecret;
     }
 }

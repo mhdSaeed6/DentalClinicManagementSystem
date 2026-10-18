@@ -89,10 +89,14 @@ public static class DependencyInjection
 
     public static IServiceCollection AddAppRateLimiting(this IServiceCollection services, IConfiguration configuration)
     {
-        var limits = configuration.GetSection("AppSettings:RateLimiting").Get<RateLimitSettings>() ?? new RateLimitSettings();
-
         services.AddRateLimiter(options =>
         {
+            // Read INSIDE the callback. AddRateLimiter's action is applied lazily,
+            // so this observes configuration added after service registration
+            // (a test host's ConfigureAppConfiguration, or a late configuration
+            // source). Reading eagerly here would miss those values.
+            var limits = configuration.GetSection("AppSettings:RateLimiting").Get<RateLimitSettings>() ?? new RateLimitSettings();
+
             options.AddSlidingWindowLimiter(RateLimiterPolicyNames.SlidingWindow, limiterOptions =>
             {
                 limiterOptions.PermitLimit = limits.GeneralPermitLimit;

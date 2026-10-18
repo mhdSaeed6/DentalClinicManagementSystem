@@ -15,9 +15,10 @@ using Microsoft.IdentityModel.Tokens;
 
 namespace DentalClinic.Infrastructure.Identity;
 
-public class TokenProvider(IConfiguration configuration, IAppDbContext context) : ITokenProvider
+public class TokenProvider(IConfiguration configuration, IJwtSecretProvider secretProvider, IAppDbContext context) : ITokenProvider
 {
     private readonly IConfiguration _configuration = configuration;
+    private readonly IJwtSecretProvider _secretProvider = secretProvider;
     private readonly IAppDbContext _context = context;
 
     public async Task<Result<TokenResponse>> GenerateJwtTokenAsync(AppUserDto user, CancellationToken ct = default)
@@ -42,7 +43,7 @@ public class TokenProvider(IConfiguration configuration, IAppDbContext context) 
         var tokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuerSigningKey = true,
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_configuration["JwtSettings:Secret"]!)),
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_secretProvider.GetSecret())),
             ValidateIssuer = true,
             ValidIssuer = _configuration["JwtSettings:Issuer"],
             ValidateAudience = true,
@@ -79,7 +80,7 @@ public class TokenProvider(IConfiguration configuration, IAppDbContext context) 
 
         var issuer = jwtSettings["Issuer"]!;
         var audience = jwtSettings["Audience"]!;
-        var key = jwtSettings["Secret"]!;
+        var key = _secretProvider.GetSecret();
 
         var expires = DateTime.UtcNow.AddMinutes(int.Parse(jwtSettings["TokenExpirationInMinutes"]!));
 

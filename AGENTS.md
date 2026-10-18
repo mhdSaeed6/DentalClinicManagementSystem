@@ -40,6 +40,7 @@ dotnet ef migrations add <Name> --project src/DentalClinic.Infrastructure --star
 
 ## Architecture rules worth not breaking
 
+- **Never read `IConfiguration` eagerly during service registration.** `WebApplicationFactory` queues `ConfigureAppConfiguration` callbacks and applies them when the host is *built*, so any value read inside `Program.Main` misses what a test host supplied. This broke every integration test once already. Read configuration *inside* a lazily-invoked callback (`AddJwtBearer(options => …)`, `AddRateLimiter(options => …)`) or resolve it from DI at use time (`JwtSecretProvider`).
 - **Result flow, no exceptions for expected failures.** Handlers return `Result<T>` built from `Domain/Common/Results`. Controllers unwrap with `result.Match(Ok, Problem)` — `ApiController.Problem(List<Error>)` maps `ErrorKind` to status codes. Never throw to signal a business rule.
 - **Validation** is FluentValidation via `ValidationBehaviour`, registered in `Application/DependencyInjection.cs`. Naming convention is `XxxCommandValidator` / `XxxQueryValidator` alongside the request. Adding a new pipeline behaviour means editing that `AddOpenBehavior` list.
 - **Authorization is two-layer and fail-closed.** `[Authorize(Policy = ...)]` on the controller is only the outer layer. Every handler must also check ownership through `Application/Common/Security/ClinicAuthorization.cs` (`user.CanAccessAppointment(doctorId)`, `user.DoctorScope()`, `user.PatientScope()`, `user.CanWriteClinicalRecords()`). Client-supplied doctor/patient ids are never trusted.
@@ -53,7 +54,7 @@ dotnet ef migrations add <Name> --project src/DentalClinic.Infrastructure --star
 
 ## Environment quirks (deliberate or known-broken)
 
-- **JWT secret is not in git.** `appsettings.json` has no `Secret`. Non-Development environments must set `JwtSettings__Secret` (env var/user-secrets/vault) or the app throws at startup; Development auto-generates an ephemeral one so a fresh clone runs and no usable secret ever lives in git.
+- **JWT secret is not in git.** `appsettings.json` has no `Secret`. Non-Development environments must set `JwtSettings__Secret` (env var/user-secrets/vault) or the app throws at startup; Development auto-generates an ephemeral one so a fresh clone runs and no usable secret ever lives in git. It is resolved lazily by `JwtSecretProvider` — never read it during service registration, or `WebApplicationFactory` configuration sources (queued until host build) will be missed.
 - Serilog's Seq sink is set per environment: `appsettings.Development.json` → `localhost:5342` (compose maps `5342:5341`), `docker-compose.yml` → `seq:5341`. Keep the host matching the compose service name.
 - `Dockerfile` builds and ships **only the API**. `DentalClinic.Web` has no container and no compose service; the Web app reaches the API over HTTP using `ApiBaseUrl`.
 - `TZ` is applied at runtime via the `TZ` env var; the image no longer hard-links `/etc/localtime`, so the same image is deployable in any region.

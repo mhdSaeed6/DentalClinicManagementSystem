@@ -65,7 +65,13 @@ public class IdentityControllerTests(WebAppFactory webAppFactory)
         var response = await _client.PostAsJsonAsync("/api/v1.0/identity/token/generate", request);
 
         // Assert
-        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        // Authentication failures deliberately return one uniform
+        // Auth_Invalid_Credentials (Validation -> 400) whether the account is
+        // unknown, unconfirmed, locked out, or the password is simply wrong.
+        // Distinguishing them would make this endpoint an account-enumeration
+        // oracle. (The assertion previously expected Conflict/409, contradicting
+        // this test's own name.)
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
     // -------------------------------------------------------------------------

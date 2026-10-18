@@ -1,9 +1,9 @@
-using DentalClinic.Api;
-using DentalClinic.Application.SubcutaneousTests.Common;
 using DentalClinic.Infrastructure.Data;
 
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
+
+using Testcontainers.MsSql;
 
 using Xunit;
 
@@ -18,26 +18,46 @@ namespace DentalClinic.Api.IntegrationTests;
 /// compiles fine but fails against real SQL Server would never be caught by CI,
 /// and the app (which calls <c>MigrateAsync()</c> at startup) would then fail
 /// to boot in production. This test closes that gap.
+///
+/// It deliberately uses its own container rather than <c>WebAppFactory</c>: that
+/// fixture calls <c>EnsureCreatedAsync()</c>, which would leave tables behind and
+/// make a subsequent <c>MigrateAsync()</c> fail on an existing schema. Its
+/// connection string also targets <c>master</c>, which cannot be dropped.
 /// </summary>
-public class MigrationTests : IClassFixture<WebAppFactory>
+public class MigrationTests : IAsyncLifetime
 {
-    private readonly WebAppFactory _webAppFactory;
+    private readonly MsSqlContainer _dbContainer = new MsSqlBuilder().Build();
+    private DbContextOptions<AppDbContext> _options = default!;
 
-    public MigrationTests(WebAppFactory webAppFactory)
+    public async Task InitializeAsync()
     {
-        _webAppFactory = webAppFactory;
+        await _dbContainer.StartAsync();
+
+        // Point at a real (empty) database rather than master so the migration
+        // chain creates the schema from scratch. Testcontainers' connection
+        // string has no Initial Catalog, and the named GetConnectionString
+        // overload is not supported by the MsSql provider.
+        var connectionString = new SqlConnectionStringBuilder(_dbContainer.GetConnectionString())
+        {
+            InitialCatalog = "MigrationsUnderTest",
+        }.ConnectionString;
+
+        var builder = new DbContextOptionsBuilder<AppDbContext>();
+        builder.UseSqlServer(connectionString);
+
+        _options = builder.Options;
+    }
+
+    public async Task DisposeAsync()
+    {
+        await _dbContainer.StopAsync();
     }
 
     [Fact]
     public async Task MigrateAsync_ShouldApplyAllMigrations_ToCleanDatabase()
     {
-        using var scope = _webAppFactory.Services.CreateScope();
-        var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        await using var context = new AppDbContext(_options);
 
-        // The fixture builds the schema with EnsureCreatedAsync, so drop it first
-        // to guarantee MigrateAsync has a clean slate and must replay the whole
-        // chain from InitialCreate rather than finding history already present.
-        await context.Database.EnsureDeletedAsync();
         await context.Database.MigrateAsync();
 
         var applied = await context.Database
@@ -47,25 +67,55 @@ public class MigrationTests : IClassFixture<WebAppFactory>
 
         Assert.NotEmpty(applied);
 
-        // Every known migration must be recorded, not silently skipped.
+        // The first migration must be present, proving the whole chain replayed
+        // from zero rather than finding history already present.
         Assert.Contains("20260912190400_InitialCreate", applied);
 
-        var pending = await context.Database.GetPendingMigrationsAsync();
-        Assert.Empty(pending);
+        Assert.Empty(await context.Database.GetPendingMigrationsAsync());
     }
 
     [Fact]
     public async Task MigrateAsync_ShouldBeIdempotent_WhenAppliedTwice()
     {
-        using var scope = _webAppFactory.Services.CreateScope();
-        var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        await using var context = new AppDbContext(_options);
 
-        await context.Database.EnsureDeletedAsync();
         await context.Database.MigrateAsync();
 
         // Re-running must be a no-op rather than an error.
         await context.Database.MigrateAsync();
 
         Assert.Empty(await context.Database.GetPendingMigrationsAsync());
+    }
+
+    [Fact]
+    public async Task MigrateAsync_ShouldCreateTablesWithExpectedColumns()
+    {
+        await using var context = new AppDbContext(_options);
+
+        await context.Database.MigrateAsync();
+
+        // The concurrency token backing the payment race fix must actually exist
+        // in the database, not merely in the EF model.
+        var rowVersion = await context.Database
+            .SqlQueryRaw<string>(
+                "SELECT [name] FROM sys.columns WHERE [object_id] = OBJECT_ID(N'[Invoices]') AND [name] = 'RowVersion'")
+            .ToListAsync();
+
+        Assert.NotEmpty(rowVersion);
+
+        // Refresh tokens must be stored as a hash column, never a raw token.
+        var tokenHash = await context.Database
+            .SqlQueryRaw<string>(
+                "SELECT [name] FROM sys.columns WHERE [object_id] = OBJECT_ID(N'[RefreshTokens]') AND [name] = 'TokenHash'")
+            .ToListAsync();
+
+        Assert.NotEmpty(tokenHash);
+
+        var rawToken = await context.Database
+            .SqlQueryRaw<string>(
+                "SELECT [name] FROM sys.columns WHERE [object_id] = OBJECT_ID(N'[RefreshTokens]') AND [name] = 'Token'")
+            .ToListAsync();
+
+        Assert.Empty(rawToken);
     }
 }
