@@ -3,6 +3,7 @@ using System.Security.Claims;
 using DentalClinic.Application.Common.Errors;
 using DentalClinic.Application.Common.Interfaces;
 using DentalClinic.Domain.Common.Results;
+using DentalClinic.Domain.Identity;
 
 using MediatR;
 
@@ -47,14 +48,32 @@ public class RefreshTokenQueryHandler(ILogger<RefreshTokenQueryHandler> logger, 
             return getUserResult.Errors;
         }
 
-        var refreshToken = await _context.RefreshTokens.FirstOrDefaultAsync(r => r.Token == request.RefreshToken && r.UserId == userId, ct);
+        // Lookup by hash: the raw token is never stored, so it is hashed before
+        // comparison. An unknown/expired token is reported identically to avoid
+        // leaking whether a token ever existed.
+        var presentedHash = RefreshToken.HashToken(request.RefreshToken);
 
-        if (refreshToken is null || refreshToken.ExpiresOnUtc < DateTime.UtcNow)
+        var refreshToken = await _context.RefreshTokens
+            .FirstOrDefaultAsync(r => r.TokenHash == presentedHash && r.UserId == userId, ct);
+
+        if (refreshToken is null)
         {
-            _logger.LogError("Refresh token has expired");
+            _logger.LogWarning("Refresh token presented for user {UserId} was not recognised.", userId);
 
             return ApplicationErrors.RefreshTokenExpired;
         }
+
+        if (refreshToken.ExpiresOnUtc < DateTime.UtcNow)
+        {
+            _logger.LogWarning("Refresh token has expired for user {UserId}.", userId);
+
+            return ApplicationErrors.RefreshTokenExpired;
+        }
+
+        // Rotate on use: the presented token is single-use. Generating a new pair
+        // marks it deleted, so a stolen token is usable at most once and the
+        // legitimate client is forced onto the fresh token.
+        refreshToken.Delete(userId);
 
         var generateTokenResult = await _tokenProvider.GenerateJwtTokenAsync(getUserResult.Value, ct);
 
