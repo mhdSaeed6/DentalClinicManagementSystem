@@ -124,13 +124,29 @@ public class TokenProvider(IConfiguration configuration, IAppDbContext context) 
 
         var securityToken = tokenHandler.CreateToken(descriptor);
 
+        // Retire the user's previous refresh tokens so a new sign-in invalidates
+        // old sessions. Done as tracked deletes (the entity is soft-deletable)
+        // rather than ExecuteDeleteAsync, which bypassed the global query filter
+        // and raced concurrent sign-ins issuing tokens for the same user.
         var oldRefreshTokens = await _context.RefreshTokens
-              .Where(rt => rt.UserId == user.UserId)
-              .ExecuteDeleteAsync(ct);
+              .Where(rt => rt.UserId == user.UserId && !rt.IsDeleted)
+              .ToListAsync(ct);
+
+        if (oldRefreshTokens.Count > 0)
+        {
+            foreach (var stale in oldRefreshTokens)
+            {
+                stale.Delete(user.UserId);
+            }
+        }
+
+        // The raw value is returned to the client exactly once here; only its
+        // hash is persisted on the entity.
+        var rawRefreshToken = GenerateRefreshToken();
 
         var refreshTokenResult = RefreshToken.Create(
             Guid.NewGuid(),
-            GenerateRefreshToken(),
+            rawRefreshToken,
             user.UserId,
             DateTime.UtcNow.AddDays(7));
 
@@ -148,7 +164,7 @@ public class TokenProvider(IConfiguration configuration, IAppDbContext context) 
         return new TokenResponse
         {
             AccessToken = tokenHandler.WriteToken(securityToken),
-            RefreshToken = refreshToken.Token,
+            RefreshToken = rawRefreshToken,
             ExpiresOnUtc = expires
         };
     }

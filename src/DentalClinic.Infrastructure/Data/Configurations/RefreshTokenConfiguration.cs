@@ -13,9 +13,10 @@ public class RefreshTokenConfiguration : IEntityTypeConfiguration<RefreshToken>
         builder.HasKey(rt => rt.Id).IsClustered();
 
         // 1. Core Properties
-        builder.Property(rt => rt.Token)
+        // Only the SHA-256 hash is persisted; SHA-256 hex is 64 chars.
+        builder.Property(rt => rt.TokenHash)
             .IsRequired()
-            .HasMaxLength(256);
+            .HasMaxLength(64);
 
         builder.Property(rt => rt.UserId)
             .IsRequired()
@@ -28,7 +29,7 @@ public class RefreshTokenConfiguration : IEntityTypeConfiguration<RefreshToken>
         builder.HasQueryFilter(rt => !rt.IsDeleted);
 
         // 3. Performance Indexes
-        builder.HasIndex(rt => rt.Token)
+        builder.HasIndex(rt => rt.TokenHash)
             .IsUnique();
 
         builder.HasIndex(rt => rt.UserId);

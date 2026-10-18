@@ -25,6 +25,14 @@ public class ApplicationDbContextInitialiser(
     RoleManager<IdentityRole> roleManager,
     IOptions<AppSettings> appSettingsOptions)
 {
+    // Development-only demo credentials. They satisfy the Identity password
+    // policy and must stay in sync with Tests.Common/Security/TestUsers.cs.
+    // Production must never reach this code path — see Program.cs, where
+    // InitialiseDatabaseAsync() only runs under the Development environment.
+    private const string SeededAdminPassword = "Admin!Pass123";
+    private const string SeededDoctorPassword = "Doctor!Pass123";
+    private const string SeededReceptionistPassword = "Receptionist!Pass123";
+
     private readonly ILogger<ApplicationDbContextInitialiser> _logger = logger;
     private readonly AppDbContext _context = context;
     private readonly UserManager<AppUser> _userManager = userManager;
@@ -88,7 +96,7 @@ public class ApplicationDbContextInitialiser(
 
         if (_userManager.Users.All(u => u.Email != adminUser.Email))
         {
-            await _userManager.CreateAsync(adminUser, "Admin123!");
+            await _userManager.CreateAsync(adminUser, SeededAdminPassword);
             await _userManager.AddToRoleAsync(adminUser, "Admin");
         }
 
@@ -103,7 +111,7 @@ public class ApplicationDbContextInitialiser(
 
         if (_userManager.Users.All(u => u.Email != doctor01User.Email))
         {
-            await _userManager.CreateAsync(doctor01User, "Doctor123!");
+            await _userManager.CreateAsync(doctor01User, SeededDoctorPassword);
             await _userManager.AddToRoleAsync(doctor01User, "Doctor");
         }
 
@@ -117,7 +125,7 @@ public class ApplicationDbContextInitialiser(
 
         if (_userManager.Users.All(u => u.Email != doctor02User.Email))
         {
-            await _userManager.CreateAsync(doctor02User, "Doctor123!");
+            await _userManager.CreateAsync(doctor02User, SeededDoctorPassword);
             await _userManager.AddToRoleAsync(doctor02User, "Doctor");
         }
 
@@ -132,7 +140,7 @@ public class ApplicationDbContextInitialiser(
 
         if (_userManager.Users.All(u => u.Email != receptionistUser.Email))
         {
-            await _userManager.CreateAsync(receptionistUser, "Reception123!");
+            await _userManager.CreateAsync(receptionistUser, SeededReceptionistPassword);
             await _userManager.AddToRoleAsync(receptionistUser, "Receptionist");
         }
 

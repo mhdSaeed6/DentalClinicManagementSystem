@@ -4,17 +4,17 @@ namespace DentalClinic.Domain.Identity;
 
 public sealed class RefreshToken : AuditableEntity
 {
-    public string? Token { get; }
+    public string? TokenHash { get; }
     public string? UserId { get; }
     public DateTimeOffset ExpiresOnUtc { get; }
 
     private RefreshToken()
     { }
 
-    private RefreshToken(Guid id, string? token, string? userId, DateTimeOffset expiresOnUtc)
+    private RefreshToken(Guid id, string? tokenHash, string? userId, DateTimeOffset expiresOnUtc)
         : base(id)
     {
-        Token = token;
+        TokenHash = tokenHash;
         UserId = userId;
         ExpiresOnUtc = expiresOnUtc;
     }
@@ -41,6 +41,17 @@ public sealed class RefreshToken : AuditableEntity
             return RefreshTokenErrors.ExpiryInvalid;
         }
 
-        return new RefreshToken(id, token, userId, expiresOnUtc);
+        return new RefreshToken(id, HashToken(token), userId, expiresOnUtc);
+    }
+
+    /// <summary>
+    /// Hash of a raw token. Tokens are 256 bits of CSPRNG output, so there is no
+    /// low-entropy secret to brute-force and a fast hash keeps lookup cheap.
+    /// </summary>
+    public static string HashToken(string rawToken)
+    {
+        var bytes = System.Text.Encoding.UTF8.GetBytes(rawToken);
+
+        return Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes));
     }
 }

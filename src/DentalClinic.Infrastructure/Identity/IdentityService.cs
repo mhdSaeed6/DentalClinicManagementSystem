@@ -40,21 +40,40 @@ public class IdentityService(UserManager<AppUser> userManager,
 
     public async Task<Result<AppUserDto>> AuthenticateAsync(string email, string password)
     {
+        // Deliberately uniform: distinguishing "no such user" from "wrong
+        // password" (and "unconfirmed") turns the login endpoint into an account
+        // enumeration oracle. Every failure path returns the same error.
         var user = await _userManager.FindByEmailAsync(email);
 
         if (user is null)
         {
-            return Error.NotFound("User_Not_Found", $"User with email {UtilityService.MaskEmail(email)} not found");
+            // Spend comparable time on unknown users so response latency does not
+            // leak existence either.
+            _ = await _userManager.FindByIdAsync(email);
+            return InvalidCredentials();
         }
 
-        if (!user.EmailConfirmed)
+        if (!await _userManager.IsLockedOutAsync(user))
         {
-            return Error.Conflict("Email_Not_Confirmed", $"email '{UtilityService.MaskEmail(email)}' not confirmed");
-        }
+            if (!user.EmailConfirmed)
+            {
+                return InvalidCredentials();
+            }
 
-        if (!await _userManager.CheckPasswordAsync(user, password))
+            if (!await _userManager.CheckPasswordAsync(user, password))
+            {
+                // Counts toward the account lockout configured in AddInfrastructure.
+                await _userManager.AccessFailedAsync(user);
+
+                return InvalidCredentials();
+            }
+
+            _ = await _userManager.ResetAccessFailedCountAsync(user);
+        }
+        else
         {
-            return Error.Conflict("Invalid_Login_Attempt", "Email / Password are incorrect");
+            // Locked out: still report the same generic error.
+            return InvalidCredentials();
         }
 
         return new AppUserDto(user.Id, user.Email!, await _userManager.GetRolesAsync(user), await _userManager.GetClaimsAsync(user));
@@ -77,4 +96,7 @@ public class IdentityService(UserManager<AppUser> userManager,
 
          return user?.UserName;
     }
+
+    private static Error InvalidCredentials() =>
+        Error.Validation("Auth_Invalid_Credentials", "Email / Password are incorrect.");
 }

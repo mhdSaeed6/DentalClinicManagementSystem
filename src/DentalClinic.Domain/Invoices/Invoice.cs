@@ -15,6 +15,14 @@ public class Invoice : AuditableEntity
     public decimal RemainingAmount => TotalAmount - PaidAmount;
     public PaymentStatus Status { get; private set; }
     public InvoiceLifecycleStatus LifecycleStatus { get; private set; }
+
+    /// <summary>
+    /// SQL Server <c>rowversion</c> token used for optimistic concurrency.
+    /// EF appends it to every UPDATE/DELETE predicate, so a concurrent writer
+    /// that loaded a stale copy cannot silently overwrite this invoice.
+    /// </summary>
+    public byte[] RowVersion { get; private set; } = [];
+
     public IReadOnlyCollection<Payment> Payments => _payments.AsReadOnly();
     public IReadOnlyCollection<InvoiceLine> Lines => _lines.AsReadOnly();
 

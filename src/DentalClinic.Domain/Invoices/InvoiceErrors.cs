@@ -63,4 +63,12 @@ public static class InvoiceErrors
     public static readonly Error AppointmentPatientMismatch = Error.Validation(
         "Invoice.AppointmentPatientMismatch",
         "The selected appointment does not belong to the selected patient.");
+
+    /// <summary>
+    /// Returned when another request modified the invoice first. The caller
+    /// should retry against the refreshed invoice rather than assume success.
+    /// </summary>
+    public static readonly Error ConcurrentModification = Error.Conflict(
+        "Invoice.ConcurrentModification",
+        "The invoice was modified by another request. Reload it and try again.");
 }

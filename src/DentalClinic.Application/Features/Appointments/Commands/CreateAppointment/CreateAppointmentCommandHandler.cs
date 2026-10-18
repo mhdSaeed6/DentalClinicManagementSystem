@@ -1,3 +1,5 @@
+using System.Data;
+
 using DentalClinic.Application.Common.Errors;
 using DentalClinic.Application.Common.Interfaces;
 using DentalClinic.Application.Common.Security;
@@ -26,6 +28,13 @@ public class CreateAppointmentCommandHandler(
     public async Task<Result<AppointmentDto>> Handle(CreateAppointmentCommand request, CancellationToken cancellationToken)
     {
         logger.LogInformation("Creating appointment for patient {PatientId}", request.PatientId);
+
+        // The overlap check in step 4 is read-then-write. Two concurrent requests
+        // for the same slot would both read "no conflict" and both insert, so the
+        // whole check-and-insert runs inside a serializable transaction.
+        await using var transaction = await context.BeginTransactionAsync(
+            IsolationLevel.Serializable,
+            cancellationToken);
 
         // 0. Ownership: a doctor may only book appointments for themselves.
         if (!user.CanAccessAppointment(request.DoctorId))
@@ -111,6 +120,7 @@ public class CreateAppointmentCommandHandler(
 
         context.Appointments.Add(appointment);
         await context.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
 
         // 6. Invalidate Cache Tag
         await cache.RemoveByTagAsync("appointment", cancellationToken);

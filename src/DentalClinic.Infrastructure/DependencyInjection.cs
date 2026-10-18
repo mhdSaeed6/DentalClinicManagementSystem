@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text;
 using DentalClinic.Application.Common.Interfaces;
 using DentalClinic.Infrastructure.Data;
@@ -54,18 +55,34 @@ public static class DependencyInjection
         // 3. Identity Core Setup
         services.AddIdentityCore<AppUser>(options =>
         {
-            options.Password.RequiredLength = 6;
-            options.Password.RequireDigit = false;
-            options.Password.RequireNonAlphanumeric = false;
-            options.Password.RequireUppercase = false;
-            options.Password.RequireLowercase = false;
-            options.Password.RequiredUniqueChars = 1;
+            // Password policy applies to every identity operation, including the
+            // test fixtures. Keep the seeded/tested credentials in sync with
+            // Tests.Common/Security/TestUsers.cs when changing any rule here.
+            options.Password.RequiredLength = 12;
+            options.Password.RequireDigit = true;
+            options.Password.RequireNonAlphanumeric = true;
+            options.Password.RequireUppercase = true;
+            options.Password.RequireLowercase = true;
+            options.Password.RequiredUniqueChars = 4;
+
+            // Brute-force protection: without a lockout the sliding-window
+            // limiter alone cannot stop credential stuffing.
+            options.Lockout.MaxFailedAccessAttempts = 5;
+            options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(15);
+            options.Lockout.AllowedForNewUsers = true;
+
             options.SignIn.RequireConfirmedAccount = false;
         })
         .AddRoles<IdentityRole>()
         .AddEntityFrameworkStores<AppDbContext>();
 
         // 4. JWT Authentication Setup
+        // The signing secret is deliberately absent from appsettings.json. A
+        // committed secret lets anyone with repo access mint an Admin token, so
+        // it must come from user-secrets, an env var, or a secret store.
+        var jwtSettings = configuration.GetSection("JwtSettings");
+        var jwtSecret = ResolveJwtSecret(configuration, jwtSettings);
+
         services.AddAuthentication(options =>
         {
             options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
@@ -73,8 +90,6 @@ public static class DependencyInjection
         })
         .AddJwtBearer(options =>
         {
-            var jwtSettings = configuration.GetSection("JwtSettings");
-
             options.TokenValidationParameters = new TokenValidationParameters
             {
                 ValidateIssuer = true,
@@ -84,8 +99,7 @@ public static class DependencyInjection
                 ValidateIssuerSigningKey = true,
                 ValidIssuer = jwtSettings["Issuer"],
                 ValidAudience = jwtSettings["Audience"],
-                IssuerSigningKey = new SymmetricSecurityKey(
-                    Encoding.UTF8.GetBytes(jwtSettings["Secret"]!)),
+                IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret)),
             };
         });
 
@@ -108,5 +122,41 @@ public static class DependencyInjection
         });
 
         return services;
+    }
+
+    /// <summary>
+    /// Resolves the JWT signing secret. Outside Development the secret must be
+    /// supplied explicitly (env var <c>JwtSettings__Secret</c>, user-secrets, or
+    /// a vault); the process refuses to start without it. In Development an
+    /// ephemeral in-memory secret is generated so a fresh clone runs without
+    /// setup, and so no usable secret ever lives in git.
+    /// </summary>
+    private static string ResolveJwtSecret(IConfiguration configuration, IConfigurationSection jwtSettings)
+    {
+        var configured = jwtSettings["Secret"];
+
+        if (!string.IsNullOrWhiteSpace(configured))
+        {
+            return configured;
+        }
+
+        var isDevelopment = string.Equals(
+            configuration["ASPNETCORE_ENVIRONMENT"],
+            "Development",
+            StringComparison.OrdinalIgnoreCase);
+
+        if (!isDevelopment)
+        {
+            throw new InvalidOperationException(
+                "JwtSettings:Secret is not configured. Set it via the JwtSettings__Secret " +
+                "environment variable, user-secrets, or your secret manager. Refusing to start.");
+        }
+
+        var developmentSecret = Convert.ToBase64String(RandomNumberGenerator.GetBytes(64));
+
+        // Back-fill so TokenProvider reads the identical value.
+        configuration["JwtSettings:Secret"] = developmentSecret;
+
+        return developmentSecret;
     }
 }

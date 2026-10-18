@@ -1,4 +1,5 @@
-﻿using DentalClinic.Tests.Common.Auth;
+﻿using DentalClinic.Domain.Identity;
+using DentalClinic.Tests.Common.Auth;
 using Xunit;
 
 namespace DentalClinic.Domain.UnitTests.Auth;
@@ -20,10 +21,35 @@ public class RefreshTokenTests
         var token = result.Value;
 
         Assert.NotNull(token);
-        Assert.Equal(tokenValue, token.Token);
+
+        // The raw token is never persisted: only its SHA-256 hash is stored.
+        Assert.False(string.IsNullOrWhiteSpace(token.TokenHash));
+        Assert.Equal(RefreshToken.HashToken(tokenValue), token.TokenHash);
+        Assert.DoesNotContain(tokenValue, token.TokenHash!, StringComparison.OrdinalIgnoreCase);
         Assert.False(string.IsNullOrWhiteSpace(token.UserId));
         Assert.Equal(userId, token.UserId);
         Assert.True(token.ExpiresOnUtc > DateTimeOffset.UtcNow);
+    }
+
+    [Fact]
+    public void CreateRefreshToken_ShouldProduceStableHash_ForSameRawToken()
+    {
+        const string tokenValue = "token";
+
+        var first = RefreshTokenFactory.CreateRefreshToken(token: tokenValue).Value;
+        var second = RefreshTokenFactory.CreateRefreshToken(token: tokenValue).Value;
+
+        // Lookup by hash must be deterministic, otherwise refresh can never match.
+        Assert.Equal(first.TokenHash, second.TokenHash);
+    }
+
+    [Fact]
+    public void CreateRefreshToken_ShouldDifferentlyHash_DifferentRawTokens()
+    {
+        var first = RefreshTokenFactory.CreateRefreshToken(token: "token-a").Value;
+        var second = RefreshTokenFactory.CreateRefreshToken(token: "token-b").Value;
+
+        Assert.NotEqual(first.TokenHash, second.TokenHash);
     }
 
     [Fact]
