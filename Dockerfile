@@ -23,9 +23,10 @@ RUN dotnet publish "src/DentalClinic.Api/DentalClinic.Api.csproj" -c Release -o 
 # ----- Final Stage -----
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
 
-# Install timezone data for TimeZoneInfo support
+# Install timezone data for TimeZoneInfo support. The timezone is applied at
+# runtime via the TZ environment variable rather than baked into the image, so
+# the same image can be deployed to a clinic in any region.
 RUN apt-get update && apt-get install -y tzdata && \
-    ln -fs /usr/share/zoneinfo/America/Montreal /etc/localtime && \
     dpkg-reconfigure -f noninteractive tzdata && \
     rm -rf /var/lib/apt/lists/*
 

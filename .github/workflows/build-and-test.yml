@@ -19,11 +19,22 @@ jobs:
       with:
         dotnet-version: '10.0.x'
 
+    # The integration and subcutaneous suites start a real SQL Server through
+    # Testcontainers, so the runner needs a working Docker daemon. Without this
+    # step those suites fail (or silently skip) and CI reports green without
+    # having executed the database-facing tests.
+    - name: Verify Docker is available
+      run: docker info
+
     - name: Restore dependencies
       run: dotnet restore
 
     - name: Build solution
       run: dotnet build --configuration Release --no-restore
 
+    # Includes MigrationTests, which replays the EF migration chain against a
+    # real SQL Server. MigrateAsync (not EnsureCreatedAsync) is what the app runs
+    # at startup, and no CI step used to execute it, letting a broken migration
+    # reach production undetected.
     - name: Run tests
       run: dotnet test --configuration Release --no-build --verbosity normal
