@@ -1,9 +1,7 @@
+using DentalClinic.Api.IntegrationTests.Common;
 using DentalClinic.Infrastructure.Data;
 
-using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
-
-using Testcontainers.MsSql;
 
 using Xunit;
 
@@ -24,39 +22,21 @@ namespace DentalClinic.Api.IntegrationTests;
 /// make a subsequent <c>MigrateAsync()</c> fail on an existing schema. Its
 /// connection string also targets <c>master</c>, which cannot be dropped.
 /// </summary>
-public class MigrationTests : IAsyncLifetime
+public class MigrationTests : IClassFixture<MsSqlMigrationFixture>
 {
-    private readonly MsSqlContainer _dbContainer = new MsSqlBuilder().Build();
-    private DbContextOptions<AppDbContext> _options = default!;
+    private readonly MsSqlMigrationFixture _fixture;
 
-    public async Task InitializeAsync()
+    public MigrationTests(MsSqlMigrationFixture fixture)
     {
-        await _dbContainer.StartAsync();
-
-        // Point at a real (empty) database rather than master so the migration
-        // chain creates the schema from scratch. Testcontainers' connection
-        // string has no Initial Catalog, and the named GetConnectionString
-        // overload is not supported by the MsSql provider.
-        var connectionString = new SqlConnectionStringBuilder(_dbContainer.GetConnectionString())
-        {
-            InitialCatalog = "MigrationsUnderTest",
-        }.ConnectionString;
-
-        var builder = new DbContextOptionsBuilder<AppDbContext>();
-        builder.UseSqlServer(connectionString);
-
-        _options = builder.Options;
+        _fixture = fixture;
     }
 
-    public async Task DisposeAsync()
-    {
-        await _dbContainer.StopAsync();
-    }
+    private AppDbContext CreateContext() => new(_fixture.Options);
 
     [Fact]
     public async Task MigrateAsync_ShouldApplyAllMigrations_ToCleanDatabase()
     {
-        await using var context = new AppDbContext(_options);
+        await using var context = CreateContext();
 
         await context.Database.MigrateAsync();
 
@@ -77,7 +57,7 @@ public class MigrationTests : IAsyncLifetime
     [Fact]
     public async Task MigrateAsync_ShouldBeIdempotent_WhenAppliedTwice()
     {
-        await using var context = new AppDbContext(_options);
+        await using var context = CreateContext();
 
         await context.Database.MigrateAsync();
 
@@ -90,7 +70,7 @@ public class MigrationTests : IAsyncLifetime
     [Fact]
     public async Task MigrateAsync_ShouldCreateTablesWithExpectedColumns()
     {
-        await using var context = new AppDbContext(_options);
+        await using var context = CreateContext();
 
         await context.Database.MigrateAsync();
 
