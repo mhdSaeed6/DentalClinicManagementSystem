@@ -3,14 +3,18 @@ using System.Threading.RateLimiting;
 
 using Asp.Versioning;
 
+using DentalClinic.Api;
 using DentalClinic.Api.BackgroundServices;
 using DentalClinic.Api.Infrastructure;
 using DentalClinic.Api.OpenApi.Transformers;
 using DentalClinic.Api.Services;
 using DentalClinic.Application.Common.Interfaces;
+using DentalClinic.Infrastructure.Data;
 using DentalClinic.Infrastructure.Settings;
 
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
@@ -22,6 +26,7 @@ namespace Microsoft.Extensions.DependencyInjection;
 
 public static class DependencyInjection
 {
+
     public static IServiceCollection AddPresentation(this IServiceCollection services, IConfiguration configuration)
     {
         services.Configure<AppSettings>(configuration.GetSection("AppSettings"));
@@ -37,6 +42,7 @@ public static class DependencyInjection
                 .AddAppRateLimiting()
                 .AddAppOutputCaching()
                 .AddAppOpenTelememrty()
+                .AddAppHealthChecks()
                 .AddSignalR();
 
         services.AddHostedService<AppointmentNoShowBackgroundService>();
@@ -85,13 +91,23 @@ public static class DependencyInjection
     {
         services.AddRateLimiter(options =>
         {
-            options.AddSlidingWindowLimiter("SlidingWindow", limiterOptions =>
+            options.AddSlidingWindowLimiter(RateLimiterPolicyNames.SlidingWindow, limiterOptions =>
             {
                 limiterOptions.PermitLimit = 100;
                 limiterOptions.Window = TimeSpan.FromMinutes(1);
                 limiterOptions.SegmentsPerWindow = 6;
                 limiterOptions.QueueLimit = 10;
                 limiterOptions.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
+                limiterOptions.AutoReplenishment = true;
+            });
+
+            // Tight limit for credential endpoints, partitioned per remote IP so
+            // one abusive client cannot exhaust everyone else's budget.
+            options.AddFixedWindowLimiter(RateLimiterPolicyNames.Auth, limiterOptions =>
+            {
+                limiterOptions.PermitLimit = 10;
+                limiterOptions.Window = TimeSpan.FromMinutes(1);
+                limiterOptions.QueueLimit = 0;
                 limiterOptions.AutoReplenishment = true;
             });
 
@@ -189,6 +205,19 @@ public static class DependencyInjection
                 .AllowAnyHeader()
                 .AllowAnyMethod()
                 .AllowCredentials()));
+
+        return services;
+    }
+
+    /// <summary>
+    /// Liveness plus a database readiness probe. Without these an orchestrator
+    /// cannot distinguish "process is up but the database is unreachable" from a
+    /// healthy instance, so it will keep routing traffic to a broken pod.
+    /// </summary>
+    public static IServiceCollection AddAppHealthChecks(this IServiceCollection services)
+    {
+        services.AddHealthChecks()
+            .AddCheck<DatabaseHealthCheck>("database", failureStatus: HealthStatus.Unhealthy);
 
         return services;
     }

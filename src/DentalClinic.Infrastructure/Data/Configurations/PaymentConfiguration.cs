@@ -12,6 +12,10 @@ public class PaymentConfiguration : IEntityTypeConfiguration<Payment>
 
         builder.HasKey(p => p.Id);
 
+        // Global Query Filter (Soft Delete) — a payment is financial history and
+        // must never reappear in queries once it has been voided.
+        builder.HasQueryFilter(p => !p.IsDeleted);
+
         builder.Property(p => p.Amount)
             .HasPrecision(18, 2)
             .IsRequired();

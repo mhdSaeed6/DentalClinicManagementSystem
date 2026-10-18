@@ -2,6 +2,7 @@
 
 using Asp.Versioning;
 
+using DentalClinic.Api;
 using DentalClinic.Api.Controllers;
 using DentalClinic.Application.Features.Identity;
 using DentalClinic.Application.Features.Identity.Dtos;
@@ -13,6 +14,7 @@ using MediatR;
 
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace DentalClinic.Api.Controllers;
 
@@ -20,6 +22,17 @@ namespace DentalClinic.Api.Controllers;
 [ApiVersionNeutral]
 public sealed class IdentityController(ISender sender) : ApiController
 {
+    /// <summary>
+    /// Alias for the shared policy name; both this project and
+    /// DentalClinic.Application declare a <c>DependencyInjection</c> type, so
+    /// qualifying it in a controller would be ambiguous.
+    /// </summary>
+    private const string AuthRateLimiterPolicy = RateLimiterPolicyNames.Auth;
+
+    // Token endpoints are the only unauthenticated surface, so they are the ones
+    // that need throttling. Without this the sliding-window policy is registered
+    // but never applied to any endpoint and brute-force login is unthrottled.
+    [EnableRateLimiting(AuthRateLimiterPolicy)]
     [HttpPost("token/generate")]
     [ProducesResponseType(typeof(TokenResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
@@ -35,6 +48,7 @@ public sealed class IdentityController(ISender sender) : ApiController
             Problem);
     }
 
+    [EnableRateLimiting(AuthRateLimiterPolicy)]
     [HttpPost("token/refresh-token")]
     [ProducesResponseType(typeof(TokenResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
