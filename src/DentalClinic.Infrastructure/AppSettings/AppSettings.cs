@@ -15,4 +15,11 @@ public class AppSettings
     public int OverdueBookingCleanupFrequencyMinutes { get; set; }
     public string CorsPolicyName { get; set; } = default!;
     public string[] AllowedOrigins { get; set; } = default!;
+
+    /// <summary>
+    /// Credential-endpoint throttling. Integration tests generate a token per
+    /// request, so this must be configurable rather than a hard-coded constant
+    /// or the suite trips its own limiter.
+    /// </summary>
+    public RateLimitSettings RateLimiting { get; set; } = new();
 }

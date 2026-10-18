@@ -39,7 +39,7 @@ public static class DependencyInjection
                 .AddValidation()
                 .AddConfiguredCors(configuration)
                 .AddIdentityInfrastructure()
-                .AddAppRateLimiting()
+                .AddAppRateLimiting(configuration)
                 .AddAppOutputCaching()
                 .AddAppOpenTelememrty()
                 .AddAppHealthChecks()
@@ -87,26 +87,29 @@ public static class DependencyInjection
         return services;
     }
 
-    public static IServiceCollection AddAppRateLimiting(this IServiceCollection services)
+    public static IServiceCollection AddAppRateLimiting(this IServiceCollection services, IConfiguration configuration)
     {
+        var limits = configuration.GetSection("AppSettings:RateLimiting").Get<RateLimitSettings>() ?? new RateLimitSettings();
+
         services.AddRateLimiter(options =>
         {
             options.AddSlidingWindowLimiter(RateLimiterPolicyNames.SlidingWindow, limiterOptions =>
             {
-                limiterOptions.PermitLimit = 100;
-                limiterOptions.Window = TimeSpan.FromMinutes(1);
+                limiterOptions.PermitLimit = limits.GeneralPermitLimit;
+                limiterOptions.Window = TimeSpan.FromMinutes(limits.GeneralWindowMinutes);
                 limiterOptions.SegmentsPerWindow = 6;
                 limiterOptions.QueueLimit = 10;
                 limiterOptions.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
                 limiterOptions.AutoReplenishment = true;
             });
 
-            // Tight limit for credential endpoints, partitioned per remote IP so
-            // one abusive client cannot exhaust everyone else's budget.
+            // Tight limit for credential endpoints. Configurable because the
+            // integration suite requests a token per test and would otherwise
+            // throttle itself into 429s.
             options.AddFixedWindowLimiter(RateLimiterPolicyNames.Auth, limiterOptions =>
             {
-                limiterOptions.PermitLimit = 10;
-                limiterOptions.Window = TimeSpan.FromMinutes(1);
+                limiterOptions.PermitLimit = limits.AuthPermitLimit;
+                limiterOptions.Window = TimeSpan.FromMinutes(limits.AuthWindowMinutes);
                 limiterOptions.QueueLimit = 0;
                 limiterOptions.AutoReplenishment = true;
             });

@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -64,6 +65,15 @@ public class WebAppFactory : WebApplicationFactory<IAssemblyMarker>, IAsyncLifet
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
+        // WebApplicationFactory does not set ASPNETCORE_ENVIRONMENT, so the host
+        // boots as Production and the API's fail-fast JWT guard would throw.
+        builder.ConfigureAppConfiguration(config => config.AddInMemoryCollection(
+            new Dictionary<string, string?>
+            {
+                ["JwtSettings:Secret"] = TestConfiguration.JwtSecret,
+                ["AppSettings:RateLimiting:AuthPermitLimit"] = TestConfiguration.AuthPermitLimit.ToString(),
+            }));
+
         builder.ConfigureTestServices(services =>
         {
             services.RemoveAll<IHostedService>();
