@@ -5,9 +5,12 @@ namespace DentalClinic.Tests.Common.Security;
 
 public static class TestUsers
 {
-    public const string AdminPassword = "Admin123!";
-    public const string DoctorPassword = "Doctor123!";
-    public const string ReceptionistPassword = "Receptionist123!";
+    // These satisfy the Identity password policy configured in
+    // Infrastructure/DependencyInjection.cs (12+ chars, upper, lower, digit,
+    // non-alphanumeric, 4+ unique chars).
+    public const string AdminPassword = "Admin!Pass123";
+    public const string DoctorPassword = "Doctor!Pass123";
+    public const string ReceptionistPassword = "Receptionist!Pass123";
 
     private static readonly PasswordHasher<AppUser> _hasher = new();
 
