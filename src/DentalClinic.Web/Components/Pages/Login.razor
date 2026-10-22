@@ -107,17 +107,17 @@
 
             <div class="demo-creds">
                 <div class="demo-title">@Session.T("Demo accounts — tap to fill", "حسابات تجريبية — اضغط للتعبئة")</div>
-                <button type="button" class="demo-cred" @onclick='() => UseDemo("admin@dentalclinic.com", "Admin123!")'>
+                <button type="button" class="demo-cred" @onclick='() => UseDemo("admin@dentalclinic.com", "Admin!Pass123")'>
                     <ClinicIcon Name="shield" Class="sm" />
                     <span>@Session.T("Administrator", "مدير")</span>
                     <code>admin@dentalclinic.com</code>
                 </button>
-                <button type="button" class="demo-cred" @onclick='() => UseDemo("dr.smith@dentalclinic.com", "Doctor123!")'>
+                <button type="button" class="demo-cred" @onclick='() => UseDemo("dr.smith@dentalclinic.com", "Doctor!Pass123")'>
                     <ClinicIcon Name="doctor" Class="sm" />
                     <span>@Session.T("Doctor", "طبيب")</span>
                     <code>dr.smith@dentalclinic.com</code>
                 </button>
-                <button type="button" class="demo-cred" @onclick='() => UseDemo("reception@dentalclinic.com", "Reception123!")'>
+                <button type="button" class="demo-cred" @onclick='() => UseDemo("reception@dentalclinic.com", "Receptionist!Pass123")'>
                     <ClinicIcon Name="calendar" Class="sm" />
                     <span>@Session.T("Receptionist", "موظف الاستقبال")</span>
                     <code>reception@dentalclinic.com</code>

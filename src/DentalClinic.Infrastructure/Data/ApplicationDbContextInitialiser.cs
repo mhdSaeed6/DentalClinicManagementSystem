@@ -86,63 +86,51 @@ public class ApplicationDbContextInitialiser(
         }
 
         // 2. Default Admin Account
-        var adminUser = new AppUser
-        {
-            Id = "19a59129-6c20-417a-834d-11a208d32d96",
-            Email = "admin@dentalclinic.com",
-            UserName = "admin@dentalclinic.com",
-            EmailConfirmed = true
-        };
-
-        if (_userManager.Users.All(u => u.Email != adminUser.Email))
-        {
-            await _userManager.CreateAsync(adminUser, SeededAdminPassword);
-            await _userManager.AddToRoleAsync(adminUser, "Admin");
-        }
+        var adminUser = await EnsureDemoAccountAsync(
+            new AppUser
+            {
+                Id = "19a59129-6c20-417a-834d-11a208d32d96",
+                Email = "admin@dentalclinic.com",
+                UserName = "admin@dentalclinic.com",
+                EmailConfirmed = true
+            },
+            SeededAdminPassword,
+            "Admin");
 
         // 3. Doctors Accounts & Profiles
-        var doctor01User = new AppUser
-        {
-            Id = "b6327240-0aea-46fc-863a-777fc4e42560",
-            Email = "dr.smith@dentalclinic.com",
-            UserName = "dr.smith@dentalclinic.com",
-            EmailConfirmed = true
-        };
+        var doctor01User = await EnsureDemoAccountAsync(
+            new AppUser
+            {
+                Id = "b6327240-0aea-46fc-863a-777fc4e42560",
+                Email = "dr.smith@dentalclinic.com",
+                UserName = "dr.smith@dentalclinic.com",
+                EmailConfirmed = true
+            },
+            SeededDoctorPassword,
+            "Doctor");
 
-        if (_userManager.Users.All(u => u.Email != doctor01User.Email))
-        {
-            await _userManager.CreateAsync(doctor01User, SeededDoctorPassword);
-            await _userManager.AddToRoleAsync(doctor01User, "Doctor");
-        }
-
-        var doctor02User = new AppUser
-        {
-            Id = "8104ab20-26c2-4651-b1de-c0baf04dbbd9",
-            Email = "dr.sara@dentalclinic.com",
-            UserName = "dr.sara@dentalclinic.com",
-            EmailConfirmed = true
-        };
-
-        if (_userManager.Users.All(u => u.Email != doctor02User.Email))
-        {
-            await _userManager.CreateAsync(doctor02User, SeededDoctorPassword);
-            await _userManager.AddToRoleAsync(doctor02User, "Doctor");
-        }
+        var doctor02User = await EnsureDemoAccountAsync(
+            new AppUser
+            {
+                Id = "8104ab20-26c2-4651-b1de-c0baf04dbbd9",
+                Email = "dr.sara@dentalclinic.com",
+                UserName = "dr.sara@dentalclinic.com",
+                EmailConfirmed = true
+            },
+            SeededDoctorPassword,
+            "Doctor");
 
         // 3b. Receptionist Account
-        var receptionistUser = new AppUser
-        {
-            Id = "2f9c4a51-7b3e-4d0a-9c1e-5a6b7c8d9e0f",
-            Email = "reception@dentalclinic.com",
-            UserName = "reception@dentalclinic.com",
-            EmailConfirmed = true
-        };
-
-        if (_userManager.Users.All(u => u.Email != receptionistUser.Email))
-        {
-            await _userManager.CreateAsync(receptionistUser, SeededReceptionistPassword);
-            await _userManager.AddToRoleAsync(receptionistUser, "Receptionist");
-        }
+        var receptionistUser = await EnsureDemoAccountAsync(
+            new AppUser
+            {
+                Id = "2f9c4a51-7b3e-4d0a-9c1e-5a6b7c8d9e0f",
+                Email = "reception@dentalclinic.com",
+                UserName = "reception@dentalclinic.com",
+                EmailConfirmed = true
+            },
+            SeededReceptionistPassword,
+            "Receptionist");
 
         // 4. Seed Doctors
         if (!await _context.Doctors.AnyAsync())
@@ -249,6 +237,100 @@ public class ApplicationDbContextInitialiser(
                 await _context.SaveChangesAsync();
             }
         }
+    }
+
+    /// <summary>
+    /// Creates a demo account when it is missing and otherwise repairs it.
+    /// <para>
+    /// The demo accounts exist so the quick-login buttons on the login page
+    /// work on a fresh clone. A database that was seeded before the password
+    /// policy changed still carries the old password, and a "create only when
+    /// missing" rule would never repair it - the documented quick-login path
+    /// would stay broken forever. The known demo password is therefore
+    /// reconciled on every start, and a lockout is lifted, because the login
+    /// errors are deliberately uniform and a locked-out demo account cannot be
+    /// distinguished from a wrong password.
+    /// </para>
+    /// <para>
+    /// This only ever runs for the Development demo data (the whole seeder is
+    /// gated on the environment in Program.cs), never in production.
+    /// </para>
+    /// </summary>
+    /// <returns>The persisted account, so the caller can link profiles to its real identifier.</returns>
+    private async Task<AppUser> EnsureDemoAccountAsync(AppUser demoUser, string password, string role)
+    {
+        var user = await _userManager.FindByEmailAsync(demoUser.Email!);
+
+        if (user is null)
+        {
+            user = demoUser;
+
+            var created = await _userManager.CreateAsync(user, password);
+            if (!created.Succeeded)
+            {
+                _logger.LogWarning(
+                    "Could not create the demo account {Email}. Errors: {Errors}",
+                    demoUser.Email,
+                    created.Errors.Select(e => e.Description));
+
+                return user;
+            }
+        }
+        else
+        {
+            try
+            {
+                if (!await _userManager.CheckPasswordAsync(user, password))
+                {
+                    // The account exists with a different password (a database
+                    // seeded before the password policy changed keeps the old
+                    // one). The hash is replaced directly: the demo password is
+                    // known, and AddIdentityCore registers no reset-token
+                    // provider, so the reset-token route is not available.
+                    var removed = await _userManager.RemovePasswordAsync(user);
+                    if (!removed.Succeeded)
+                    {
+                        _logger.LogWarning(
+                            "Could not clear the demo password for {Email}. Errors: {Errors}",
+                            demoUser.Email,
+                            removed.Errors.Select(e => e.Description));
+                    }
+                    else
+                    {
+                        var added = await _userManager.AddPasswordAsync(user, password);
+                        if (!added.Succeeded)
+                        {
+                            _logger.LogWarning(
+                                "Could not set the demo password for {Email}. Errors: {Errors}",
+                                demoUser.Email,
+                                added.Errors.Select(e => e.Description));
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                // A demo account that cannot be repaired must never stop the
+                // application from starting.
+                _logger.LogWarning(ex, "Could not reconcile the demo password for {Email}.", user.Email);
+            }
+
+            if (user.LockoutEnd is not null || user.AccessFailedCount > 0 || !user.EmailConfirmed)
+            {
+                user.LockoutEnd = null;
+                user.AccessFailedCount = 0;
+                user.EmailConfirmed = true;
+
+                await _userManager.UpdateAsync(user);
+            }
+        }
+
+        if (!await _userManager.IsInRoleAsync(user, role))
+        {
+            await _userManager.AddToRoleAsync(user, role);
+        }
+
+        return user;
     }
 }
 
