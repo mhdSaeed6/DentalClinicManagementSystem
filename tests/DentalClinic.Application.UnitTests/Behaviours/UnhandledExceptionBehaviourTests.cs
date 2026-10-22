@@ -56,5 +56,31 @@ public class UnhandledExceptionBehaviourTests
             Arg.Any<Func<object, Exception?, string>>());
     }
 
-    public class DummyRequest;
+    [Fact]
+    public async Task Handle_WhenExceptionThrown_NeverLogsTheSecret()
+    {
+        // Arrange
+        var request = new DummyRequest { Password = "Admin!Pass123" };
+        var exception = new InvalidOperationException("test failure");
+
+        var next = Substitute.For<RequestHandlerDelegate<string>>();
+        next.Invoke().Returns<Task<string>>(_ => throw exception);
+
+        // Act & Assert
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            _sut.Handle(request, next, CancellationToken.None));
+
+        // The password must not appear anywhere in the log entry.
+        _logger.Received(1).Log(
+            LogLevel.Error,
+            Arg.Any<EventId>(),
+            Arg.Is<object>(o => !o.ToString()!.Contains("Admin!Pass123")),
+            exception,
+            Arg.Any<Func<object, Exception?, string>>());
+    }
+
+    public class DummyRequest
+    {
+        public string Password { get; init; } = string.Empty;
+    }
 }

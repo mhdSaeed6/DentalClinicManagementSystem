@@ -1,5 +1,6 @@
 ﻿using DentalClinic.Application.Common.Behaviours;
 using DentalClinic.Application.Common.Interfaces;
+using DentalClinic.Application.Common.Logging;
 
 using Microsoft.Extensions.Logging;
 
@@ -172,6 +173,36 @@ public class PerformanceBehaviourTests
     }
 
     [Fact]
+    public async Task Handle_WhenRequestIsSlow_NeverLogsTheSecret()
+    {
+        // Arrange - a slow login must not leak the password into the log sink.
+        const string password = "Admin!Pass123";
+        var request = new TestRequest { Name = "Test", Password = password };
+        var expectedResponse = new TestResponse { Result = "Success" };
+        var cancellationToken = CancellationToken.None;
+
+        _user.Id.Returns("user123");
+        _identityService.GetUserNameAsync("user123").Returns("TestUser");
+
+        // Act
+        await _behaviour.Handle(request, async (_) =>
+        {
+            await Task.Delay(600, cancellationToken);
+            return expectedResponse;
+        }, cancellationToken);
+
+        // Assert
+        _logger.Received(1).Log(
+            LogLevel.Warning,
+            Arg.Any<EventId>(),
+            Arg.Is<object>(o =>
+                !o.ToString()!.Contains(password) &&
+                o.ToString()!.Contains(SensitiveDataRedactor.RedactedValue)),
+            null,
+            Arg.Any<Func<object, Exception?, string>>());
+    }
+
+    [Fact]
     public async Task Handle_ShouldAlwaysReturnResponseFromNext()
     {
         // Arrange
@@ -204,6 +235,8 @@ public class PerformanceBehaviourTests
     public class TestRequest
     {
         public string Name { get; set; } = string.Empty;
+
+        public string Password { get; set; } = string.Empty;
     }
 
     public class TestResponse

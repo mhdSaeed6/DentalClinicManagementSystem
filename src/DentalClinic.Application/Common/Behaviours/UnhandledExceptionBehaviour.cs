@@ -1,3 +1,5 @@
+using DentalClinic.Application.Common.Logging;
+
 using MediatR;
 
 using Microsoft.Extensions.Logging;
@@ -20,7 +22,13 @@ public class UnhandledExceptionBehaviour<TRequest, TResponse>(ILogger<TRequest> 
         {
             var requestName = typeof(TRequest).Name;
 
-            _logger.LogError(ex, "Request: Unhandled Exception for Request {Name} {@Request}", requestName, request);
+            // The request is logged in a redacted form: a password, a refresh
+            // token or any other credential must never reach the log sink.
+            _logger.LogError(
+                ex,
+                "Request: Unhandled Exception for Request {Name} {Request}",
+                requestName,
+                SensitiveDataRedactor.Describe(request));
 
             throw;
         }
