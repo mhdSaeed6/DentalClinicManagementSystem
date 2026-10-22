@@ -1,0 +1,30 @@
+# Version control, editors, CI
+.git
+.gitignore
+.github
+.vs
+.vscode
+.idea
+
+# Build output and test artefacts
+**/bin/
+**/obj/
+**/TestResults/
+**/*.user
+**/*.suo
+**/*.trx
+
+# Not needed to publish the API or Web app
+tests/
+docs/
+containers/
+*.md
+
+# Local secrets and databases
+.env
+.env.*
+!.env.example
+**/appsettings.*.local.json
+**/*.db
+**/*.db-shm
+**/*.db-wal
