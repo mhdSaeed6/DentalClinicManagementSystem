@@ -1,3 +1,5 @@
+using System.Data;
+
 using DentalClinic.Application.Common.Errors;
 using DentalClinic.Application.Common.Interfaces;
 using DentalClinic.Application.Common.Security;
@@ -24,6 +26,14 @@ public class RescheduleAppointmentCommandHandler(
 {
     public async Task<Result<AppointmentDto>> Handle(RescheduleAppointmentCommand request, CancellationToken cancellationToken)
     {
+        // The overlap check below is read-then-write. Two concurrent requests
+        // for the same slot would both read "no conflict" and both write, so the
+        // whole check-and-update runs inside a serializable transaction — the
+        // same pattern the create path uses.
+        await using var transaction = await context.BeginTransactionAsync(
+            IsolationLevel.Serializable,
+            cancellationToken);
+
         var appointment = await context.Appointments.FindAsync([request.AppointmentId], cancellationToken);
         if (appointment is null)
         {
@@ -65,6 +75,7 @@ public class RescheduleAppointmentCommandHandler(
         }
 
         await context.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
 
         await cache.RemoveAsync($"appointment-{request.AppointmentId}", cancellationToken);
         await cache.RemoveByTagAsync("appointment", cancellationToken);
