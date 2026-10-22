@@ -9,10 +9,12 @@ using DentalClinic.Application.Features.Patients.Dtos;
 using DentalClinic.Application.SubcutaneousTests.Common;
 using DentalClinic.Contracts.Requests.Appointments;
 using DentalClinic.Contracts.Requests.Doctors;
+using DentalClinic.Contracts.Requests.Invoices;
 using DentalClinic.Contracts.Requests.TreatmentRecords;
 using DentalClinic.Domain.Appointments;
 using DentalClinic.Domain.Doctors;
 using DentalClinic.Domain.Invoices;
+using DentalClinic.Domain.Invoices.Enums;
 using DentalClinic.Domain.Patients;
 using DentalClinic.Infrastructure.Identity;
 using DentalClinic.Tests.Common.Builders;
@@ -34,6 +36,12 @@ namespace DentalClinic.Api.IntegrationTests.Controllers;
 [Collection(WebAppFactoryCollection.CollectionName)]
 public class AuthorizationIntegrationTests(WebAppFactory webAppFactory)
 {
+    /// <summary>
+    /// Password of the throwaway, role-less account. It only has to satisfy
+    /// the Identity password policy - the account is never a doctor.
+    /// </summary>
+    private const string NonStaffPassword = "NonStaff!Pass123";
+
     private readonly AppHttpClient _client = webAppFactory.CreateAppHttpClient();
 
     // ---------------------------------------------------------------------
@@ -418,6 +426,280 @@ public class AuthorizationIntegrationTests(WebAppFactory webAppFactory)
     }
 
     // ---------------------------------------------------------------------
+    // Invoices – mutation ownership (a write may never reach further than a read)
+    // ---------------------------------------------------------------------
+
+    [Fact]
+    public async Task IssueInvoice_AsDoctor_ForAnotherDoctorsInvoice_ReturnsForbidden()
+    {
+        await webAppFactory.ResetDatabaseAsync();
+
+        var (doctorAEmail, _) = await CreateDoctorUserAsync("authz.inv.mut.doc.a@dentalclinic.com");
+        var (_, doctorB) = await CreateDoctorUserAsync("authz.inv.mut.doc.b@dentalclinic.com");
+
+        var (_, _, invoice) = await SeedInvoiceForDoctorAsync(doctorB.Id, InvoiceLifecycleStatus.Draft);
+
+        _client.SetAuthorizationHeader(await _client.GenerateTokenAsync(doctorAEmail, TestUsers.DoctorPassword));
+
+        var response = await _client.SendAsync(new HttpRequestMessage(
+            HttpMethod.Post,
+            $"/api/v1.0/invoices/{invoice.Id}/issue"));
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task UpdateInvoiceDraft_AsDoctor_ForAnotherDoctorsInvoice_ReturnsForbidden()
+    {
+        await webAppFactory.ResetDatabaseAsync();
+
+        var (doctorAEmail, _) = await CreateDoctorUserAsync("authz.inv.mut.doc.c@dentalclinic.com");
+        var (_, doctorB) = await CreateDoctorUserAsync("authz.inv.mut.doc.d@dentalclinic.com");
+
+        var (_, _, invoice) = await SeedInvoiceForDoctorAsync(doctorB.Id, InvoiceLifecycleStatus.Draft);
+
+        _client.SetAuthorizationHeader(await _client.GenerateTokenAsync(doctorAEmail, TestUsers.DoctorPassword));
+
+        var request = new UpdateInvoiceDraftRequest
+        {
+            Lines = [new UpdateInvoiceLineRequest { Description = "Stolen edit", Amount = 999m }],
+        };
+
+        var response = await _client.PutAsJsonAsync($"/api/v1.0/invoices/{invoice.Id}/draft", request);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task RefreshInvoiceDraft_AsDoctor_ForAnotherDoctorsInvoice_ReturnsForbidden()
+    {
+        await webAppFactory.ResetDatabaseAsync();
+
+        var (doctorAEmail, _) = await CreateDoctorUserAsync("authz.inv.mut.doc.e@dentalclinic.com");
+        var (_, doctorB) = await CreateDoctorUserAsync("authz.inv.mut.doc.f@dentalclinic.com");
+
+        var (_, _, invoice) = await SeedInvoiceForDoctorAsync(doctorB.Id, InvoiceLifecycleStatus.Draft);
+
+        _client.SetAuthorizationHeader(await _client.GenerateTokenAsync(doctorAEmail, TestUsers.DoctorPassword));
+
+        var response = await _client.PostAsJsonAsync(
+            $"/api/v1.0/invoices/{invoice.Id}/draft/refresh",
+            new RefreshInvoiceDraftRequest { ConfirmDiscardManualAdjustments = true });
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task AddInvoicePayment_AsDoctor_ForAnotherDoctorsInvoice_ReturnsForbidden()
+    {
+        await webAppFactory.ResetDatabaseAsync();
+
+        var (doctorAEmail, _) = await CreateDoctorUserAsync("authz.inv.mut.doc.g@dentalclinic.com");
+        var (_, doctorB) = await CreateDoctorUserAsync("authz.inv.mut.doc.h@dentalclinic.com");
+
+        var (_, _, invoice) = await SeedInvoiceForDoctorAsync(doctorB.Id, InvoiceLifecycleStatus.Issued);
+
+        _client.SetAuthorizationHeader(await _client.GenerateTokenAsync(doctorAEmail, TestUsers.DoctorPassword));
+
+        var request = new AddInvoicePaymentRequest { Amount = 10m, Notes = "Payment for a foreign invoice." };
+
+        var response = await _client.PostAsJsonAsync($"/api/v1.0/invoices/{invoice.Id}/payments", request);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task AddInvoicePayment_AsDoctor_ForStandaloneInvoice_ReturnsForbidden()
+    {
+        await webAppFactory.ResetDatabaseAsync();
+
+        var (doctorEmail, _) = await CreateDoctorUserAsync("authz.inv.mut.doc.i@dentalclinic.com");
+        var patient = await SeedPatientAsync();
+
+        // A standalone invoice has no owning doctor, so it stays outside a
+        // doctor's reach - the same rule the read path applies.
+        var invoice = InvoiceTestDataBuilder.Create()
+            .ForPatient(patient.Id)
+            .WithAmount(120m)
+            .Build();
+
+        await webAppFactory.ExecuteDbContextAsync(async context =>
+        {
+            // The patient is already persisted by SeedPatientAsync.
+            context.Invoices.Add(invoice);
+            await context.SaveChangesAsync(default);
+        });
+
+        _client.SetAuthorizationHeader(await _client.GenerateTokenAsync(doctorEmail, TestUsers.DoctorPassword));
+
+        var request = new AddInvoicePaymentRequest { Amount = 10m, Notes = "Payment for a standalone invoice." };
+
+        var response = await _client.PostAsJsonAsync($"/api/v1.0/invoices/{invoice.Id}/payments", request);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task AddInvoicePayment_AsDoctor_ForOwnInvoice_ReturnsOk()
+    {
+        await webAppFactory.ResetDatabaseAsync();
+
+        var (doctorEmail, doctor) = await CreateDoctorUserAsync("authz.inv.mut.doc.j@dentalclinic.com");
+
+        var (_, _, invoice) = await SeedInvoiceForDoctorAsync(doctor.Id, InvoiceLifecycleStatus.Issued);
+
+        _client.SetAuthorizationHeader(await _client.GenerateTokenAsync(doctorEmail, TestUsers.DoctorPassword));
+
+        var request = new AddInvoicePaymentRequest { Amount = 50m, Notes = "Cash payment." };
+
+        var response = await _client.PostAsJsonAsync($"/api/v1.0/invoices/{invoice.Id}/payments", request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var updated = await response.Content.ReadFromJsonAsync<InvoiceDto>();
+        Assert.Equal(50m, updated!.PaidAmount);
+    }
+
+    [Fact]
+    public async Task IssueInvoice_AsDoctor_ForOwnInvoice_ReturnsOk()
+    {
+        await webAppFactory.ResetDatabaseAsync();
+
+        var (doctorEmail, doctor) = await CreateDoctorUserAsync("authz.inv.mut.doc.k@dentalclinic.com");
+
+        var (_, _, invoice) = await SeedInvoiceForDoctorAsync(doctor.Id, InvoiceLifecycleStatus.Draft);
+
+        _client.SetAuthorizationHeader(await _client.GenerateTokenAsync(doctorEmail, TestUsers.DoctorPassword));
+
+        var response = await _client.SendAsync(new HttpRequestMessage(
+            HttpMethod.Post,
+            $"/api/v1.0/invoices/{invoice.Id}/issue"));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var issued = await response.Content.ReadFromJsonAsync<InvoiceDto>();
+        Assert.Equal(InvoiceLifecycleStatus.Issued, issued!.LifecycleStatus);
+    }
+
+    [Fact]
+    public async Task CreateInvoice_AsDoctor_ForAnotherDoctorsAppointment_ReturnsForbidden()
+    {
+        await webAppFactory.ResetDatabaseAsync();
+
+        var (doctorAEmail, _) = await CreateDoctorUserAsync("authz.inv.mut.doc.l@dentalclinic.com");
+        var (_, doctorB) = await CreateDoctorUserAsync("authz.inv.mut.doc.m@dentalclinic.com");
+
+        var patient = await SeedPatientAsync();
+        var appointment = await SeedAppointmentForPatientAsync(doctorB.Id, patient.Id);
+
+        _client.SetAuthorizationHeader(await _client.GenerateTokenAsync(doctorAEmail, TestUsers.DoctorPassword));
+
+        var request = new CreateInvoiceRequest
+        {
+            PatientId = patient.Id,
+            TotalAmount = 100m,
+            AppointmentId = appointment.Id,
+        };
+
+        var response = await _client.PostAsJsonAsync("/api/v1.0/invoices", request);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task CreateInvoice_AsDoctor_WithoutAppointment_ReturnsForbidden()
+    {
+        await webAppFactory.ResetDatabaseAsync();
+
+        var (doctorEmail, _) = await CreateDoctorUserAsync("authz.inv.mut.doc.n@dentalclinic.com");
+        var patient = await SeedPatientAsync();
+
+        _client.SetAuthorizationHeader(await _client.GenerateTokenAsync(doctorEmail, TestUsers.DoctorPassword));
+
+        var request = new CreateInvoiceRequest
+        {
+            PatientId = patient.Id,
+            TotalAmount = 100m,
+            AppointmentId = null,
+        };
+
+        var response = await _client.PostAsJsonAsync("/api/v1.0/invoices", request);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetAppointmentInvoiceBreakdown_AsDoctor_ForAnotherDoctorsAppointment_ReturnsForbidden()
+    {
+        await webAppFactory.ResetDatabaseAsync();
+
+        var (doctorAEmail, _) = await CreateDoctorUserAsync("authz.inv.mut.doc.o@dentalclinic.com");
+        var (_, doctorB) = await CreateDoctorUserAsync("authz.inv.mut.doc.p@dentalclinic.com");
+
+        var patient = await SeedPatientAsync();
+        var appointment = await SeedAppointmentForPatientAsync(doctorB.Id, patient.Id);
+
+        _client.SetAuthorizationHeader(await _client.GenerateTokenAsync(doctorAEmail, TestUsers.DoctorPassword));
+
+        var response = await _client.GetAsync($"/api/v1.0/invoices/breakdown/{appointment.Id}");
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task IssueInvoice_AsReceptionist_ReturnsOk()
+    {
+        await webAppFactory.ResetDatabaseAsync();
+
+        var (_, doctor) = await CreateDoctorUserAsync("authz.inv.mut.doc.q@dentalclinic.com");
+        var receptionistEmail = await EnsureReceptionistAsync();
+
+        var (_, _, invoice) = await SeedInvoiceForDoctorAsync(doctor.Id, InvoiceLifecycleStatus.Draft);
+
+        _client.SetAuthorizationHeader(await _client.GenerateTokenAsync(receptionistEmail, TestUsers.ReceptionistPassword));
+
+        var response = await _client.SendAsync(new HttpRequestMessage(
+            HttpMethod.Post,
+            $"/api/v1.0/invoices/{invoice.Id}/issue"));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task AddInvoicePayment_AsReceptionist_ReturnsOk()
+    {
+        await webAppFactory.ResetDatabaseAsync();
+
+        var (_, doctor) = await CreateDoctorUserAsync("authz.inv.mut.doc.r@dentalclinic.com");
+        var receptionistEmail = await EnsureReceptionistAsync();
+
+        var (_, _, invoice) = await SeedInvoiceForDoctorAsync(doctor.Id, InvoiceLifecycleStatus.Issued);
+
+        _client.SetAuthorizationHeader(await _client.GenerateTokenAsync(receptionistEmail, TestUsers.ReceptionistPassword));
+
+        var request = new AddInvoicePaymentRequest { Amount = 25m, Notes = "Reception payment." };
+
+        var response = await _client.PostAsJsonAsync($"/api/v1.0/invoices/{invoice.Id}/payments", request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetInvoices_AsAuthenticatedNonStaffUser_ReturnsForbidden()
+    {
+        // The invoice endpoints are staff-only: an authenticated identity that
+        // holds no clinic role must never reach the billing data.
+        await webAppFactory.ResetDatabaseAsync();
+
+        var email = await EnsureNonStaffUserAsync();
+        _client.SetAuthorizationHeader(await _client.GenerateTokenAsync(email, NonStaffPassword));
+
+        var response = await _client.GetAsync("/api/v1.0/invoices?pageNumber=1&pageSize=10");
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    // ---------------------------------------------------------------------
     // Administrative operations
     // ---------------------------------------------------------------------
 
@@ -561,5 +843,83 @@ public class AuthorizationIntegrationTests(WebAppFactory webAppFactory)
         });
 
         return appointment;
+    }
+
+    /// <summary>
+    /// Seeds a patient, an appointment for <paramref name="doctorId"/> and an
+    /// invoice linked to that appointment. The invoice carries one line so a
+    /// draft can actually be issued.
+    /// </summary>
+    private async Task<(Patient Patient, Appointment Appointment, Invoice Invoice)> SeedInvoiceForDoctorAsync(
+        Guid doctorId,
+        InvoiceLifecycleStatus lifecycleStatus,
+        decimal amount = 120m)
+    {
+        var patient = PatientTestDataBuilder.Create().Build();
+        var service = DentalServiceTestDataBuilder.Create().Build();
+        var appointment = AppointmentTestDataBuilder.Create()
+            .WithPatient(patient.Id)
+            .WithDoctor(doctorId)
+            .WithService(service.Id)
+            .Build();
+
+        var invoice = Invoice.Create(patient.Id, amount, appointment.Id, lifecycleStatus).Value;
+        invoice.AddLineImmediate("Consultation", amount);
+
+        await webAppFactory.ExecuteDbContextAsync(async context =>
+        {
+            context.Patients.Add(patient);
+            context.DentalServices.Add(service);
+            context.Appointments.Add(appointment);
+            context.Invoices.Add(invoice);
+            await context.SaveChangesAsync(default);
+        });
+
+        return (patient, appointment, invoice);
+    }
+
+    private async Task<Appointment> SeedAppointmentForPatientAsync(Guid doctorId, Guid patientId)
+    {
+        var service = DentalServiceTestDataBuilder.Create().Build();
+        var appointment = AppointmentTestDataBuilder.Create()
+            .WithPatient(patientId)
+            .WithDoctor(doctorId)
+            .WithService(service.Id)
+            .Build();
+
+        await webAppFactory.ExecuteDbContextAsync(async context =>
+        {
+            context.DentalServices.Add(service);
+            context.Appointments.Add(appointment);
+            await context.SaveChangesAsync(default);
+        });
+
+        return appointment;
+    }
+
+    /// <summary>
+    /// An authenticated identity that holds no clinic role at all. It proves
+    /// the staff-only policy is really enforced and not merely "any token".
+    /// </summary>
+    private async Task<string> EnsureNonStaffUserAsync()
+    {
+        const string email = "authz.nonstaff@dentalclinic.com";
+
+        using var scope = webAppFactory.Services.CreateScope();
+        var userManager = scope.ServiceProvider.GetRequiredService<UserManager<AppUser>>();
+
+        var user = await userManager.FindByEmailAsync(email);
+
+        if (user is null)
+        {
+            user = new AppUser { Email = email, UserName = email, EmailConfirmed = true };
+            var created = await userManager.CreateAsync(user, NonStaffPassword);
+            Assert.True(created.Succeeded, string.Join("; ", created.Errors.Select(e => e.Description)));
+        }
+
+        // No role is assigned on purpose: the account must hold none of the
+        // clinic roles (Admin, Doctor, Receptionist) so the staff-only policy
+        // rejects it.
+        return email;
     }
 }

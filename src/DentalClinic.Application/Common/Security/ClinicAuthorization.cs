@@ -1,5 +1,8 @@
 using DentalClinic.Application.Common.Interfaces;
 using DentalClinic.Domain.Identity;
+using DentalClinic.Domain.Invoices;
+
+using Microsoft.EntityFrameworkCore;
 
 namespace DentalClinic.Application.Common.Security;
 
@@ -52,4 +55,38 @@ public static class ClinicAuthorization
         user.IsUnrestrictedStaff() || user.IsInRole(Roles.Doctor)
             ? PatientAccessScope.None
             : new PatientAccessScope(IsRestricted: true, DoctorId: user.DoctorId, UserId: user.Id);
+
+    /// <summary>
+    /// Whether the caller may read or modify the supplied invoice. The rule
+    /// mirrors the invoice read scope exactly, so a mutation can never reach
+    /// further than a read: administrators and receptionists operate across
+    /// every invoice, while a doctor may only touch an invoice that is linked
+    /// to one of their own appointments. A standalone invoice has no owning
+    /// doctor, so it stays out of a doctor's reach (fail-closed).
+    /// </summary>
+    public static async Task<bool> CanAccessInvoiceAsync(
+        this IUser user,
+        IAppDbContext context,
+        Invoice invoice,
+        CancellationToken cancellationToken)
+    {
+        if (user.IsUnrestrictedStaff())
+        {
+            return true;
+        }
+
+        if (!user.IsInRole(Roles.Doctor) || user.DoctorId is not { } doctorId)
+        {
+            return false;
+        }
+
+        if (invoice.AppointmentId is not { } appointmentId)
+        {
+            return false;
+        }
+
+        return await context.Appointments
+            .AsNoTracking()
+            .AnyAsync(a => a.Id == appointmentId && a.DoctorId == doctorId, cancellationToken);
+    }
 }

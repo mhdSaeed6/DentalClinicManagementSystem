@@ -1,5 +1,6 @@
 using DentalClinic.Application.Common.Errors;
 using DentalClinic.Application.Common.Interfaces;
+using DentalClinic.Application.Common.Security;
 using DentalClinic.Application.Features.Invoices.Commands.GenerateAppointmentInvoice;
 using DentalClinic.Application.Features.Invoices.Dtos;
 using DentalClinic.Application.Features.Invoices.Mappers;
@@ -17,7 +18,8 @@ namespace DentalClinic.Application.Features.Invoices.Commands.CreateInvoice;
 public class CreateInvoiceCommandHandler(
     ILogger<CreateInvoiceCommandHandler> logger,
     IAppDbContext context,
-    HybridCache cache)
+    HybridCache cache,
+    IUser user)
     : IRequestHandler<CreateInvoiceCommand, Result<InvoiceDto>>
 {
     public async Task<Result<InvoiceDto>> Handle(CreateInvoiceCommand request, CancellationToken cancellationToken)
@@ -42,13 +44,25 @@ public class CreateInvoiceCommandHandler(
             var appointment = await context.Appointments
                 .AsNoTracking()
                 .Where(a => a.Id == appointmentId)
-                .Select(a => new { a.PatientId })
+                .Select(a => new { a.PatientId, a.DoctorId })
                 .FirstOrDefaultAsync(cancellationToken);
 
             if (appointment is null)
             {
                 logger.LogWarning("Invoice creation failed. Appointment {AppointmentId} not found.", appointmentId);
                 return ApplicationErrors.AppointmentNotFound;
+            }
+
+            // Ownership: an appointment-linked invoice belongs to the
+            // appointment's doctor, so a doctor may only bill their own visit.
+            if (!user.CanAccessAppointment(appointment.DoctorId))
+            {
+                logger.LogWarning(
+                    "Invoice creation denied for user {UserId}. Appointment {AppointmentId} belongs to doctor {DoctorId}.",
+                    user.Id,
+                    appointmentId,
+                    appointment.DoctorId);
+                return ApplicationErrors.AppointmentAccessForbidden;
             }
 
             if (appointment.PatientId != request.PatientId)
@@ -72,6 +86,13 @@ public class CreateInvoiceCommandHandler(
                     appointmentId);
                 return InvoiceErrors.ExistingInvoiceForAppointment;
             }
+        }
+        else if (!user.IsUnrestrictedStaff())
+        {
+            // A standalone invoice has no owning doctor, so it stays outside a
+            // doctor's reach (fail-closed), exactly as it is for reads.
+            logger.LogWarning("Standalone invoice creation denied for user {UserId}.", user.Id);
+            return ApplicationErrors.InvoiceAccessForbidden;
         }
 
         // 2. Standalone invoices stay a flat, immediately payable invoice. An

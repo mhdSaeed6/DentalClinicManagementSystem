@@ -28,7 +28,8 @@ public record UpdateInvoiceDraftCommand(
 public class UpdateInvoiceDraftCommandHandler(
     ILogger<UpdateInvoiceDraftCommandHandler> logger,
     IAppDbContext context,
-    HybridCache cache)
+    HybridCache cache,
+    IUser user)
     : IRequestHandler<UpdateInvoiceDraftCommand, Result<InvoiceDto>>
 {
     public async Task<Result<InvoiceDto>> Handle(UpdateInvoiceDraftCommand request, CancellationToken cancellationToken)
@@ -43,6 +44,15 @@ public class UpdateInvoiceDraftCommandHandler(
         if (invoice is null)
         {
             return ApplicationErrors.InvoiceNotFound;
+        }
+
+        // Ownership: a doctor may only edit an invoice linked to one of their
+        // own appointments. The check runs before the state check so a foreign
+        // invoice never reveals whether it could have been edited.
+        if (!await user.CanAccessInvoiceAsync(context, invoice, cancellationToken))
+        {
+            logger.LogWarning("Draft edit denied for user {UserId} on invoice {InvoiceId}.", user.Id, request.InvoiceId);
+            return ApplicationErrors.InvoiceAccessForbidden;
         }
 
         // Check the invoice state FIRST so editing an issued or paid invoice reports
@@ -114,7 +124,8 @@ public record RefreshInvoiceDraftCommand(
 public class RefreshInvoiceDraftCommandHandler(
     ILogger<RefreshInvoiceDraftCommandHandler> logger,
     IAppDbContext context,
-    HybridCache cache)
+    HybridCache cache,
+    IUser user)
     : IRequestHandler<RefreshInvoiceDraftCommand, Result<InvoiceDto>>
 {
     public async Task<Result<InvoiceDto>> Handle(RefreshInvoiceDraftCommand request, CancellationToken cancellationToken)
@@ -129,6 +140,15 @@ public class RefreshInvoiceDraftCommandHandler(
         if (invoice is null)
         {
             return ApplicationErrors.InvoiceNotFound;
+        }
+
+        // Ownership: a doctor may only refresh an invoice linked to one of their
+        // own appointments. The check runs before the state checks so a foreign
+        // invoice never reveals whether it could have been refreshed.
+        if (!await user.CanAccessInvoiceAsync(context, invoice, cancellationToken))
+        {
+            logger.LogWarning("Draft refresh denied for user {UserId} on invoice {InvoiceId}.", user.Id, request.InvoiceId);
+            return ApplicationErrors.InvoiceAccessForbidden;
         }
 
         if (invoice.AppointmentId is not { } appointmentId)
