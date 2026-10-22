@@ -9,7 +9,7 @@ dotnet build DentalClinic.slnx                      # or: dotnet build src/Denta
 dotnet test tests/DentalClinic.Domain.UnitTests     # no Docker needed
 dotnet test tests/DentalClinic.Application.UnitTests
 dotnet run --project src/DentalClinic.Api           # http://localhost:5004, Scalar at /scalar/v1 (Development only)
-dotnet run --project src/DentalClinic.Web           # http://localhost:5048, calls API on :5004
+dotnet run --project src/DentalClinic.Web           # http://localhost:7204, calls API on :5004
 docker compose up -d --build                        # API :5002, SQL :1434, Seq :8081, Prometheus :9090, Grafana :3000
 ```
 
@@ -73,4 +73,4 @@ dotnet ef migrations add <Name> --project src/DentalClinic.Infrastructure --star
 
 ## Docs
 
-`docs/product/` holds a PRD, a phased roadmap, and an open-questions register. They are marked **draft / not approved for implementation**, and they describe an aspirational target (multi-tenant `ClinicId`, permissions, health checks) that does **not** exist in the code yet. Use them for intent; use the code for reality. `README.md` also overstates test counts and lists stale ports (`7198`); actual dev ports are `5004` (API) and `5048` (Web).
+`docs/product/` holds a PRD, a phased roadmap, and an open-questions register. They are marked **draft / not approved for implementation**, and they describe an aspirational target (multi-tenant `ClinicId`, permissions, health checks) that does **not** exist in the code yet. Use them for intent; use the code for reality. `README.md` also overstates test counts and lists stale ports (`7198`); actual dev ports are `5004` (API) and `7204` (Web). The Web port deliberately avoids `5048`: Windows reserves `5041-5140` for Hyper-V/Docker/WSL2, and binding there fails with socket error `10013` ("access permissions") rather than the usual "port already in use". Check `netsh interface ipv4 show excludedportrange protocol=tcp` before picking any new port.

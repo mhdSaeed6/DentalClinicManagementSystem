@@ -126,11 +126,23 @@ Set your local SQL Server connection string in `src/DentalClinic.Api/appsettings
 dotnet run --project src/DentalClinic.Api
 
 ```
+4. **Run the Blazor Web UI** (in a second terminal — it calls the API on `:5004`):
+```bash
+dotnet run --project src/DentalClinic.Web
+
+```
 
 
-4. **Explore Endpoints:**
-* **Scalar UI:** `https://localhost:7198/scalar/v1`
-* **Swagger UI:** `https://localhost:7198/swagger`
+5. **Explore Endpoints:**
+* **Web UI:** `http://localhost:7204`
+* **Scalar UI:** `http://localhost:5004/scalar/v1`
+* **Swagger UI:** `http://localhost:5004/swagger`
+
+> **Port note:** the Web UI uses `7204`, not `5048`. Windows reserves `5041-5140` for
+> Hyper-V / Docker Desktop / WSL2, and binding a port inside that range fails with
+> socket error `10013` ("access permissions") instead of the usual "port already in
+> use". Run `netsh interface ipv4 show excludedportrange protocol=tcp` to see the
+> ranges currently reserved on your machine.
 
 
 
