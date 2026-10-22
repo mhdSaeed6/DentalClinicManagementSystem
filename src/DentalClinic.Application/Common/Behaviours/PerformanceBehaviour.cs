@@ -1,6 +1,7 @@
 using System.Diagnostics;
 
 using DentalClinic.Application.Common.Interfaces;
+using DentalClinic.Application.Common.Logging;
 
 using MediatR;
 
@@ -49,8 +50,15 @@ public class PerformanceBehaviour<TRequest, TResponse> : IPipelineBehavior<TRequ
                 userName = await _identityService.GetUserNameAsync(userId);
             }
 
+            // The request is logged in a redacted form: a password, a refresh
+            // token or any other credential must never reach the log sink.
             _logger.LogWarning(
-                "Long Running Request: {Name} ({ElapsedMilliseconds} milliseconds) {@UserId} {@UserName} {@Request}", requestName, elapsedMilliseconds, userId, userName, request);
+                "Long Running Request: {Name} ({ElapsedMilliseconds} milliseconds) {UserId} {UserName} {Request}",
+                requestName,
+                elapsedMilliseconds,
+                userId,
+                userName,
+                SensitiveDataRedactor.Describe(request));
         }
 
         return response;

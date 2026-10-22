@@ -1,5 +1,6 @@
 using DentalClinic.Application.Common.Errors;
 using DentalClinic.Application.Common.Interfaces;
+using DentalClinic.Application.Common.Security;
 using DentalClinic.Application.Features.Invoices.Dtos;
 using DentalClinic.Application.Features.Invoices.Mappers;
 using DentalClinic.Domain.Common.Results;
@@ -14,7 +15,8 @@ namespace DentalClinic.Application.Features.Invoices.Commands.IssueInvoice;
 public class IssueInvoiceCommandHandler(
     ILogger<IssueInvoiceCommandHandler> logger,
     IAppDbContext context,
-    HybridCache cache)
+    HybridCache cache,
+    IUser user)
     : IRequestHandler<IssueInvoiceCommand, Result<InvoiceDto>>
 {
     public async Task<Result<InvoiceDto>> Handle(IssueInvoiceCommand request, CancellationToken cancellationToken)
@@ -29,6 +31,15 @@ public class IssueInvoiceCommandHandler(
         {
             logger.LogWarning("Issue invoice failed. Invoice {InvoiceId} not found.", request.InvoiceId);
             return ApplicationErrors.InvoiceNotFound;
+        }
+
+        // Ownership: a doctor may only issue an invoice linked to one of their
+        // own appointments. The check runs before the state check so a foreign
+        // invoice never reveals whether it could have been issued.
+        if (!await user.CanAccessInvoiceAsync(context, invoice, cancellationToken))
+        {
+            logger.LogWarning("Invoice issuance denied for user {UserId} on invoice {InvoiceId}.", user.Id, request.InvoiceId);
+            return ApplicationErrors.InvoiceAccessForbidden;
         }
 
         var result = invoice.Issue();

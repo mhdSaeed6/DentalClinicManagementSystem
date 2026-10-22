@@ -23,7 +23,7 @@ namespace DentalClinic.Api.Controllers;
 
 [Route("api/v{version:apiVersion}/invoices")]
 [ApiVersion("1.0")]
-[Authorize]
+[Authorize(Policy = "StaffOnly")]
 public class InvoiceController(ISender sender, IUser user) : ApiController
 {
     [HttpGet]

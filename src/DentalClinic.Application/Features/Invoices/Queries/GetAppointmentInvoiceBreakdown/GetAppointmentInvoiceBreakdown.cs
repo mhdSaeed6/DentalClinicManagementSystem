@@ -1,5 +1,6 @@
 using DentalClinic.Application.Common.Errors;
 using DentalClinic.Application.Common.Interfaces;
+using DentalClinic.Application.Common.Security;
 using DentalClinic.Application.Features.Invoices.Commands.GenerateAppointmentInvoice;
 using DentalClinic.Application.Features.Invoices.Dtos;
 using DentalClinic.Application.Features.Invoices.Mappers;
@@ -28,7 +29,7 @@ public sealed record AppointmentInvoiceBreakdownDto(
     int TreatmentCount,
     bool HasBillableItems);
 
-public class GetAppointmentInvoiceBreakdownQueryHandler(IAppDbContext context)
+public class GetAppointmentInvoiceBreakdownQueryHandler(IAppDbContext context, IUser user)
     : IRequestHandler<GetAppointmentInvoiceBreakdownQuery, Result<AppointmentInvoiceBreakdownDto>>
 {
     public async Task<Result<AppointmentInvoiceBreakdownDto>> Handle(
@@ -43,6 +44,13 @@ public class GetAppointmentInvoiceBreakdownQueryHandler(IAppDbContext context)
         if (appointment is null)
         {
             return ApplicationErrors.AppointmentNotFound;
+        }
+
+        // Ownership: the breakdown reveals what a visit would cost, so it
+        // follows the same rule as every other appointment-scoped operation.
+        if (!user.CanAccessAppointment(appointment.DoctorId))
+        {
+            return ApplicationErrors.AppointmentAccessForbidden;
         }
 
         var treatments = await context.TreatmentRecords

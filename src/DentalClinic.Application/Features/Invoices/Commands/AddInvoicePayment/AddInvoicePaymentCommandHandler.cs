@@ -2,6 +2,7 @@ using System.Data;
 
 using DentalClinic.Application.Common.Errors;
 using DentalClinic.Application.Common.Interfaces;
+using DentalClinic.Application.Common.Security;
 using DentalClinic.Application.Features.Invoices.Commands.AddInvoicePayment;
 using DentalClinic.Application.Features.Invoices.Dtos;
 using DentalClinic.Application.Features.Invoices.Mappers;
@@ -17,7 +18,8 @@ using Microsoft.Extensions.Logging;
 public class AddInvoicePaymentCommandHandler(
     ILogger<AddInvoicePaymentCommandHandler> logger,
     IAppDbContext context,
-    HybridCache cache)
+    HybridCache cache,
+    IUser user)
     : IRequestHandler<AddInvoicePaymentCommand, Result<InvoiceDto>>
 {
     public async Task<Result<InvoiceDto>> Handle(AddInvoicePaymentCommand request, CancellationToken cancellationToken)
@@ -41,7 +43,16 @@ public class AddInvoicePaymentCommandHandler(
             return ApplicationErrors.InvoiceNotFound;
         }
 
-        // 2. تطبيق الـ Business Rules وتحديث الفاتورة
+        // 2. Ownership: a doctor may only pay an invoice linked to one of their
+        //    own appointments. The check runs before the balance rules so a
+        //    foreign invoice never reveals its state.
+        if (!await user.CanAccessInvoiceAsync(context, invoice, cancellationToken))
+        {
+            logger.LogWarning("Invoice payment denied for user {UserId} on invoice {InvoiceId}.", user.Id, request.InvoiceId);
+            return ApplicationErrors.InvoiceAccessForbidden;
+        }
+
+        // 3. تطبيق الـ Business Rules وتحديث الفاتورة
         var registerResult = invoice.RegisterPayment(request.Amount);
         if (registerResult.IsError)
         {
@@ -49,17 +60,17 @@ public class AddInvoicePaymentCommandHandler(
             return registerResult.Errors;
         }
 
-        // 3. إنشاء كائن الـ Payment المستقل
+        // 4. إنشاء كائن الـ Payment المستقل
         var paymentResult = Payment.Create(invoice.Id, request.Amount, request.Notes);
         if (paymentResult.IsError)
         {
             return paymentResult.Errors;
         }
 
-        // 4. إضافة الـ Payment صراحة إلى جدول الـ Payments في قاعدة البيانات
+        // 5. إضافة الـ Payment صراحة إلى جدول الـ Payments في قاعدة البيانات
         await context.Payments.AddAsync(paymentResult.Value, cancellationToken);
 
-        // 5. حفظ التغييرات (تحديث الفاتورة + إضافة السطر الجديد في الدفعات)
+        // 6. حفظ التغييرات (تحديث الفاتورة + إضافة السطر الجديد في الدفعات)
         try
         {
             await context.SaveChangesAsync(cancellationToken);
@@ -77,7 +88,7 @@ public class AddInvoicePaymentCommandHandler(
             return InvoiceErrors.ConcurrentModification;
         }
 
-        // 6. تفريغ الـ Cache
+        // 7. تفريغ الـ Cache
         await cache.RemoveAsync($"invoice-{request.InvoiceId}", cancellationToken);
         await cache.RemoveByTagAsync("invoice", cancellationToken);
 

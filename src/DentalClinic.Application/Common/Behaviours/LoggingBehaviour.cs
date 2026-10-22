@@ -1,4 +1,5 @@
 using DentalClinic.Application.Common.Interfaces;
+using DentalClinic.Application.Common.Logging;
 
 using MediatR.Pipeline;
 
@@ -25,7 +26,13 @@ public class LoggingBehaviour<TRequest>(ILogger<TRequest> logger, IUser user, II
             userName = await _identityService.GetUserNameAsync(userId);
         }
 
+        // The request is logged in a redacted form: a password, a refresh token
+        // or any other credential must never reach the log sink.
         _logger.LogInformation(
-            "Request: {Name} {@UserId} {@UserName} {@Request}", requestName, userId, userName, request);
+            "Request: {Name} {UserId} {UserName} {Request}",
+            requestName,
+            userId,
+            userName,
+            SensitiveDataRedactor.Describe(request));
     }
 }
