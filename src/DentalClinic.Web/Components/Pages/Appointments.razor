@@ -168,6 +168,18 @@
             </button>
         </div>
 
+        @* Medical alerts travel with the appointment so the doctor sees them
+           before the visit starts, without opening the patient file. *@
+        @if (Patient(appt.PatientId) is { } drawerPatient && (drawerPatient.MedicalHistory?.AlertSeverity ?? 0) != 0)
+        {
+            <div class="badge @ClinicFormatting.AlertCss(drawerPatient.MedicalHistory!.AlertSeverity) no-dot mb-3"
+                 style="display:flex;flex-wrap:wrap;gap:10px;padding:10px 14px;border-radius:11px;align-items:center">
+                <ClinicIcon Name="alert" Class="sm" />
+                <span class="fw-600">@ClinicFormatting.AlertLabel(drawerPatient.MedicalHistory!.AlertSeverity, Session.IsRtl)</span>
+                <span>@ClinicFormatting.MedicalFlagsSummary(drawerPatient.MedicalHistory, Session.IsRtl)</span>
+            </div>
+        }
+
         <div class="complete-summary mb-3">
             <div class="summary-cell">
                 <div class="label">@Session.T("When", "الموعد")</div>

@@ -59,6 +59,10 @@ public sealed class ApiClient
     public Task<PatientDto> GetPatientAsync(Guid id, CancellationToken ct = default) =>
         GetAsync<PatientDto>($"patients/{id}", ct);
 
+    /// <summary>Server-computed count of patients (visible to the caller) with any medical alert.</summary>
+    public Task<int> GetMedicalAlertsCountAsync(CancellationToken ct = default) =>
+        GetAsync<int>("patients/alerts-count", ct);
+
     public Task<PatientDto> CreatePatientAsync(PatientFormRequest request, CancellationToken ct = default) =>
         PostAsync<PatientDto>("patients", request, ct);
 

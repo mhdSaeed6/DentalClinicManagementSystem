@@ -34,7 +34,14 @@ public static class PatientMapper
             entity.HasDiabetes,
             entity.HasHypertension,
             entity.HasHeartDisease,
+            entity.HasBleedingDisorder,
+            entity.HasEpilepsy,
+            entity.HasAsthma,
+            entity.IsPregnant,
+            entity.PregnancyWeeks,
+            entity.BloodPressureReading,
             entity.Allergies,
-            entity.Notes );
+            entity.Notes,
+            (int)entity.AlertSeverity);
     }
 }

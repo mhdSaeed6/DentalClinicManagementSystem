@@ -70,6 +70,29 @@ public class PatientConfiguration : IEntityTypeConfiguration<Patient>
                 .HasColumnName("HasHeartDisease")
                 .IsRequired();
 
+            medicalHistory.Property(m => m.HasBleedingDisorder)
+                .HasColumnName("HasBleedingDisorder")
+                .IsRequired();
+
+            medicalHistory.Property(m => m.HasEpilepsy)
+                .HasColumnName("HasEpilepsy")
+                .IsRequired();
+
+            medicalHistory.Property(m => m.HasAsthma)
+                .HasColumnName("HasAsthma")
+                .IsRequired();
+
+            medicalHistory.Property(m => m.IsPregnant)
+                .HasColumnName("IsPregnant")
+                .IsRequired();
+
+            medicalHistory.Property(m => m.PregnancyWeeks)
+                .HasColumnName("PregnancyWeeks");
+
+            medicalHistory.Property(m => m.BloodPressureReading)
+                .HasColumnName("BloodPressureReading")
+                .HasMaxLength(20);
+
             medicalHistory.Property(m => m.Allergies)
                 .HasColumnName("Allergies")
                 .HasMaxLength(500);

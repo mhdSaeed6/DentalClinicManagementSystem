@@ -847,9 +847,26 @@ namespace DentalClinic.Infrastructure.Data.Migrations
                                 .HasColumnType("nvarchar(500)")
                                 .HasColumnName("Allergies");
 
+                            b1.Property<string>("BloodPressureReading")
+                                .HasMaxLength(20)
+                                .HasColumnType("nvarchar(20)")
+                                .HasColumnName("BloodPressureReading");
+
+                            b1.Property<bool>("HasAsthma")
+                                .HasColumnType("bit")
+                                .HasColumnName("HasAsthma");
+
+                            b1.Property<bool>("HasBleedingDisorder")
+                                .HasColumnType("bit")
+                                .HasColumnName("HasBleedingDisorder");
+
                             b1.Property<bool>("HasDiabetes")
                                 .HasColumnType("bit")
                                 .HasColumnName("HasDiabetes");
+
+                            b1.Property<bool>("HasEpilepsy")
+                                .HasColumnType("bit")
+                                .HasColumnName("HasEpilepsy");
 
                             b1.Property<bool>("HasHeartDisease")
                                 .HasColumnType("bit")
@@ -859,10 +876,18 @@ namespace DentalClinic.Infrastructure.Data.Migrations
                                 .HasColumnType("bit")
                                 .HasColumnName("HasHypertension");
 
+                            b1.Property<bool>("IsPregnant")
+                                .HasColumnType("bit")
+                                .HasColumnName("IsPregnant");
+
                             b1.Property<string>("Notes")
                                 .HasMaxLength(1000)
                                 .HasColumnType("nvarchar(1000)")
                                 .HasColumnName("MedicalNotes");
+
+                            b1.Property<int?>("PregnancyWeeks")
+                                .HasColumnType("int")
+                                .HasColumnName("PregnancyWeeks");
 
                             b1.HasKey("PatientId");
 

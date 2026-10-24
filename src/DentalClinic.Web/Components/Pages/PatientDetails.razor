@@ -111,24 +111,35 @@ else if (_patient is not null)
                     <div class="card-header">
                         <div class="card-title">@Session.T("Medical history", "التاريخ الطبي")</div>
                         <div class="spacer"></div>
-                        @if (HasAlerts)
-                        {
-                            <span class="badge warning">@Session.T("Attention needed", "يتطلب انتباهاً")</span>
-                        }
-                        else
-                        {
-                            <span class="badge success">@Session.T("No alerts", "لا تنبيهات")</span>
-                        }
+                        <MedicalAlertBadge Value="@(_patient.MedicalHistory?.AlertSeverity ?? 0)" />
                     </div>
                     <div class="card-body">
                         <div class="flex gap-2 flex-wrap mb-3">
                             <span class="chip @(Med("diabetes") ? "active" : "")"><ClinicIcon Name="droplet" Class="sm" /> @Session.T("Diabetes", "سكري")</span>
                             <span class="chip @(Med("bp") ? "active" : "")"><ClinicIcon Name="activity" Class="sm" /> @Session.T("Hypertension", "ضغط")</span>
                             <span class="chip @(Med("heart") ? "active" : "")"><ClinicIcon Name="heart" Class="sm" /> @Session.T("Heart disease", "أمراض قلب")</span>
+                            <span class="chip @(Med("bleeding") ? "active" : "")"><ClinicIcon Name="alert" Class="sm" /> @Session.T("Bleeding disorder", "اضطراب نزيف")</span>
+                            <span class="chip @(Med("epilepsy") ? "active" : "")"><ClinicIcon Name="activity" Class="sm" /> @Session.T("Epilepsy", "صرع")</span>
+                            <span class="chip @(Med("asthma") ? "active" : "")"><ClinicIcon Name="droplet" Class="sm" /> @Session.T("Asthma", "ربو")</span>
+                            <span class="chip @(Med("pregnancy") ? "active" : "")"><ClinicIcon Name="user" Class="sm" /> @Session.T("Pregnancy", "حمل")</span>
                         </div>
                         <dl class="kv">
                             <dt>@Session.T("Allergies", "الحساسية")</dt>
                             <dd>@(string.IsNullOrWhiteSpace(_patient.MedicalHistory?.Allergies) ? Session.T("None recorded", "لا يوجد") : _patient.MedicalHistory!.Allergies)</dd>
+                            <dt>@Session.T("Blood pressure", "قراءة الضغط")</dt>
+                            <dd>
+                                @if (!string.IsNullOrWhiteSpace(_patient.MedicalHistory?.BloodPressureReading))
+                                {
+                                    <span class="mono">@_patient.MedicalHistory!.BloodPressureReading</span>
+                                    @(BpNote(_patient.MedicalHistory.BloodPressureReading))
+                                }
+                                else
+                                {
+                                    <span>—</span>
+                                }
+                            </dd>
+                            <dt>@Session.T("Pregnancy week", "أسبوع الحمل")</dt>
+                            <dd>@(_patient.MedicalHistory?.PregnancyWeeks is { } weeks ? weeks.ToString() : "—")</dd>
                             <dt>@Session.T("Notes", "ملاحظات")</dt>
                             <dd>@(string.IsNullOrWhiteSpace(_patient.MedicalHistory?.Notes) ? "—" : _patient.MedicalHistory!.Notes)</dd>
                         </dl>
@@ -252,7 +263,6 @@ else if (_patient is not null)
     private List<AppointmentDto> _appointments = [];
     private List<TreatmentRecordDto> _treatments = [];
     private List<InvoiceDto> _invoices = [];
-    private bool HasAlerts => _patient?.MedicalHistory is { } h && (h.HasDiabetes || h.HasHypertension || h.HasHeartDisease);
     private InvoiceSummaryDto? _invoiceSummary;
 
     protected override async Task OnInitializedAsync()
@@ -311,6 +321,35 @@ else if (_patient is not null)
         "diabetes" => _patient?.MedicalHistory?.HasDiabetes == true,
         "bp" => _patient?.MedicalHistory?.HasHypertension == true,
         "heart" => _patient?.MedicalHistory?.HasHeartDisease == true,
+        "bleeding" => _patient?.MedicalHistory?.HasBleedingDisorder == true,
+        "epilepsy" => _patient?.MedicalHistory?.HasEpilepsy == true,
+        "asthma" => _patient?.MedicalHistory?.HasAsthma == true,
+        "pregnancy" => _patient?.MedicalHistory?.IsPregnant == true,
         _ => false,
     };
+
+    /// <summary>
+    /// Short extra note next to a stored blood-pressure reading. Local copy of
+    /// the parser thresholds in MedicalAlertEvaluator (Web has no Domain ref).
+    /// </summary>
+    private string BpNote(string reading)
+    {
+        var parts = reading.Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (parts.Length == 2
+            && int.TryParse(parts[0], out var systolic)
+            && int.TryParse(parts[1], out var diastolic))
+        {
+            if (systolic >= 180 || diastolic >= 120)
+            {
+                return Session.T("— critically high, consult a doctor first", "— مرتفع بشكل حرج، استشر الطبيب أولاً");
+            }
+
+            if (systolic >= 140 || diastolic >= 90)
+            {
+                return Session.T("— above normal, monitor", "— أعلى من المعدل الطبيعي، يُراقَب");
+            }
+        }
+
+        return string.Empty;
+    }
 }

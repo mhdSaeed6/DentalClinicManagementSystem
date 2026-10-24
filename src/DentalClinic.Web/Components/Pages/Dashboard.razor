@@ -160,9 +160,14 @@ else
                     <span class="text-muted fs-sm">@Session.T("Active doctors", "الأطباء النشطون")</span>
                     <span class="fw-700 mono">@_doctors.Count</span>
                 </div>
-                <div class="flex-between">
+                <div class="flex-between mb-2">
                     <span class="text-muted fs-sm">@Session.T("Services offered", "الخدمات المتاحة")</span>
                     <span class="fw-700 mono">@_services.Count</span>
+                </div>
+                @* Server-computed count (patients/alerts-count), never a sum over this page. *@
+                <div class="flex-between">
+                    <span class="text-muted fs-sm">@Session.T("Patients with medical alerts", "مرضى بالتنبيهات الطبية")</span>
+                    <span class="fw-700 mono">@_patientsWithAlerts</span>
                 </div>
             </div>
         </div>
@@ -255,6 +260,7 @@ else
     private int _patientCount;
     private int _todayCount;
     private int _scheduledCount;
+    private int _patientsWithAlerts;
     private List<AppointmentDto> _upcoming = [];
 
     private string DisplayName => string.IsNullOrWhiteSpace(Session.UserName) ? "there" : Session.UserName;
@@ -288,7 +294,8 @@ else
             var appointmentsTask = Api.GetAppointmentsAsync(1, 100);
             var invoicesTask = Api.GetInvoicesAsync(1, 100);
             var invoiceSummaryTask = Api.GetInvoiceSummaryAsync();
-            await Task.WhenAll(patientsTask, doctorsTask, servicesTask, appointmentsTask, invoicesTask, invoiceSummaryTask);
+            var alertsCountTask = Api.GetMedicalAlertsCountAsync();
+            await Task.WhenAll(patientsTask, doctorsTask, servicesTask, appointmentsTask, invoicesTask, invoiceSummaryTask, alertsCountTask);
 
             var patients = await patientsTask;
             var doctors = await doctorsTask;
@@ -302,6 +309,7 @@ else
             _appointments = appointments.Items ?? [];
             _invoices = invoices.Items ?? [];
             _summary = await invoiceSummaryTask;
+            _patientsWithAlerts = await alertsCountTask;
 
             _patientCount = patients.TotalCount;
             _todayCount = _appointments.Count(a => a.ScheduledDateTime.Date == DateTime.Today);

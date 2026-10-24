@@ -182,9 +182,25 @@ public class ApplicationDbContextInitialiser(
                 throw new Exception($"ContactInfo Seeding Failed: {contact1Res.Errors} | {contact2Res.Errors}");
             }
 
+            // Demo medical alerts so the alert badges and the dashboard count
+            // are not always zero on a fresh database.
+            var michaelHistory = new MedicalHistory
+            {
+                HasDiabetes = true,
+                BloodPressureReading = "148/92"
+            };
+
+            var emmaHistory = new MedicalHistory
+            {
+                HasAsthma = true,
+                IsPregnant = true,
+                PregnancyWeeks = 32,
+                BloodPressureReading = "118/76"
+            };
+
             _context.Patients.AddRange([
-                Patient.Create("Michael", "Brown", contact1Res.Value, DateTime.UtcNow.AddYears(-30), Gender.Male).Value,
-                Patient.Create("Emma", "Wilson", contact2Res.Value, DateTime.UtcNow.AddYears(-25), Gender.Female).Value
+                Patient.Create("Michael", "Brown", contact1Res.Value, DateTime.UtcNow.AddYears(-30), Gender.Male, michaelHistory).Value,
+                Patient.Create("Emma", "Wilson", contact2Res.Value, DateTime.UtcNow.AddYears(-25), Gender.Female, emmaHistory).Value
             ]);
         }
 
