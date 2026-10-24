@@ -95,13 +95,13 @@ else if (_patient is not null)
                     </div>
                     <div class="stat blue">
                         <div class="stat-icon"><ClinicIcon Name="invoice" /></div>
-                        <div class="stat-value">@ClinicFormatting.Money(_invoices.Sum(i => i.TotalAmount))</div>
-                        <div class="stat-label">@Session.T("Total billed", "إجمالي الفواتير")</div>
+                        <div class="stat-value">@ClinicFormatting.Money(_invoiceSummary?.TotalBilled ?? 0)</div>
+                        <div class="stat-label">@Session.T("Total billed (issued)", "إجمالي الفواتير (صادرة)")</div>
                     </div>
                     <div class="stat amber">
                         <div class="stat-icon"><ClinicIcon Name="wallet" /></div>
-                        <div class="stat-value">@ClinicFormatting.Money(_invoices.Sum(i => i.RemainingAmount))</div>
-                        <div class="stat-label">@Session.T("Balance due", "الرصيد المستحق")</div>
+                        <div class="stat-value">@ClinicFormatting.Money(_invoiceSummary?.TotalOutstanding ?? 0)</div>
+                        <div class="stat-label">@Session.T("Balance due (issued)", "الرصيد المستحق (صادرة)")</div>
                     </div>
                 </div>
 
@@ -250,8 +250,8 @@ else if (_patient is not null)
     private List<AppointmentDto> _appointments = [];
     private List<TreatmentRecordDto> _treatments = [];
     private List<InvoiceDto> _invoices = [];
-
     private bool HasAlerts => _patient?.MedicalHistory is { } h && (h.HasDiabetes || h.HasHypertension || h.HasHeartDisease);
+    private InvoiceSummaryDto? _invoiceSummary;
 
     protected override async Task OnInitializedAsync()
     {
@@ -263,8 +263,9 @@ else if (_patient is not null)
             var appointmentsTask = Api.GetAppointmentsAsync(1, 100, patientId: Id);
             var treatmentsTask = Api.GetTreatmentRecordsAsync(1, 100, patientId: Id);
             var invoicesTask = Api.GetInvoicesAsync(1, 100, patientId: Id);
+            var summaryTask = Api.GetInvoiceSummaryAsync(Id);
 
-            await Task.WhenAll(patientTask, doctorsTask, servicesTask, appointmentsTask, treatmentsTask, invoicesTask);
+            await Task.WhenAll(patientTask, doctorsTask, servicesTask, appointmentsTask, treatmentsTask, invoicesTask, summaryTask);
 
             _patient = await patientTask;
             _doctors = (await doctorsTask).Items ?? [];
@@ -272,6 +273,7 @@ else if (_patient is not null)
             _appointments = (await appointmentsTask).Items ?? [];
             _treatments = (await treatmentsTask).Items ?? [];
             _invoices = (await invoicesTask).Items ?? [];
+            _invoiceSummary = await summaryTask;
         }
         catch (ApiException ex)
         {

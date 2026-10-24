@@ -181,6 +181,23 @@ public sealed class ApiClient
     public Task<InvoiceDto> GetInvoiceAsync(Guid id, CancellationToken ct = default) =>
         GetAsync<InvoiceDto>($"invoices/{id}", ct);
 
+    /// <summary>
+    /// Server-side totals over <em>all</em> issued invoices visible to the
+    /// caller (optionally for one patient) — replaces the wrong client-side
+    /// sums over a single page. Draft invoices are estimates and excluded.
+    /// </summary>
+    public Task<InvoiceSummaryDto> GetInvoiceSummaryAsync(Guid? patientId = null, CancellationToken ct = default) =>
+        GetAsync<InvoiceSummaryDto>("invoices/summary?" + Query(("PatientId", patientId)), ct);
+
+    /// <summary>One row per patient with money owed on issued invoices, ordered from the largest debt.</summary>
+    public Task<PaginatedList<OutstandingDebtDto>> GetOutstandingDebtsAsync(
+        int page,
+        int pageSize,
+        decimal? minAmount = null,
+        CancellationToken ct = default) =>
+        GetAsync<PaginatedList<OutstandingDebtDto>>("invoices/outstanding-debts?" + Query(
+            ("PageNumber", page), ("PageSize", pageSize), ("MinAmount", minAmount)), ct);
+
     public Task<InvoiceDto> CreateInvoiceAsync(InvoiceFormRequest request, CancellationToken ct = default) =>
         PostAsync<InvoiceDto>("invoices", request, ct);
 

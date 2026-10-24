@@ -289,6 +289,36 @@ public sealed class AppointmentInvoiceBreakdownDto
     public bool HasBillableItems { get; set; }
 }
 
+/// <summary>Server-side money totals over issued invoices; never a client-side sum of one page.</summary>
+public sealed class InvoiceSummaryDto
+{
+    public int TotalInvoiceCount { get; set; }
+
+    public decimal TotalBilled { get; set; }
+
+    public decimal TotalPaid { get; set; }
+
+    public decimal TotalOutstanding { get; set; }
+
+    public int OpenInvoiceCount { get; set; }
+
+    public DateTimeOffset? OldestUnpaidInvoiceDateUtc { get; set; }
+}
+
+/// <summary>One debtor per row: money owed on issued invoices, grouped on the server.</summary>
+public sealed class OutstandingDebtDto
+{
+    public Guid PatientId { get; set; }
+
+    public string PatientName { get; set; } = string.Empty;
+
+    public int OpenInvoiceCount { get; set; }
+
+    public decimal TotalOutstanding { get; set; }
+
+    public DateTimeOffset? OldestOpenInvoiceDateUtc { get; set; }
+}
+
 public sealed class CompleteAppointmentWithDraftResultDto
 {
     public Guid AppointmentId { get; set; }

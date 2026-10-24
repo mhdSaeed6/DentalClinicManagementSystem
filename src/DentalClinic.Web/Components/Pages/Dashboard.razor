@@ -83,14 +83,14 @@ else
         </div>
         <div class="stat green">
             <div class="stat-icon"><ClinicIcon Name="wallet" /></div>
-            <div class="stat-value">@ClinicFormatting.Money(_collected)</div>
+            <div class="stat-value">@ClinicFormatting.Money(_summary?.TotalPaid ?? 0)</div>
             <div class="stat-label">@Session.T("Collected revenue", "الإيرادات المحصّلة")</div>
         </div>
         <div class="stat amber">
             <div class="stat-icon"><ClinicIcon Name="invoice" /></div>
-            <div class="stat-value">@ClinicFormatting.Money(_outstanding)</div>
+            <div class="stat-value">@ClinicFormatting.Money(_summary?.TotalOutstanding ?? 0)</div>
             <div class="stat-label">@Session.T("Outstanding balance", "الأرصدة المستحقة")</div>
-            <div class="stat-trend @(_outstanding > 0 ? "down" : "up")"><ClinicIcon Name="alert" Class="sm" /> @_unpaidInvoices @Session.T("open invoices", "فواتير مفتوحة")</div>
+            <div class="stat-trend @((_summary?.TotalOutstanding ?? 0) > 0 ? "down" : "up")"><ClinicIcon Name="alert" Class="sm" /> @(_summary?.OpenInvoiceCount ?? 0) @Session.T("open invoices", "فواتير مفتوحة")</div>
         </div>
     </div>
 
@@ -251,12 +251,10 @@ else
     private List<DentalServiceDto> _services = [];
     private List<AppointmentDto> _appointments = [];
     private List<InvoiceDto> _invoices = [];
+    private InvoiceSummaryDto? _summary;
     private int _patientCount;
     private int _todayCount;
     private int _scheduledCount;
-    private int _unpaidInvoices;
-    private decimal _collected;
-    private decimal _outstanding;
     private List<AppointmentDto> _upcoming = [];
 
     private string DisplayName => string.IsNullOrWhiteSpace(Session.UserName) ? "there" : Session.UserName;
@@ -289,7 +287,8 @@ else
             var servicesTask = Api.GetServicesAsync(1, 100, null);
             var appointmentsTask = Api.GetAppointmentsAsync(1, 100);
             var invoicesTask = Api.GetInvoicesAsync(1, 100);
-            await Task.WhenAll(patientsTask, doctorsTask, servicesTask, appointmentsTask, invoicesTask);
+            var invoiceSummaryTask = Api.GetInvoiceSummaryAsync();
+            await Task.WhenAll(patientsTask, doctorsTask, servicesTask, appointmentsTask, invoicesTask, invoiceSummaryTask);
 
             var patients = await patientsTask;
             var doctors = await doctorsTask;
@@ -302,13 +301,11 @@ else
             _services = services.Items ?? [];
             _appointments = appointments.Items ?? [];
             _invoices = invoices.Items ?? [];
+            _summary = await invoiceSummaryTask;
 
             _patientCount = patients.TotalCount;
             _todayCount = _appointments.Count(a => a.ScheduledDateTime.Date == DateTime.Today);
             _scheduledCount = _appointments.Count(a => a.Status == AppointmentStatus.Scheduled);
-            _collected = _invoices.Sum(i => i.PaidAmount);
-            _outstanding = _invoices.Sum(i => i.RemainingAmount);
-            _unpaidInvoices = _invoices.Count(i => i.Status != PaymentStatus.Paid);
 
             var now = DateTime.Now;
             _upcoming = _appointments

@@ -11,7 +11,9 @@ using DentalClinic.Application.Features.Invoices.Commands.UpdateInvoiceDraft;
 using DentalClinic.Application.Features.Invoices.Dtos;
 using DentalClinic.Application.Features.Invoices.Queries.GetAppointmentInvoiceBreakdown;
 using DentalClinic.Application.Features.Invoices.Queries.GetInvoiceById;
+using DentalClinic.Application.Features.Invoices.Queries.GetInvoiceSummary;
 using DentalClinic.Application.Features.Invoices.Queries.GetInvoices;
+using DentalClinic.Application.Features.Invoices.Queries.GetOutstandingDebts;
 using DentalClinic.Contracts.Requests.Invoices;
 
 using MediatR;
@@ -43,6 +45,52 @@ public class InvoiceController(ISender sender, IUser user) : ApiController
             PageSize: request.PageSize,
             PatientId: request.PatientId,
             AppointmentId: request.AppointmentId);
+
+        var result = await sender.Send(query, ct);
+
+        return result.Match(
+            response => Ok(response),
+            Problem);
+    }
+
+    [HttpGet("summary")]
+    [ProducesResponseType(typeof(InvoiceSummaryDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
+    [EndpointSummary("Retrieves the money totals over the caller's invoices.")]
+    [EndpointDescription("Aggregates billed, paid and outstanding amounts over every issued invoice visible to the caller — optionally for one patient — so client pages never re-sum a single page of results. Draft invoices are estimates and are excluded.")]
+    [EndpointName("GetInvoiceSummary")]
+    [MapToApiVersion("1.0")]
+    [ProducesDefaultResponseType]
+    public async Task<IActionResult> GetSummary([FromQuery] GetInvoiceSummaryRequest request, CancellationToken ct)
+    {
+        var query = new GetInvoiceSummaryQuery(
+            Scope: user.DoctorScope(),
+            PatientId: request.PatientId);
+
+        var result = await sender.Send(query, ct);
+
+        return result.Match(
+            response => Ok(response),
+            Problem);
+    }
+
+    [HttpGet("outstanding-debts")]
+    [ProducesResponseType(typeof(PaginatedList<OutstandingDebtDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
+    [EndpointSummary("Lists patients with an outstanding balance.")]
+    [EndpointDescription("Groups the caller's issued invoices with money still owed, one row per patient, ordered from the largest debt to the smallest. The patient name is resolved on the server in the same round trip.")]
+    [EndpointName("GetOutstandingDebts")]
+    [MapToApiVersion("1.0")]
+    [ProducesDefaultResponseType]
+    public async Task<IActionResult> GetOutstandingDebts([FromQuery] GetOutstandingDebtsRequest request, CancellationToken ct)
+    {
+        var query = new GetOutstandingDebtsQuery(
+            Scope: user.DoctorScope(),
+            MinAmount: request.MinAmount,
+            PageNumber: request.PageNumber,
+            PageSize: request.PageSize);
 
         var result = await sender.Send(query, ct);
 
