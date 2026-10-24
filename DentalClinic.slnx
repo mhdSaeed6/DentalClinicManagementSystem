@@ -13,5 +13,6 @@
     <Project Path="tests/DentalClinic.Application.UnitTests/DentalClinic.Application.UnitTests.csproj" />
     <Project Path="tests/DentalClinic.Domain.UnitTests/DentalClinic.Domain.UnitTests.csproj" />
     <Project Path="tests/DentalClinic.Tests.Common/DentalClinic.Tests.Common.csproj" />
+    <Project Path="tests/DentalClinic.Web.Tests/DentalClinic.Web.Tests.csproj" />
   </Folder>
 </Solution>

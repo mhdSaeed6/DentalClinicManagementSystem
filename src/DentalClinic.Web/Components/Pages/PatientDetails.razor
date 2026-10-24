@@ -44,10 +44,12 @@ else if (_patient is not null)
                     <span class="badge brand no-dot"><ClinicIcon Name="user" Class="sm" /> @ClinicFormatting.GenderLabel(_patient.Gender, Session.IsRtl)</span>
                     <span class="badge muted no-dot"><ClinicIcon Name="calendar" Class="sm" /> @ClinicFormatting.Age(_patient.DateOfBirth) @Session.T("years", "سنة")</span>
                     <span class="badge muted no-dot"><ClinicIcon Name="phone" Class="sm" /> @_patient.PrimaryPhone</span>
-                    @if (_patient.HasWhatsAppOnPrimary)
-                    {
-                        <span class="badge success no-dot"><ClinicIcon Name="whatsapp" Class="sm" /> WhatsApp</span>
-                    }
+                    <WhatsAppButton Phone="@_patient.PrimaryPhone"
+                                    HasWhatsAppOnPrimary="_patient.HasWhatsAppOnPrimary"
+                                    Message="@GeneralWhatsAppMessage"
+                                    Css="btn-success-soft">
+                        <ClinicIcon Name="whatsapp" Class="sm" /> WhatsApp
+                    </WhatsAppButton>
                 </div>
             </div>
             <div class="spacer" style="flex:1"></div>
@@ -288,6 +290,9 @@ else if (_patient is not null)
             _loading = false;
         }
     }
+
+    private string GeneralWhatsAppMessage =>
+        WhatsAppMessageBuilder.GeneralContactMessage(Session.IsRtl, FullName(_patient!));
 
     private string FullName(PatientDto patient) => ClinicFormatting.FullName(patient.FirstName, patient.LastName);
 
