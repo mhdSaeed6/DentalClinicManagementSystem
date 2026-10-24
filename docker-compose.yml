@@ -21,20 +21,43 @@ services:
     networks:
       - dentalclinic-net
     restart: on-failure
-    
+
   sqlserver:
     container_name: dentalclinic-sql
     image: mcr.microsoft.com/mssql/server:2022-latest
     environment:
       - ACCEPT_EULA=Y
       - SA_PASSWORD=YourStrong@Password1
+      # Enables SQL Agent so the backup job defined in
+      # containers/sqlserver/01-backup-job.sql can run on schedule.
+      - MSSQL_AGENT_ENABLED=true
     ports:
       - "1434:1433"
     volumes:
       - sqlserver-data:/var/opt/mssql
+      # Host-visible folder for nightly .bak files (git-ignored).
+      - ./containers/sqlserver-backups:/var/opt/mssql/backups
     networks:
       - dentalclinic-net
     restart: always
+
+  # One-shot sidecar: registers the SQL Agent backup job once after
+  # sqlserver is ready. Exits when done; re-applies idempotently on `up`.
+  sql-backup-init:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: dentalclinic-sql-init
+    environment:
+      - SQLSERVER_HOST=sqlserver
+      - SQLSERVER_USER=sa
+      - SQLSERVER_PASSWORD=YourStrong@Password1
+    volumes:
+      - ./containers/sqlserver:/scripts:ro
+    entrypoint: ["/bin/sh", "/scripts/wait-for-sql-and-install.sh"]
+    depends_on:
+      - sqlserver
+    networks:
+      - dentalclinic-net
+    restart: "no"
 
   seq:
     image: datalust/seq:latest
@@ -63,7 +86,7 @@ services:
     depends_on:
       - dentalclinic-api
     restart: unless-stopped
-      
+
   grafana:
     image: grafana/grafana:latest
     container_name: grafana

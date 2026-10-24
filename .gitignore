@@ -483,6 +483,13 @@ $RECYCLE.BIN/
 
 # Ignore Docker container persistent data
 containers/seq/
-containers/
+containers/*
 *.tick
 *.junk
+
+# SQL Server container backup output (bind-mounted to /var/opt/mssql/backups).
+# The job scripts under containers/sqlserver/ stay in git; the .bak files do not.
+# NOTE: `containers/*` (not `containers/`) is deliberate — a negation pattern
+# cannot re-include a path whose PARENT directory itself is excluded.
+!containers/sqlserver/
+containers/sqlserver-backups/
