@@ -6,14 +6,14 @@ services:
       dockerfile: Dockerfile
       target: final
     ports:
-      - "5002:80"
+      - "5004:80"
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
       - ASPNETCORE_URLS=http://+:80
       - ConnectionStrings__DefaultConnection=Server=sqlserver,1433;Database=DentalClinic;User Id=sa;Password=YourStrong@Password1;TrustServerCertificate=True;
       # Must match the compose service name below ("seq"), not a legacy host.
       - Serilog__WriteTo__1__Args__serverUrl=http://seq:5341
-      - OTEL_EXPORTER_OTLP_ENDPOINT=http://seq:5341/ingest/otlp/v1/traces 
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://seq:5341/ingest/otlp/v1/traces
       - OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
     depends_on:
       - sqlserver
