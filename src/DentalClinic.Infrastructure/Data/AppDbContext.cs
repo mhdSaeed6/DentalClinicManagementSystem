@@ -5,6 +5,7 @@ using DentalClinic.Domain.Appointments;
 using DentalClinic.Domain.Doctors;
 using DentalClinic.Domain.Identity;
 using DentalClinic.Domain.Invoices;
+using DentalClinic.Domain.Odontograms;
 using DentalClinic.Domain.Patients;
 using DentalClinic.Domain.Services;
 using DentalClinic.Domain.TreatmentRecords;
@@ -35,6 +36,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> contextOptions) : Ident
     public DbSet<Payment> Payments => Set<Payment>();
 
     public DbSet<TreatmentRecord> TreatmentRecords => Set<TreatmentRecord>();
+
+    public DbSet<PatientTooth> PatientTeeth => Set<PatientTooth>();
 
     public override async Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
     {

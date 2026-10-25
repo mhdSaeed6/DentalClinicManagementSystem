@@ -381,6 +381,62 @@ namespace DentalClinic.Infrastructure.Data.Migrations
                     b.ToTable("Payments", (string)null);
                 });
 
+            modelBuilder.Entity("DentalClinic.Domain.Odontograms.PatientTooth", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("Condition")
+                        .HasColumnType("int");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTimeOffset?>("DeletedAtUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("LastModifiedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTimeOffset?>("LastModifiedUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<Guid>("PatientId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int?>("Surface")
+                        .HasColumnType("int");
+
+                    b.Property<int>("ToothNumber")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    SqlServerKeyBuilderExtensions.IsClustered(b.HasKey("Id"));
+
+                    b.HasIndex("PatientId");
+
+                    b.HasIndex("PatientId", "ToothNumber")
+                        .IsUnique()
+                        .HasFilter("[IsDeleted] = 0");
+
+                    b.ToTable("PatientTeeth", (string)null);
+                });
+
             modelBuilder.Entity("DentalClinic.Domain.Patients.Patient", b =>
                 {
                     b.Property<Guid>("Id")
@@ -833,6 +889,17 @@ namespace DentalClinic.Infrastructure.Data.Migrations
                         .HasForeignKey("InvoiceId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("DentalClinic.Domain.Odontograms.PatientTooth", b =>
+                {
+                    b.HasOne("DentalClinic.Domain.Patients.Patient", "Patient")
+                        .WithMany()
+                        .HasForeignKey("PatientId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Patient");
                 });
 
             modelBuilder.Entity("DentalClinic.Domain.Patients.Patient", b =>

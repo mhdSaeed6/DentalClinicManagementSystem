@@ -4,6 +4,7 @@ using DentalClinic.Domain.Appointments;
 using DentalClinic.Domain.Doctors;
 using DentalClinic.Domain.Identity;
 using DentalClinic.Domain.Invoices;
+using DentalClinic.Domain.Odontograms;
 using DentalClinic.Domain.Patients;
 using DentalClinic.Domain.Services;
 using DentalClinic.Domain.TreatmentRecords;
@@ -23,6 +24,7 @@ public interface IAppDbContext
     public DbSet<InvoiceLine> InvoiceLines { get; }
     public DbSet<Payment> Payments { get; }
     public DbSet<TreatmentRecord> TreatmentRecords { get; }
+    public DbSet<PatientTooth> PatientTeeth { get; }
     Task<int> SaveChangesAsync(CancellationToken cancellationToken);
     Task<IAppTransaction> BeginTransactionAsync(IsolationLevel isolationLevel, CancellationToken cancellationToken);
 }
