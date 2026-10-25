@@ -72,6 +72,11 @@ public static class ApplicationErrors
             code: "TreatmentRecord.ClinicalWriteForbidden",
             description: "Only administrators and doctors may modify clinical treatment records.");
 
+    public static Error ToothConditionConflict =>
+        Error.Conflict(
+            code: "Tooth.ConditionConflict",
+            description: "A condition already exists for this tooth.");
+
     public static Error InvalidRefreshToken =>
     Error.Validation(
         "RefreshToken.Expiry.Invalid",

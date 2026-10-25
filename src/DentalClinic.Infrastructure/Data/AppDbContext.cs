@@ -1,5 +1,6 @@
 using System.Data;
 
+using DentalClinic.Application.Common.Exceptions;
 using DentalClinic.Application.Common.Interfaces;
 using DentalClinic.Domain.Appointments;
 using DentalClinic.Domain.Doctors;
@@ -14,6 +15,7 @@ using DentalClinic.Infrastructure.Identity;
 using MediatR;
 
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 
 namespace DentalClinic.Infrastructure.Data;
@@ -41,7 +43,20 @@ public class AppDbContext(DbContextOptions<AppDbContext> contextOptions) : Ident
 
     public override async Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
     {
-        return await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+        try
+        {
+            return await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is SqlException { Number: 2601 or 2605 })
+        {
+            // Provider-neutral translation: the unique-index violation (the
+            // filtered index on (PatientId, ToothNumber)) becomes one typed
+            // exception so Application handlers can map it to a Result error
+            // without referencing the database driver. Concurrency
+            // (DbUpdateConcurrencyException) and every other failure pass
+            // through unchanged — only 2601/2605 are translated here.
+            throw new UniqueIndexViolationException(ex);
+        }
     }
 
     public async Task<IAppTransaction> BeginTransactionAsync(IsolationLevel isolationLevel, CancellationToken cancellationToken)
