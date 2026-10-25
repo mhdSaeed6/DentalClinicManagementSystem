@@ -1,5 +1,6 @@
 using DentalClinic.Domain.Appointments;
 using DentalClinic.Domain.Common.Results;
+using DentalClinic.Domain.Common.ValueObjects;
 using DentalClinic.Domain.Doctors;
 using DentalClinic.Domain.Patients;
 
@@ -48,7 +49,7 @@ public class TreatmentRecord : AuditableEntity
         decimal cost,
         Guid? appointmentId = null)
     {
-        // 1. التحقق من رقم السن عبر Private Method
+        // 1. التحقق من رقم السن عبر FdiTooth
         if (!IsValidToothNumber(toothNumber))
         {
             return TreatmentRecordErrors.InvalidToothNumber;
@@ -93,7 +94,7 @@ public class TreatmentRecord : AuditableEntity
         decimal cost,
         Guid? appointmentId = null)
     {
-        // 1. التحقق من رقم السن عبر Private Method
+        // 1. التحقق من رقم السن عبر FdiTooth
         if (!IsValidToothNumber(toothNumber))
         {
             return TreatmentRecordErrors.InvalidToothNumber;
@@ -132,18 +133,9 @@ public class TreatmentRecord : AuditableEntity
 
     // Helper Method للتحقق من أرقام الأسنان المقبولة (FDI).
     // Public so application validators reuse the single source of truth.
+    // Delegates to FdiTooth — the single canonical copy of FDI validation.
     public static bool IsValidToothNumber(int number)
     {
-        bool isPermanent = (number >= 11 && number <= 18) ||
-                            (number >= 21 && number <= 28) ||
-                            (number >= 31 && number <= 38) ||
-                            (number >= 41 && number <= 48);
-
-        bool isPediatric = (number >= 51 && number <= 55) ||
-                            (number >= 61 && number <= 65) ||
-                            (number >= 71 && number <= 75) ||
-                            (number >= 81 && number <= 85);
-
-        return isPermanent || isPediatric;
+        return FdiTooth.IsValidToothNumber(number);
     }
 }
