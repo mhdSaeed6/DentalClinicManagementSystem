@@ -104,6 +104,15 @@
                                         <button type="button" class="btn btn-success-soft btn-sm" @onclick="() => OpenComplete(appt)">
                                             <ClinicIcon Name="check" Class="sm" /> @Session.T("Complete", "إكمال")
                                         </button>
+                                        @if (Patient(appt.PatientId) is { } rowPatient)
+                                        {
+                                            <WhatsAppButton Phone="@rowPatient.PrimaryPhone"
+                                                            HasWhatsAppOnPrimary="@rowPatient.HasWhatsAppOnPrimary"
+                                                            Message="@ReminderMessage(appt)"
+                                                            Css="btn-ghost btn-icon">
+                                                <ClinicIcon Name="whatsapp" Class="sm" />
+                                            </WhatsAppButton>
+                                        }
                                         <button type="button" class="btn btn-ghost btn-icon" title="@Session.T("Reschedule", "إعادة جدولة")" @onclick="() => OpenReschedule(appt)">
                                             <ClinicIcon Name="refresh" Class="sm" />
                                         </button>
@@ -159,6 +168,18 @@
             </button>
         </div>
 
+        @* Medical alerts travel with the appointment so the doctor sees them
+           before the visit starts, without opening the patient file. *@
+        @if (Patient(appt.PatientId) is { } drawerPatient && (drawerPatient.MedicalHistory?.AlertSeverity ?? 0) != 0)
+        {
+            <div class="badge @ClinicFormatting.AlertCss(drawerPatient.MedicalHistory!.AlertSeverity) no-dot mb-3"
+                 style="display:flex;flex-wrap:wrap;gap:10px;padding:10px 14px;border-radius:11px;align-items:center">
+                <ClinicIcon Name="alert" Class="sm" />
+                <span class="fw-600">@ClinicFormatting.AlertLabel(drawerPatient.MedicalHistory!.AlertSeverity, Session.IsRtl)</span>
+                <span>@ClinicFormatting.MedicalFlagsSummary(drawerPatient.MedicalHistory, Session.IsRtl)</span>
+            </div>
+        }
+
         <div class="complete-summary mb-3">
             <div class="summary-cell">
                 <div class="label">@Session.T("When", "الموعد")</div>
@@ -187,6 +208,15 @@
                 <button type="button" class="btn btn-outline btn-sm" @onclick="RescheduleFromDetails">
                     <ClinicIcon Name="refresh" Class="sm" /> @Session.T("Reschedule", "إعادة جدولة")
                 </button>
+                @if (Patient(appt.PatientId) is { } drawerActionPatient)
+                {
+                    <WhatsAppButton Phone="@drawerActionPatient.PrimaryPhone"
+                                    HasWhatsAppOnPrimary="@drawerActionPatient.HasWhatsAppOnPrimary"
+                                    Message="@ReminderMessage(appt)"
+                                    Css="btn-ghost btn-sm">
+                        <ClinicIcon Name="whatsapp" Class="sm" /> WhatsApp
+                    </WhatsAppButton>
+                }
                 <button type="button" class="btn btn-warning-soft btn-sm" @onclick="NoShowFromDetails">
                     <ClinicIcon Name="user-x" Class="sm" /> @Session.T("No-show", "لم يحضر")
                 </button>
@@ -1318,6 +1348,33 @@
         _patients.FirstOrDefault(p => p.Id == id) is { } patient
             ? FullName(patient.FirstName, patient.LastName)
             : Session.T("Unknown patient", "مريض غير معروف");
+
+    /// <summary>Full record for a row's patient; null when outside the lookup page.</summary>
+    private PatientDto? Patient(Guid id) => _patients.FirstOrDefault(p => p.Id == id);
+
+    /// <summary>
+    /// Prepared reminder body for a scheduled appointment. Empty when the
+    /// patient is unknown (the button then does not render at all); the doctor
+    /// name is left blank rather than substituting the "Unassigned" fallback.
+    /// </summary>
+    private string ReminderMessage(AppointmentDto appt)
+    {
+        if (Patient(appt.PatientId) is not { } patient)
+        {
+            return string.Empty;
+        }
+
+        var doctorName = _doctors.FirstOrDefault(d => d.Id == appt.DoctorId) is { } doctor
+            ? FullName(doctor.FirstName, doctor.LastName)
+            : string.Empty;
+
+        return WhatsAppMessageBuilder.AppointmentReminderMessage(
+            Session.IsRtl,
+            FullName(patient.FirstName, patient.LastName),
+            appt.ScheduledDateTime,
+            appt.DurationInMinutes,
+            doctorName);
+    }
 
     private string DoctorName(Guid id) =>
         _doctors.FirstOrDefault(d => d.Id == id) is { } doctor

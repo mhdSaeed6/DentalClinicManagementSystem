@@ -82,9 +82,24 @@ public sealed class MedicalHistoryDto
 
     public bool HasHeartDisease { get; set; }
 
+    public bool HasBleedingDisorder { get; set; }
+
+    public bool HasEpilepsy { get; set; }
+
+    public bool HasAsthma { get; set; }
+
+    public bool IsPregnant { get; set; }
+
+    public int? PregnancyWeeks { get; set; }
+
+    public string? BloodPressureReading { get; set; }
+
     public string? Allergies { get; set; }
 
     public string? Notes { get; set; }
+
+    /// <summary>Server-computed MedicalAlertSeverity (0 = none, 1 = warning, 2 = critical).</summary>
+    public int AlertSeverity { get; set; }
 }
 
 public sealed class PatientDto
@@ -289,6 +304,36 @@ public sealed class AppointmentInvoiceBreakdownDto
     public bool HasBillableItems { get; set; }
 }
 
+/// <summary>Server-side money totals over issued invoices; never a client-side sum of one page.</summary>
+public sealed class InvoiceSummaryDto
+{
+    public int TotalInvoiceCount { get; set; }
+
+    public decimal TotalBilled { get; set; }
+
+    public decimal TotalPaid { get; set; }
+
+    public decimal TotalOutstanding { get; set; }
+
+    public int OpenInvoiceCount { get; set; }
+
+    public DateTimeOffset? OldestUnpaidInvoiceDateUtc { get; set; }
+}
+
+/// <summary>One debtor per row: money owed on issued invoices, grouped on the server.</summary>
+public sealed class OutstandingDebtDto
+{
+    public Guid PatientId { get; set; }
+
+    public string PatientName { get; set; } = string.Empty;
+
+    public int OpenInvoiceCount { get; set; }
+
+    public decimal TotalOutstanding { get; set; }
+
+    public DateTimeOffset? OldestOpenInvoiceDateUtc { get; set; }
+}
+
 public sealed class CompleteAppointmentWithDraftResultDto
 {
     public Guid AppointmentId { get; set; }
@@ -352,6 +397,18 @@ public sealed class MedicalHistoryRequest
     public bool HasHypertension { get; set; }
 
     public bool HasHeartDisease { get; set; }
+
+    public bool HasBleedingDisorder { get; set; }
+
+    public bool HasEpilepsy { get; set; }
+
+    public bool HasAsthma { get; set; }
+
+    public bool IsPregnant { get; set; }
+
+    public int? PregnancyWeeks { get; set; }
+
+    public string? BloodPressureReading { get; set; }
 
     public string? Allergies { get; set; }
 

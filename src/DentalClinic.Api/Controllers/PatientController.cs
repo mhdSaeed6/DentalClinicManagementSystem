@@ -7,6 +7,7 @@ using DentalClinic.Application.Features.Patients.Commands.CreatePatient;
 using DentalClinic.Application.Features.Patients.Commands.RemovePatient;
 using DentalClinic.Application.Features.Patients.Commands.UpdatePatient;
 using DentalClinic.Application.Features.Patients.Dtos;
+using DentalClinic.Application.Features.Patients.Queries.GetMedicalAlertsCount;
 using DentalClinic.Application.Features.Patients.Queries.GetPatientById;
 using DentalClinic.Application.Features.Patients.Queries.GetPatients;
 using DentalClinic.Contracts.Requests.Patients;
@@ -68,6 +69,23 @@ public class PatientController(ISender sender, IUser user) : ApiController
             Problem);
     }
 
+    [HttpGet("alerts-count")]
+    [ProducesResponseType(typeof(int), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
+    [EndpointSummary("Counts patients with medical alerts.")]
+    [EndpointDescription("Returns how many patients visible to the caller have any medical condition that requires attention, so dashboards render a server-computed figure instead of summing a page of results.")]
+    [EndpointName("GetMedicalAlertsCount")]
+    [MapToApiVersion("1.0")]
+    [ProducesDefaultResponseType]
+    public async Task<IActionResult> GetMedicalAlertsCount(CancellationToken ct)
+    {
+        var result = await sender.Send(new GetMedicalAlertsCountQuery(user.PatientScope()), ct);
+
+        return result.Match(
+            response => Ok(response),
+            Problem);
+    }
+
     [HttpPost]
     [ProducesResponseType(typeof(PatientDto), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
@@ -89,6 +107,12 @@ public class PatientController(ISender sender, IUser user) : ApiController
                 HasDiabetes = request.MedicalHistory.HasDiabetes,
                 HasHypertension = request.MedicalHistory.HasHypertension,
                 HasHeartDisease = request.MedicalHistory.HasHeartDisease,
+                HasBleedingDisorder = request.MedicalHistory.HasBleedingDisorder,
+                HasEpilepsy = request.MedicalHistory.HasEpilepsy,
+                HasAsthma = request.MedicalHistory.HasAsthma,
+                IsPregnant = request.MedicalHistory.IsPregnant,
+                PregnancyWeeks = request.MedicalHistory.PregnancyWeeks,
+                BloodPressureReading = request.MedicalHistory.BloodPressureReading,
                 Allergies = request.MedicalHistory.Allergies,
                 Notes = request.MedicalHistory.Notes
             }
@@ -138,6 +162,12 @@ public class PatientController(ISender sender, IUser user) : ApiController
                 HasDiabetes = request.MedicalHistory.HasDiabetes,
                 HasHypertension = request.MedicalHistory.HasHypertension,
                 HasHeartDisease = request.MedicalHistory.HasHeartDisease,
+                HasBleedingDisorder = request.MedicalHistory.HasBleedingDisorder,
+                HasEpilepsy = request.MedicalHistory.HasEpilepsy,
+                HasAsthma = request.MedicalHistory.HasAsthma,
+                IsPregnant = request.MedicalHistory.IsPregnant,
+                PregnancyWeeks = request.MedicalHistory.PregnancyWeeks,
+                BloodPressureReading = request.MedicalHistory.BloodPressureReading,
                 Allergies = request.MedicalHistory.Allergies,
                 Notes = request.MedicalHistory.Notes
             }

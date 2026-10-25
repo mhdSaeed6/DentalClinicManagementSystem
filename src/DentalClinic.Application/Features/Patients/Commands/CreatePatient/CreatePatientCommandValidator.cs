@@ -46,6 +46,19 @@ public sealed class CreatePatientCommandValidator : AbstractValidator<CreatePati
         RuleFor(x => x.MedicalHistory)
             .NotNull().WithMessage("Medical history is required.");
 
+        When(x => x.MedicalHistory.PregnancyWeeks.HasValue, () =>
+        {
+            RuleFor(x => x.MedicalHistory.PregnancyWeeks!.Value)
+                .InclusiveBetween(1, 45).WithMessage("Pregnancy weeks must be between 1 and 45.");
+        });
+
+        When(x => !string.IsNullOrWhiteSpace(x.MedicalHistory.BloodPressureReading), () =>
+        {
+            RuleFor(x => x.MedicalHistory.BloodPressureReading)
+                .MaximumLength(20).WithMessage("Blood pressure reading must not exceed 20 characters.")
+                .Matches(@"^\d{2,3}\s*/\s*\d{2,3}$").WithMessage("Blood pressure reading must be systolic/diastolic, e.g. 120/80.");
+        });
+
         When(x => !string.IsNullOrWhiteSpace(x.MedicalHistory.Allergies), () =>
         {
             RuleFor(x => x.MedicalHistory.Allergies)

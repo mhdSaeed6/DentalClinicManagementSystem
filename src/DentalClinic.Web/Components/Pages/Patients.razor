@@ -90,13 +90,12 @@
                                 <div class="cell-sub">@ClinicFormatting.GenderLabel(patient.Gender, Session.IsRtl)</div>
                             </td>
                             <td>
-                                @if (HasAlerts(patient))
+                                <div style="display:inline-block;margin-bottom:2px">
+                                    <MedicalAlertBadge Value="@(patient.MedicalHistory?.AlertSeverity ?? 0)" />
+                                </div>
+                                @if (!string.IsNullOrWhiteSpace(ClinicFormatting.MedicalFlagsSummary(patient.MedicalHistory, Session.IsRtl)))
                                 {
-                                    <span class="badge warning">@Alerts(patient)</span>
-                                }
-                                else
-                                {
-                                    <span class="badge success no-dot">@Session.T("Clear", "سليم")</span>
+                                    <div class="cell-sub">@ClinicFormatting.MedicalFlagsSummary(patient.MedicalHistory, Session.IsRtl)</div>
                                 }
                             </td>
                             <td>
@@ -181,9 +180,28 @@
     <div class="divider"></div>
     <h3 class="mb-2">@Session.T("Medical history", "التاريخ الطبي")</h3>
     <div class="flex gap-2 flex-wrap mb-3">
+        <label class="check"><input type="checkbox" @bind="_form.MedicalHistory.HasBleedingDisorder" /><span>@Session.T("Bleeding disorder", "اضطراب نزيف")</span></label>
         <label class="check"><input type="checkbox" @bind="_form.MedicalHistory.HasDiabetes" /><span>@Session.T("Diabetes", "سكري")</span></label>
         <label class="check"><input type="checkbox" @bind="_form.MedicalHistory.HasHypertension" /><span>@Session.T("Hypertension", "ضغط")</span></label>
         <label class="check"><input type="checkbox" @bind="_form.MedicalHistory.HasHeartDisease" /><span>@Session.T("Heart disease", "أمراض قلب")</span></label>
+        <label class="check"><input type="checkbox" @bind="_form.MedicalHistory.HasEpilepsy" /><span>@Session.T("Epilepsy", "صرع")</span></label>
+        <label class="check"><input type="checkbox" @bind="_form.MedicalHistory.HasAsthma" /><span>@Session.T("Asthma", "ربو")</span></label>
+        <label class="check"><input type="checkbox" @bind="_form.MedicalHistory.IsPregnant" /><span>@Session.T("Pregnant", "حامل")</span></label>
+    </div>
+    <div class="form-grid">
+        <div class="field">
+            <label class="label">@Session.T("Blood pressure (mmHg)", "قراءة الضغط (ملم زئبق)")</label>
+            <input type="text" class="input" @bind="_form.MedicalHistory.BloodPressureReading"
+                   placeholder="@Session.T("e.g. 120/80", "مثال: 120/80")" />
+            <span class="fs-xs text-soft">@Session.T("Optional — systolic/diastolic.", "اختياري — قياسي/انبساطي.")</span>
+        </div>
+        @if (_form.MedicalHistory.IsPregnant)
+        {
+            <div class="field">
+                <label class="label">@Session.T("Pregnancy week", "أسبوع الحمل")</label>
+                <input type="number" min="1" max="45" class="input" @bind="_form.MedicalHistory.PregnancyWeeks" />
+            </div>
+        }
     </div>
     <div class="field">
         <label class="label">@Session.T("Allergies", "الحساسية")</label>
@@ -341,6 +359,12 @@
                 HasDiabetes = patient.MedicalHistory?.HasDiabetes ?? false,
                 HasHypertension = patient.MedicalHistory?.HasHypertension ?? false,
                 HasHeartDisease = patient.MedicalHistory?.HasHeartDisease ?? false,
+                HasBleedingDisorder = patient.MedicalHistory?.HasBleedingDisorder ?? false,
+                HasEpilepsy = patient.MedicalHistory?.HasEpilepsy ?? false,
+                HasAsthma = patient.MedicalHistory?.HasAsthma ?? false,
+                IsPregnant = patient.MedicalHistory?.IsPregnant ?? false,
+                PregnancyWeeks = patient.MedicalHistory?.PregnancyWeeks,
+                BloodPressureReading = patient.MedicalHistory?.BloodPressureReading,
                 Allergies = patient.MedicalHistory?.Allergies,
                 Notes = patient.MedicalHistory?.Notes,
             },
@@ -433,22 +457,6 @@
     }
 
     private string FullName(PatientDto patient) => ClinicFormatting.FullName(patient.FirstName, patient.LastName);
-
-    private static bool HasAlerts(PatientDto patient) =>
-        patient.MedicalHistory is { } history &&
-        (history.HasDiabetes || history.HasHypertension || history.HasHeartDisease);
-
-    private string Alerts(PatientDto patient)
-    {
-        var history = patient.MedicalHistory;
-        var alerts = new List<string>();
-
-        if (history?.HasDiabetes == true) alerts.Add(Session.T("Diabetes", "سكري"));
-        if (history?.HasHypertension == true) alerts.Add(Session.T("Hypertension", "ضغط"));
-        if (history?.HasHeartDisease == true) alerts.Add(Session.T("Heart", "قلب"));
-
-        return string.Join(" · ", alerts);
-    }
 
     public void Dispose()
     {

@@ -12,13 +12,15 @@ public static class PatientFactory
         string lastName = "Doe",
         ContactInfo? contactInfo = null,
         DateTime? dateOfBirth = null,
-        Gender? gender = null)
+        Gender? gender = null,
+        MedicalHistory? medicalHistory = null)
     {
         return Patient.Create(
             firstName,
             lastName,
             contactInfo ?? ContactInfo.Create("741085207410", null, true, "koko.com").Value,
             dateOfBirth ?? DateTime.UtcNow.AddYears(-30),
-            gender ?? Gender.Male);
+            gender ?? Gender.Male,
+            medicalHistory);
     }
 }

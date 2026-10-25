@@ -44,10 +44,12 @@ else if (_patient is not null)
                     <span class="badge brand no-dot"><ClinicIcon Name="user" Class="sm" /> @ClinicFormatting.GenderLabel(_patient.Gender, Session.IsRtl)</span>
                     <span class="badge muted no-dot"><ClinicIcon Name="calendar" Class="sm" /> @ClinicFormatting.Age(_patient.DateOfBirth) @Session.T("years", "سنة")</span>
                     <span class="badge muted no-dot"><ClinicIcon Name="phone" Class="sm" /> @_patient.PrimaryPhone</span>
-                    @if (_patient.HasWhatsAppOnPrimary)
-                    {
-                        <span class="badge success no-dot"><ClinicIcon Name="whatsapp" Class="sm" /> WhatsApp</span>
-                    }
+                    <WhatsAppButton Phone="@_patient.PrimaryPhone"
+                                    HasWhatsAppOnPrimary="_patient.HasWhatsAppOnPrimary"
+                                    Message="@GeneralWhatsAppMessage"
+                                    Css="btn-success-soft">
+                        <ClinicIcon Name="whatsapp" Class="sm" /> WhatsApp
+                    </WhatsAppButton>
                 </div>
             </div>
             <div class="spacer" style="flex:1"></div>
@@ -95,13 +97,13 @@ else if (_patient is not null)
                     </div>
                     <div class="stat blue">
                         <div class="stat-icon"><ClinicIcon Name="invoice" /></div>
-                        <div class="stat-value">@ClinicFormatting.Money(_invoices.Sum(i => i.TotalAmount))</div>
-                        <div class="stat-label">@Session.T("Total billed", "إجمالي الفواتير")</div>
+                        <div class="stat-value">@ClinicFormatting.Money(_invoiceSummary?.TotalBilled ?? 0)</div>
+                        <div class="stat-label">@Session.T("Total billed (issued)", "إجمالي الفواتير (صادرة)")</div>
                     </div>
                     <div class="stat amber">
                         <div class="stat-icon"><ClinicIcon Name="wallet" /></div>
-                        <div class="stat-value">@ClinicFormatting.Money(_invoices.Sum(i => i.RemainingAmount))</div>
-                        <div class="stat-label">@Session.T("Balance due", "الرصيد المستحق")</div>
+                        <div class="stat-value">@ClinicFormatting.Money(_invoiceSummary?.TotalOutstanding ?? 0)</div>
+                        <div class="stat-label">@Session.T("Balance due (issued)", "الرصيد المستحق (صادرة)")</div>
                     </div>
                 </div>
 
@@ -109,24 +111,35 @@ else if (_patient is not null)
                     <div class="card-header">
                         <div class="card-title">@Session.T("Medical history", "التاريخ الطبي")</div>
                         <div class="spacer"></div>
-                        @if (HasAlerts)
-                        {
-                            <span class="badge warning">@Session.T("Attention needed", "يتطلب انتباهاً")</span>
-                        }
-                        else
-                        {
-                            <span class="badge success">@Session.T("No alerts", "لا تنبيهات")</span>
-                        }
+                        <MedicalAlertBadge Value="@(_patient.MedicalHistory?.AlertSeverity ?? 0)" />
                     </div>
                     <div class="card-body">
                         <div class="flex gap-2 flex-wrap mb-3">
                             <span class="chip @(Med("diabetes") ? "active" : "")"><ClinicIcon Name="droplet" Class="sm" /> @Session.T("Diabetes", "سكري")</span>
                             <span class="chip @(Med("bp") ? "active" : "")"><ClinicIcon Name="activity" Class="sm" /> @Session.T("Hypertension", "ضغط")</span>
                             <span class="chip @(Med("heart") ? "active" : "")"><ClinicIcon Name="heart" Class="sm" /> @Session.T("Heart disease", "أمراض قلب")</span>
+                            <span class="chip @(Med("bleeding") ? "active" : "")"><ClinicIcon Name="alert" Class="sm" /> @Session.T("Bleeding disorder", "اضطراب نزيف")</span>
+                            <span class="chip @(Med("epilepsy") ? "active" : "")"><ClinicIcon Name="activity" Class="sm" /> @Session.T("Epilepsy", "صرع")</span>
+                            <span class="chip @(Med("asthma") ? "active" : "")"><ClinicIcon Name="droplet" Class="sm" /> @Session.T("Asthma", "ربو")</span>
+                            <span class="chip @(Med("pregnancy") ? "active" : "")"><ClinicIcon Name="user" Class="sm" /> @Session.T("Pregnancy", "حمل")</span>
                         </div>
                         <dl class="kv">
                             <dt>@Session.T("Allergies", "الحساسية")</dt>
                             <dd>@(string.IsNullOrWhiteSpace(_patient.MedicalHistory?.Allergies) ? Session.T("None recorded", "لا يوجد") : _patient.MedicalHistory!.Allergies)</dd>
+                            <dt>@Session.T("Blood pressure", "قراءة الضغط")</dt>
+                            <dd>
+                                @if (!string.IsNullOrWhiteSpace(_patient.MedicalHistory?.BloodPressureReading))
+                                {
+                                    <span class="mono">@_patient.MedicalHistory!.BloodPressureReading</span>
+                                    @(BpNote(_patient.MedicalHistory.BloodPressureReading))
+                                }
+                                else
+                                {
+                                    <span>—</span>
+                                }
+                            </dd>
+                            <dt>@Session.T("Pregnancy week", "أسبوع الحمل")</dt>
+                            <dd>@(_patient.MedicalHistory?.PregnancyWeeks is { } weeks ? weeks.ToString() : "—")</dd>
                             <dt>@Session.T("Notes", "ملاحظات")</dt>
                             <dd>@(string.IsNullOrWhiteSpace(_patient.MedicalHistory?.Notes) ? "—" : _patient.MedicalHistory!.Notes)</dd>
                         </dl>
@@ -250,8 +263,7 @@ else if (_patient is not null)
     private List<AppointmentDto> _appointments = [];
     private List<TreatmentRecordDto> _treatments = [];
     private List<InvoiceDto> _invoices = [];
-
-    private bool HasAlerts => _patient?.MedicalHistory is { } h && (h.HasDiabetes || h.HasHypertension || h.HasHeartDisease);
+    private InvoiceSummaryDto? _invoiceSummary;
 
     protected override async Task OnInitializedAsync()
     {
@@ -263,8 +275,9 @@ else if (_patient is not null)
             var appointmentsTask = Api.GetAppointmentsAsync(1, 100, patientId: Id);
             var treatmentsTask = Api.GetTreatmentRecordsAsync(1, 100, patientId: Id);
             var invoicesTask = Api.GetInvoicesAsync(1, 100, patientId: Id);
+            var summaryTask = Api.GetInvoiceSummaryAsync(Id);
 
-            await Task.WhenAll(patientTask, doctorsTask, servicesTask, appointmentsTask, treatmentsTask, invoicesTask);
+            await Task.WhenAll(patientTask, doctorsTask, servicesTask, appointmentsTask, treatmentsTask, invoicesTask, summaryTask);
 
             _patient = await patientTask;
             _doctors = (await doctorsTask).Items ?? [];
@@ -272,6 +285,7 @@ else if (_patient is not null)
             _appointments = (await appointmentsTask).Items ?? [];
             _treatments = (await treatmentsTask).Items ?? [];
             _invoices = (await invoicesTask).Items ?? [];
+            _invoiceSummary = await summaryTask;
         }
         catch (ApiException ex)
         {
@@ -286,6 +300,9 @@ else if (_patient is not null)
             _loading = false;
         }
     }
+
+    private string GeneralWhatsAppMessage =>
+        WhatsAppMessageBuilder.GeneralContactMessage(Session.IsRtl, FullName(_patient!));
 
     private string FullName(PatientDto patient) => ClinicFormatting.FullName(patient.FirstName, patient.LastName);
 
@@ -304,6 +321,35 @@ else if (_patient is not null)
         "diabetes" => _patient?.MedicalHistory?.HasDiabetes == true,
         "bp" => _patient?.MedicalHistory?.HasHypertension == true,
         "heart" => _patient?.MedicalHistory?.HasHeartDisease == true,
+        "bleeding" => _patient?.MedicalHistory?.HasBleedingDisorder == true,
+        "epilepsy" => _patient?.MedicalHistory?.HasEpilepsy == true,
+        "asthma" => _patient?.MedicalHistory?.HasAsthma == true,
+        "pregnancy" => _patient?.MedicalHistory?.IsPregnant == true,
         _ => false,
     };
+
+    /// <summary>
+    /// Short extra note next to a stored blood-pressure reading. Local copy of
+    /// the parser thresholds in MedicalAlertEvaluator (Web has no Domain ref).
+    /// </summary>
+    private string BpNote(string reading)
+    {
+        var parts = reading.Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (parts.Length == 2
+            && int.TryParse(parts[0], out var systolic)
+            && int.TryParse(parts[1], out var diastolic))
+        {
+            if (systolic >= 180 || diastolic >= 120)
+            {
+                return Session.T("— critically high, consult a doctor first", "— مرتفع بشكل حرج، استشر الطبيب أولاً");
+            }
+
+            if (systolic >= 140 || diastolic >= 90)
+            {
+                return Session.T("— above normal, monitor", "— أعلى من المعدل الطبيعي، يُراقَب");
+            }
+        }
+
+        return string.Empty;
+    }
 }

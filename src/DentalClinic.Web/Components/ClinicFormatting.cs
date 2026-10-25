@@ -98,6 +98,88 @@ public static class ClinicFormatting
         _ => arabic ? "غير معروف" : "Unknown",
     };
 
+    /// <summary>
+    /// Label for the pharmacy-free <c>MedicalAlertSeverity</c> value the API
+    /// computes on <c>Patient.MedicalHistory</c> (0 = none, 1 = warning, 2 = critical).
+    /// </summary>
+    public static string AlertLabel(int severity, bool arabic) => severity switch
+    {
+        2 => arabic ? "حرج — استشر الطبيب قبل العلاج" : "Critical — check before treatment",
+        1 => arabic ? "يتطلب انتباهاً" : "Attention needed",
+        _ => arabic ? "سليم" : "Clear",
+    };
+
+    public static string AlertCss(int severity) => severity switch
+    {
+        2 => "danger",
+        1 => "warning",
+        _ => "success",
+    };
+
+    /// <summary>
+    /// One-line summary of the flags that drive the alert (empty string when
+    /// there are none) — used by list rows and the appointment drawer so the
+    /// "why" behind the badge is visible at a glance.
+    /// </summary>
+    public static string MedicalFlagsSummary(MedicalHistoryDto? history, bool arabic)
+    {
+        if (history is null)
+        {
+            return string.Empty;
+        }
+
+        var flags = new List<string>();
+
+        if (history.HasBleedingDisorder)
+        {
+            flags.Add(arabic ? "اضطراب نزيف" : "Bleeding disorder");
+        }
+
+        if (history.HasDiabetes)
+        {
+            flags.Add(arabic ? "سكري" : "Diabetes");
+        }
+
+        if (history.HasHypertension)
+        {
+            flags.Add(arabic ? "ضغط مرتفع" : "Hypertension");
+        }
+
+        if (history.HasHeartDisease)
+        {
+            flags.Add(arabic ? "أمراض قلب" : "Heart disease");
+        }
+
+        if (history.HasEpilepsy)
+        {
+            flags.Add(arabic ? "صرع" : "Epilepsy");
+        }
+
+        if (history.HasAsthma)
+        {
+            flags.Add(arabic ? "ربو" : "Asthma");
+        }
+
+        if (history.IsPregnant)
+        {
+            flags.Add(history.PregnancyWeeks is { } weeks
+                ? $"{(arabic ? "حمل" : "Pregnancy")} ({(arabic ? "الأسبوع " : "week ")}{weeks})"
+                : arabic ? "حمل" : "Pregnancy");
+        }
+
+        if (!string.IsNullOrWhiteSpace(history.BloodPressureReading))
+        {
+            flags.Add($"{(arabic ? "ضغط" : "BP")} {history.BloodPressureReading}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(history.Allergies))
+        {
+            flags.Add($"{(arabic ? "حساسية" : "Allergies")}: {history.Allergies}");
+        }
+
+        return string.Join(" · ", flags);
+    }
+
     public static string PaymentCss(PaymentStatus status) => status switch
     {
         PaymentStatus.Unpaid => "danger",

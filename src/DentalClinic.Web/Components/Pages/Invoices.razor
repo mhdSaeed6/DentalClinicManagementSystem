@@ -24,22 +24,22 @@
 <div class="stat-grid">
     <div class="stat teal">
         <div class="stat-icon"><ClinicIcon Name="invoice" /></div>
-        <div class="stat-value">@_invoices.Count</div>
-        <div class="stat-label">@Session.T("Invoices loaded", "الفواتير المحمّلة")</div>
+        <div class="stat-value">@_total</div>
+        <div class="stat-label">@Session.T("Invoices", "الفواتير")</div>
     </div>
     <div class="stat green">
         <div class="stat-icon"><ClinicIcon Name="wallet" /></div>
-        <div class="stat-value">@ClinicFormatting.Money(_invoices.Sum(i => i.PaidAmount))</div>
-        <div class="stat-label">@Session.T("Collected", "المحصّل")</div>
+        <div class="stat-value">@ClinicFormatting.Money(_summary?.TotalPaid ?? 0)</div>
+        <div class="stat-label">@Session.T("Collected (issued)", "المحصّل (صادرة)")</div>
     </div>
     <div class="stat amber">
         <div class="stat-icon"><ClinicIcon Name="alert" /></div>
-        <div class="stat-value">@ClinicFormatting.Money(_invoices.Sum(i => i.RemainingAmount))</div>
-        <div class="stat-label">@Session.T("Outstanding", "المستحق")</div>
+        <div class="stat-value">@ClinicFormatting.Money(_summary?.TotalOutstanding ?? 0)</div>
+        <div class="stat-label">@Session.T("Outstanding (issued)", "المستحق (صادرة)")</div>
     </div>
     <div class="stat rose">
         <div class="stat-icon"><ClinicIcon Name="clock" /></div>
-        <div class="stat-value">@_invoices.Count(i => i.Status != PaymentStatus.Paid)</div>
+        <div class="stat-value">@(_summary?.OpenInvoiceCount ?? 0)</div>
         <div class="stat-label">@Session.T("Open invoices", "فواتير مفتوحة")</div>
     </div>
 </div>
@@ -374,6 +374,7 @@
     private List<InvoiceDto> _invoices = [];
     private List<PatientDto> _patients = [];
     private List<DentalServiceDto> _services = [];
+    private InvoiceSummaryDto? _summary;
     private int _page = 1;
     private int _pageSize = 10;
     private int _total;
@@ -447,15 +448,24 @@
         StateHasChanged();
         try
         {
-            var result = await Api.GetInvoicesAsync(_page, _pageSize, _patientFilter);
+            // The page and the aggregated money totals are fetched together;
+            // the totals are computed by the server over the full matching
+            // set, so they stay correct past one page of invoices.
+            var listTask = Api.GetInvoicesAsync(_page, _pageSize, _patientFilter);
+            var summaryTask = Api.GetInvoiceSummaryAsync(_patientFilter);
+            await Task.WhenAll(listTask, summaryTask);
+
+            var result = await listTask;
             _invoices = result.Items ?? [];
             _total = result.TotalCount;
             _totalPages = result.TotalPages;
+            _summary = await summaryTask;
         }
         catch (ApiException ex)
         {
             Notifier.Error(Session.T("Could not load invoices", "تعذّر تحميل الفواتير"), ex.Message);
             _invoices = [];
+            _summary = null;
         }
         finally
         {

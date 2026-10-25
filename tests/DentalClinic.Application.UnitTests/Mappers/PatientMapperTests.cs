@@ -33,8 +33,49 @@ public class PatientMapperTests
         Assert.Equal(patient.MedicalHistory.HasDiabetes, dto.MedicalHistory.HasDiabetes);
         Assert.Equal(patient.MedicalHistory.HasHypertension, dto.MedicalHistory.HasHypertension);
         Assert.Equal(patient.MedicalHistory.HasHeartDisease, dto.MedicalHistory.HasHeartDisease);
+
+        // New alert fields round-trip and the severity comes from the domain rule.
+        Assert.Equal(patient.MedicalHistory.HasBleedingDisorder, dto.MedicalHistory.HasBleedingDisorder);
+        Assert.Equal(patient.MedicalHistory.HasEpilepsy, dto.MedicalHistory.HasEpilepsy);
+        Assert.Equal(patient.MedicalHistory.HasAsthma, dto.MedicalHistory.HasAsthma);
+        Assert.Equal(patient.MedicalHistory.IsPregnant, dto.MedicalHistory.IsPregnant);
+        Assert.Equal(patient.MedicalHistory.PregnancyWeeks, dto.MedicalHistory.PregnancyWeeks);
+        Assert.Equal(patient.MedicalHistory.BloodPressureReading, dto.MedicalHistory.BloodPressureReading);
         Assert.Equal(patient.MedicalHistory.Allergies, dto.MedicalHistory.Allergies);
         Assert.Equal(patient.MedicalHistory.Notes, dto.MedicalHistory.Notes);
+        Assert.Equal((int)patient.MedicalHistory.AlertSeverity, dto.MedicalHistory.AlertSeverity);
+    }
+
+    [Fact]
+    public void ToDto_ShouldMapSeverity_CriticalForBleedingDisorder()
+    {
+        // Arrange
+        var patient = PatientFactory.CreatePatient(
+            medicalHistory: new MedicalHistory { HasBleedingDisorder = true }).Value;
+
+        // Act
+        var dto = patient.ToDto();
+
+        // Assert
+        Assert.Equal((int)MedicalAlertSeverity.Critical, dto.MedicalHistory.AlertSeverity);
+    }
+
+    [Fact]
+    public void ToDto_ShouldMapSeverity_WarningForBloodPressure()
+    {
+        // Arrange — same shape as the seeded demo patient Michael.
+        var patient = PatientFactory.CreatePatient(
+            medicalHistory: new MedicalHistory
+            {
+                HasDiabetes = true,
+                BloodPressureReading = "148/92",
+            }).Value;
+
+        // Act
+        var dto = patient.ToDto();
+
+        // Assert
+        Assert.Equal((int)MedicalAlertSeverity.Warning, dto.MedicalHistory.AlertSeverity);
     }
 
     [Fact]

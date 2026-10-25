@@ -1,0 +1,42 @@
+@namespace DentalClinic.Web.Components.Shared
+@inject ClinicSessionState Session
+
+@if (Link is not null)
+{
+    <a class="btn @Css btn-sm" href="@Link" target="_blank" rel="noopener" title="@ResolvedTitle">@ChildContent</a>
+}
+else
+{
+    <button type="button" class="btn @Css btn-sm" disabled title="@ResolvedTitle">@ChildContent</button>
+}
+
+@code {
+    /// <summary>The patient's stored primary phone; may be raw/unnormalised.</summary>
+    [Parameter] public string? Phone { get; set; }
+
+    /// <summary>Whether the stored number was flagged as WhatsApp-enabled.</summary>
+    [Parameter] public bool HasWhatsAppOnPrimary { get; set; } = true;
+
+    /// <summary>Prepared message body (already in the session's language).</summary>
+    [Parameter] public string Message { get; set; } = string.Empty;
+
+    /// <summary>Additional button classes, e.g. <c>btn-icon</c> for an icon-only button.</summary>
+    [Parameter] public string Css { get; set; } = "btn-success-soft";
+
+    [Parameter] public string? Title { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private string? Link =>
+        HasWhatsAppOnPrimary && !string.IsNullOrWhiteSpace(Message)
+            ? WhatsAppMessageBuilder.TryBuildUrl(Phone, Message)
+            : null;
+
+    private string ResolvedTitle => Title is not null
+        ? Title
+        : Link is not null
+            ? Session.T("Send on WhatsApp", "إرسال عبر واتساب")
+            : !HasWhatsAppOnPrimary
+                ? Session.T("No WhatsApp on this number", "لا يوجد واتساب على هذا الرقم")
+                : Session.T("This phone number cannot open WhatsApp", "هذا الرقم لا يمكن فتح واتساب عبره");
+}

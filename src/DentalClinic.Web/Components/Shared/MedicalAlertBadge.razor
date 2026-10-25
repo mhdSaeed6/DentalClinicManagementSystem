@@ -1,0 +1,11 @@
+@namespace DentalClinic.Web.Components.Shared
+@inject ClinicSessionState Session
+
+<span class="badge @ClinicFormatting.AlertCss(Value)">
+    @ClinicFormatting.AlertLabel(Value, Session.IsRtl)
+</span>
+
+@code {
+    /// <summary><see cref="Domain.Patients.MedicalAlertSeverity"/> value from the API (0 = none, 1 = warning, 2 = critical).</summary>
+    [Parameter] public int Value { get; set; }
+}
