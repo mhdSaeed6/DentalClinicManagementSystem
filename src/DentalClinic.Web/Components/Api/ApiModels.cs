@@ -369,6 +369,69 @@ public sealed class TreatmentRecordDto
 }
 
 // ---------------------------------------------------------------------------
+// Odontograms
+// ---------------------------------------------------------------------------
+
+public enum ToothCondition
+{
+    Healthy,
+    Caries,
+    Filled,
+    Crown,
+    Bridge,
+    Implant,
+    Extracted,
+    Missing,
+}
+
+public enum ToothSurface
+{
+    Occlusal,
+    Mesial,
+    Distal,
+    Buccal,
+    Lingual,
+    Incisal,
+}
+
+public sealed class PatientOdontogramDto
+{
+    public Guid PatientId { get; set; }
+
+    public List<PatientToothSummaryDto> Teeth { get; set; } = [];
+
+    public List<ToothHistoryDto> History { get; set; } = [];
+}
+
+public sealed class PatientToothSummaryDto
+{
+    public int ToothNumber { get; set; }
+
+    public ToothCondition Condition { get; set; }
+
+    public ToothSurface? Surface { get; set; }
+
+    public string? Notes { get; set; }
+
+    public DateTimeOffset? LastModifiedUtc { get; set; }
+}
+
+public sealed class ToothHistoryDto
+{
+    public int ToothNumber { get; set; }
+
+    public Guid TreatmentRecordId { get; set; }
+
+    public DateTimeOffset RecordedAtUtc { get; set; }
+
+    public Guid DoctorId { get; set; }
+
+    public string ProcedureDetails { get; set; } = string.Empty;
+
+    public decimal Cost { get; set; }
+}
+
+// ---------------------------------------------------------------------------
 // Request payloads
 // ---------------------------------------------------------------------------
 
@@ -538,4 +601,13 @@ public sealed class TreatmentRecordFormRequest
     public string ProcedureDetails { get; set; } = string.Empty;
 
     public decimal Cost { get; set; }
+}
+
+public sealed class UpsertToothConditionRequest
+{
+    public ToothCondition Condition { get; set; }
+
+    public ToothSurface? Surface { get; set; }
+
+    public string? Notes { get; set; }
 }

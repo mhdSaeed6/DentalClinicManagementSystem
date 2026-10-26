@@ -1,0 +1,444 @@
+@inject ApiClient Api
+@inject ClinicSessionState Session
+@inject NotificationService Notifier
+
+<div class="card odontogram">
+    <div class="card-header">
+        <div>
+            <div class="card-title">@Session.T("Odontogram", "مخطط الأسنان")</div>
+            <div class="text-muted fs-sm">@Session.T("Click a tooth to view or edit its condition.", "اضغط على السن لعرض حالته أو تعديلها.")</div>
+        </div>
+        <div class="spacer"></div>
+        <button type="button" class="icon-btn" disabled="@_loading"
+                title="@Session.T("Refresh odontogram", "تحديث مخطط الأسنان")"
+                aria-label="@Session.T("Refresh odontogram", "تحديث مخطط الأسنان")"
+                @onclick="RefreshAsync">
+            <ClinicIcon Name="refresh" />
+        </button>
+    </div>
+    <div class="card-body">
+        @if (_loading)
+        {
+            <div class="page-loading"><span class="spinner lg"></span></div>
+        }
+        else if (_error is not null)
+        {
+            <EmptyState Icon="alert" Title="@Session.T("Unable to load odontogram", "تعذّر تحميل مخطط الأسنان")" Message="@_error">
+                <ActionContent>
+                    <button type="button" class="btn btn-primary" @onclick="RefreshAsync">
+                        <ClinicIcon Name="refresh" Class="sm" /> @Session.T("Try again", "حاول مرة أخرى")
+                    </button>
+                </ActionContent>
+            </EmptyState>
+        }
+        else
+        {
+            <div class="odontogram-legend" aria-label="@Session.T("Tooth condition legend", "دليل حالات الأسنان")">
+                @foreach (var condition in Enum.GetValues<ToothCondition>())
+                {
+                    <span class="odontogram-legend-item">
+                        <span class="odontogram-swatch od-@ToothConditionStyle.CssSuffix(condition)"></span>
+                        @ToothConditionStyle.Label(condition, Session.IsRtl)
+                    </span>
+                }
+            </div>
+
+            <div class="odontogram-row-label">@Session.T("Upper teeth", "الأسنان العلوية")</div>
+            <div class="odontogram-grid">
+                @foreach (var toothNumber in UpperTeeth)
+                {
+                    <button type="button" class="@ToothCss(toothNumber)"
+                            title="@ToothHint(toothNumber)"
+                            aria-label="@ToothHint(toothNumber)"
+                            aria-pressed="@AriaPressed(toothNumber)"
+                            @onclick="() => OpenTooth(toothNumber)">
+                        <span>@toothNumber</span>
+                        @if (HasHistory(toothNumber))
+                        {
+                            <span class="odontogram-history-dot" title="@Session.T("Treatment history", "سجل علاجي")"></span>
+                        }
+                    </button>
+                }
+            </div>
+
+            <div class="odontogram-row-label">@Session.T("Lower teeth", "الأسنان السفلية")</div>
+            <div class="odontogram-grid">
+                @foreach (var toothNumber in LowerTeeth)
+                {
+                    <button type="button" class="@ToothCss(toothNumber)"
+                            title="@ToothHint(toothNumber)"
+                            aria-label="@ToothHint(toothNumber)"
+                            aria-pressed="@AriaPressed(toothNumber)"
+                            @onclick="() => OpenTooth(toothNumber)">
+                        <span>@toothNumber</span>
+                        @if (HasHistory(toothNumber))
+                        {
+                            <span class="odontogram-history-dot" title="@Session.T("Treatment history", "سجل علاجي")"></span>
+                        }
+                    </button>
+                }
+            </div>
+        }
+    </div>
+</div>
+
+<Drawer IsOpen="_drawerOpen"
+        Title="@Session.T($"Tooth {_selectedTooth}", $"السن {_selectedTooth}")"
+        Subtitle="@ToothLabel"
+        Icon="tooth"
+        OnClose="CloseDrawer">
+    <ChildContent>
+        @if (_selectedTooth is not null)
+        {
+            <div class="tooth-drawer-head od-@ToothConditionStyle.CssSuffix(_condition)">
+                <div class="tooth-drawer-number">@_selectedTooth</div>
+                <div>
+                    <div class="tooth-drawer-condition">@SelectedConditionLabel</div>
+                    <div class="tooth-drawer-meta">
+                        @if (IsDirty)
+                        {
+                            <span class="text-muted fs-sm">@Session.T("Unsaved changes", "تغييرات غير محفوظة")</span>
+                        }
+                        else if (SelectedState?.LastModifiedUtc is { } modified)
+                        {
+                            <span class="text-muted fs-sm">@Session.T("Last modified", "آخر تعديل"): @ClinicFormatting.DateTimeLabel(modified.LocalDateTime)</span>
+                        }
+                        else
+                        {
+                            <span class="text-muted fs-sm">@Session.T("No condition recorded yet", "لا توجد حالة مسجلة بعد")</span>
+                        }
+                    </div>
+                </div>
+            </div>
+
+            <div class="field">
+                <label>@Session.T("Condition", "الحالة")</label>
+                <div class="chip-row" role="radiogroup" aria-label="@Session.T("Condition", "الحالة")">
+                    @foreach (var condition in Enum.GetValues<ToothCondition>())
+                    {
+                        <button type="button"
+                                class="condition-chip @(_condition == condition ? "selected" : "")"
+                                aria-pressed="@(_condition == condition ? "true" : "false")"
+                                @onclick="() => SetCondition(condition)">
+                            <span class="odontogram-swatch od-@ToothConditionStyle.CssSuffix(condition)"></span>
+                            @ToothConditionStyle.Label(condition, Session.IsRtl)
+                        </button>
+                    }
+                </div>
+            </div>
+
+            <div class="field">
+                <label>@Session.T("Surface", "السطح")</label>
+                <div class="chip-row" role="radiogroup" aria-label="@Session.T("Surface", "السطح")">
+                    <button type="button"
+                            class="surface-chip @(_surface is null ? "selected" : "")"
+                            aria-pressed="@(_surface is null ? "true" : "false")"
+                            @onclick="() => SetSurface(null)">
+                        @Session.T("Not specified", "غير محدد")
+                    </button>
+                    @foreach (var surface in Enum.GetValues<ToothSurface>())
+                    {
+                        <button type="button"
+                                class="surface-chip @(_surface == surface ? "selected" : "")"
+                                aria-pressed="@(_surface == surface ? "true" : "false")"
+                                @onclick="() => SetSurface(surface)">
+                            @ToothConditionStyle.SurfaceLabel(surface, Session.IsRtl)
+                        </button>
+                    }
+                </div>
+            </div>
+
+            <div class="field">
+                <label>@Session.T("Notes", "ملاحظات")</label>
+                <textarea rows="4" maxlength="500" @bind="_notes" @bind:event="oninput"></textarea>
+                <div class="text-muted fs-sm notes-counter">@(_notes?.Length ?? 0) / 500</div>
+            </div>
+
+            @if (SelectedHistory.Count > 0)
+            {
+                <div class="odontogram-history">
+                    <h3>@Session.T("Treatment history", "السجل العلاجي")</h3>
+                    @foreach (var history in SelectedHistory.OrderByDescending(item => item.RecordedAtUtc))
+                    {
+                        <div class="odontogram-history-item">
+                            <div class="flex justify-between gap-2">
+                                <strong>@history.ProcedureDetails</strong>
+                                <span class="mono">@ClinicFormatting.Money(history.Cost)</span>
+                            </div>
+                            <div class="text-muted fs-sm">@ClinicFormatting.DateTimeLabel(history.RecordedAtUtc.LocalDateTime)</div>
+                        </div>
+                    }
+                </div>
+            }
+            else
+            {
+                <div class="text-muted fs-sm mt-3">@Session.T("No treatment history for this tooth.", "لا يوجد سجل علاجي لهذا السن.")</div>
+            }
+        }
+    </ChildContent>
+    <Footer>
+        <button type="button" class="btn btn-danger" @onclick="AskClearAsync" disabled="@(!HasStoredCondition || _saving)">
+            @Session.T("Clear", "مسح")
+        </button>
+        <div class="spacer"></div>
+        <button type="button" class="btn btn-ghost" @onclick="CloseDrawer">@Session.T("Cancel", "إلغاء")</button>
+        <button type="button" class="btn btn-primary" @onclick="SaveAsync" disabled="@(!IsDirty || _saving)">
+            @if (_saving)
+            {
+                <span class="spinner"></span>
+            }
+            else
+            {
+                <ClinicIcon Name="check" Class="sm" />
+            }
+            @Session.T("Save", "حفظ")
+        </button>
+    </Footer>
+</Drawer>
+
+<ConfirmDialog IsOpen="_confirmOpen"
+               Title="@Session.T("Clear tooth condition", "مسح حالة السن")"
+               Message="@Session.T($"Clear the condition for tooth {_selectedTooth}?", $"هل تريد مسح حالة السن {_selectedTooth}؟")"
+               ConfirmLabel="@Session.T("Clear", "مسح")"
+               CancelLabel="@Session.T("Cancel", "إلغاء")"
+               OnConfirm="ClearAsync"
+               OnCancel="() => _confirmOpen = false" />
+
+@code {
+    [Parameter] public Guid PatientId { get; set; }
+
+    private static readonly int[] UpperTeeth = [18, 17, 16, 15, 14, 13, 12, 11, 21, 22, 23, 24, 25, 26, 27, 28];
+    private static readonly int[] LowerTeeth = [48, 47, 46, 45, 44, 43, 42, 41, 31, 32, 33, 34, 35, 36, 37, 38];
+
+    private PatientOdontogramDto? _odontogram;
+    private bool _loading = true;
+    private bool _saving;
+    private bool _drawerOpen;
+    private bool _confirmOpen;
+    private string? _error;
+    private int? _selectedTooth;
+    private ToothCondition _condition;
+    private ToothSurface? _surface;
+    private string? _notes;
+
+    private string SelectedConditionLabel =>
+        ToothConditionStyle.Label(_condition, Session.IsRtl);
+
+    private string ToothLabel =>
+        _selectedTooth is { } tooth ? ClinicFormatting.ToothLabel(tooth) : string.Empty;
+
+    private PatientToothSummaryDto? SelectedState =>
+        _selectedTooth is { } tooth
+            ? _odontogram?.Teeth.FirstOrDefault(item => item.ToothNumber == tooth)
+            : null;
+
+    private bool HasStoredCondition => SelectedState is not null;
+
+    /// <summary>
+    /// True when the form differs from the stored state; a fresh tooth counts as
+    /// unchanged while it still holds the defaults, so Save stays disabled until
+    /// the dentist actually picks something.
+    /// </summary>
+    private bool IsDirty
+    {
+        get
+        {
+            if (_selectedTooth is null)
+            {
+                return false;
+            }
+
+            var notes = string.IsNullOrWhiteSpace(_notes) ? null : _notes.Trim();
+            var state = SelectedState;
+
+            return state is null
+                ? _condition != ToothCondition.Healthy || _surface is not null || notes is not null
+                : state.Condition != _condition || state.Surface != _surface || state.Notes != notes;
+        }
+    }
+
+    private void SetCondition(ToothCondition condition) => _condition = condition;
+
+    private void SetSurface(ToothSurface? surface) => _surface = surface;
+
+    private IReadOnlyList<ToothHistoryDto> SelectedHistory =>
+        _selectedTooth is { } tooth
+            ? _odontogram?.History.Where(item => item.ToothNumber == tooth).ToList() ?? []
+            : [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            _odontogram = await Api.GetOdontogramAsync(PatientId);
+        }
+        catch (ApiException ex)
+        {
+            _error = ErrorMessage(ex);
+            Notifier.Error(Session.T("Could not load odontogram", "تعذّر تحميل مخطط الأسنان"), _error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void OpenTooth(int toothNumber)
+    {
+        _selectedTooth = toothNumber;
+        var state = _odontogram?.Teeth.FirstOrDefault(item => item.ToothNumber == toothNumber);
+        _condition = state?.Condition ?? ToothCondition.Healthy;
+        _surface = state?.Surface;
+        _notes = state?.Notes;
+        _drawerOpen = true;
+    }
+
+    private void CloseDrawer()
+    {
+        _drawerOpen = false;
+        _selectedTooth = null;
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_selectedTooth is not { } tooth)
+        {
+            return;
+        }
+
+        _saving = true;
+        try
+        {
+            var saved = await Api.UpsertToothAsync(PatientId, tooth, new UpsertToothConditionRequest
+            {
+                Condition = _condition,
+                Surface = _surface,
+                Notes = string.IsNullOrWhiteSpace(_notes) ? null : _notes.Trim(),
+            });
+
+            _odontogram!.Teeth.RemoveAll(item => item.ToothNumber == tooth);
+            _odontogram.Teeth.Add(saved);
+            Notifier.Success(Session.T("Tooth condition saved", "تم حفظ حالة السن"));
+            CloseDrawer();
+        }
+        catch (ApiException ex)
+        {
+            ShowWriteError(ex);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private Task AskClearAsync()
+    {
+        _confirmOpen = true;
+        return Task.CompletedTask;
+    }
+
+    private async Task ClearAsync()
+    {
+        if (_selectedTooth is not { } tooth)
+        {
+            return;
+        }
+
+        _confirmOpen = false;
+        _saving = true;
+        try
+        {
+            await Api.ClearToothAsync(PatientId, tooth);
+            _odontogram!.Teeth.RemoveAll(item => item.ToothNumber == tooth);
+            Notifier.Success(Session.T("Tooth condition cleared", "تم مسح حالة السن"));
+            CloseDrawer();
+        }
+        catch (ApiException ex)
+        {
+            ShowWriteError(ex);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private string ToothCss(int toothNumber)
+    {
+        string suffix;
+
+        if (_selectedTooth == toothNumber && IsDirty)
+        {
+            // Live preview: the grid shows the pending selection before saving.
+            suffix = ToothConditionStyle.CssSuffix(_condition);
+        }
+        else
+        {
+            var state = _odontogram?.Teeth.FirstOrDefault(item => item.ToothNumber == toothNumber);
+            suffix = state is null ? "unknown" : ToothConditionStyle.CssSuffix(state.Condition);
+        }
+
+        var css = $"odontogram-tooth od-{suffix}";
+        return IsSelected(toothNumber) ? $"{css} selected" : css;
+    }
+
+    private bool IsSelected(int toothNumber) => _selectedTooth == toothNumber;
+
+    private string AriaPressed(int toothNumber) => IsSelected(toothNumber) ? "true" : "false";
+
+    /// <summary>
+    /// Human-readable tooth summary used as both the hover tooltip and the
+    /// accessible name, so the condition colour is never the only signal.
+    /// </summary>
+    private string ToothHint(int toothNumber)
+    {
+        var state = _odontogram?.Teeth.FirstOrDefault(item => item.ToothNumber == toothNumber);
+        var condition = state is null
+            ? Session.T("No condition recorded", "لا توجد حالة مسجلة")
+            : ToothConditionStyle.Label(state.Condition, Session.IsRtl);
+        return Session.T($"Tooth {toothNumber}: {condition}", $"السن {toothNumber}: {condition}");
+    }
+
+    private async Task RefreshAsync()
+    {
+        _loading = true;
+        _error = null;
+        _drawerOpen = false;
+        _selectedTooth = null;
+        await LoadAsync();
+    }
+
+    private bool HasHistory(int toothNumber) =>
+        _odontogram?.History.Any(item => item.ToothNumber == toothNumber) == true;
+
+    private void ShowWriteError(ApiException ex)
+    {
+        var message = ErrorMessage(ex);
+        Notifier.Error(Session.T("Could not save tooth condition", "تعذّر حفظ حالة السن"), message);
+    }
+
+    private string ErrorMessage(ApiException ex)
+    {
+        if (ex.StatusCode == 400)
+        {
+            return Session.T("Please check the tooth condition and notes.", "يرجى التحقق من حالة السن والملاحظات.");
+        }
+
+        if (ex.StatusCode == 403)
+        {
+            return Session.T("You do not have permission to edit this odontogram.", "ليس لديك صلاحية تعديل مخطط الأسنان.");
+        }
+
+        if (ex.StatusCode == 409)
+        {
+            return Session.T("This tooth was changed by another user. Reload the odontogram and try again.", "تم تعديل هذا السن من مستخدم آخر. أعد تحميل المخطط وحاول مرة أخرى.");
+        }
+
+        return ex.Message;
+    }
+}

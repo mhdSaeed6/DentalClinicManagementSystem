@@ -281,6 +281,23 @@ public sealed class ApiClient
         PutAsync<TreatmentRecordDto>($"treatment-records/{id}", request, ct);
 
     // -----------------------------------------------------------------------
+    // Odontograms
+    // -----------------------------------------------------------------------
+
+    public Task<PatientOdontogramDto> GetOdontogramAsync(Guid patientId, CancellationToken ct = default) =>
+        GetAsync<PatientOdontogramDto>($"patients/{patientId}/odontogram", ct);
+
+    public Task<PatientToothSummaryDto> UpsertToothAsync(
+        Guid patientId,
+        int toothNumber,
+        UpsertToothConditionRequest request,
+        CancellationToken ct = default) =>
+        PutAsync<PatientToothSummaryDto>($"patients/{patientId}/odontogram/teeth/{toothNumber}", request, ct);
+
+    public Task ClearToothAsync(Guid patientId, int toothNumber, CancellationToken ct = default) =>
+        DeleteAsync($"patients/{patientId}/odontogram/teeth/{toothNumber}", ct);
+
+    // -----------------------------------------------------------------------
     // Core request pipeline
     // -----------------------------------------------------------------------
 
