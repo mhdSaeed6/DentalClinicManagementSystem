@@ -1,6 +1,7 @@
 # Version control, editors, CI
 .git
 .gitignore
+.gitattributes
 .github
 .vs
 .vscode
@@ -19,6 +20,9 @@ tests/
 docs/
 containers/
 *.md
+
+# Local documentation and scratch files
+*.log
 
 # Local secrets and databases
 .env

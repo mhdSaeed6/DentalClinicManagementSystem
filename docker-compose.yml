@@ -22,6 +22,27 @@ services:
       - dentalclinic-net
     restart: on-failure
 
+  # Blazor Server UI. Same Dockerfile, second target. It reaches the API over
+  # the compose network (service name), not over localhost, so ApiBaseUrl must
+  # be overridden here — the appsettings default only fits the developer box.
+  dentalclinic-web:
+    container_name: dentalclinic-web
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: web
+    ports:
+      - "7204:80"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:80
+      - ApiBaseUrl=http://dentalclinic-api
+    depends_on:
+      - dentalclinic-api
+    networks:
+      - dentalclinic-net
+    restart: on-failure
+
   sqlserver:
     container_name: dentalclinic-sql
     image: mcr.microsoft.com/mssql/server:2022-latest
@@ -52,7 +73,7 @@ services:
       - SQLSERVER_PASSWORD=YourStrong@Password1
     volumes:
       - ./containers/sqlserver:/scripts:ro
-    entrypoint: ["/bin/sh", "/scripts/wait-for-sql-and-install.sh"]
+    entrypoint: [ "/bin/sh", "/scripts/wait-for-sql-and-install.sh" ]
     depends_on:
       - sqlserver
     networks:
@@ -71,7 +92,7 @@ services:
       - dentalclinic-net
     ports:
       - "5342:5341"
-      - "8081:80"
+      - "8185:80"
     restart: unless-stopped
 
   prometheus:
