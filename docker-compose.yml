@@ -92,7 +92,7 @@ services:
       - dentalclinic-net
     ports:
       - "5342:5341"
-      - "8185:80"
+      - "8081:80"
     restart: unless-stopped
 
   prometheus:
