@@ -12,9 +12,10 @@ public sealed record GetTreatmentRecordsQuery(
     int PageSize = 10,
     Guid? PatientId = null,
     Guid? DoctorId = null,
-    Guid? AppointmentId = null) : ICachedQuery<Result<PaginatedList<TreatmentRecordDto>>>
+    Guid? AppointmentId = null,
+    int? ToothNumber = null) : ICachedQuery<Result<PaginatedList<TreatmentRecordDto>>>
 {
-    public string CacheKey => $"treatment-records-page-{PageNumber}-size-{PageSize}-patient-{PatientId?.ToString() ?? "all"}-doctor-{DoctorId?.ToString() ?? "all"}-appointment-{AppointmentId?.ToString() ?? "all"}-scope-{Scope.IsRestricted}-{Scope.DoctorId}";
+    public string CacheKey => $"treatment-records-page-{PageNumber}-size-{PageSize}-patient-{PatientId?.ToString() ?? "all"}-doctor-{DoctorId?.ToString() ?? "all"}-appointment-{AppointmentId?.ToString() ?? "all"}-tooth-{ToothNumber?.ToString() ?? "all"}-scope-{Scope.IsRestricted}-{Scope.DoctorId}";
 
     public string[] Tags => ["treatment-record"];
 

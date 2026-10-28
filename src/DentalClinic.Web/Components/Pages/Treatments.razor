@@ -34,6 +34,21 @@
                 <option value="@patient.Id">@FullName(patient.FirstName, patient.LastName)</option>
             }
         </select>
+        <select class="select" style="max-width:140px" @bind="_toothFilter" @bind:after="ApplyFilter">
+            <option value="">@Session.T("All teeth", "كل الأسنان")</option>
+            <optgroup label="@Session.T("Upper", "الفك العلوي")">
+                @foreach (var tooth in UpperTeeth)
+                {
+                    <option value="@tooth">@ClinicFormatting.ToothLabel(tooth)</option>
+                }
+            </optgroup>
+            <optgroup label="@Session.T("Lower", "الفك السفلي")">
+                @foreach (var tooth in LowerTeeth)
+                {
+                    <option value="@tooth">@ClinicFormatting.ToothLabel(tooth)</option>
+                }
+            </optgroup>
+        </select>
         <div class="spacer" style="flex:1"></div>
         <span class="badge muted no-dot">@_total @Session.T("records", "سجل")</span>
     </div>
@@ -192,6 +207,12 @@
 
     private Guid? _doctorFilter;
     private Guid? _patientFilter;
+    private int? _toothFilter;
+
+    // Same permanent-tooth layout as ToothChart (left untouched by design); pediatric teeth are out of UI scope.
+    private static readonly int[] UpperTeeth = [18, 17, 16, 15, 14, 13, 12, 11, 21, 22, 23, 24, 25, 26, 27, 28];
+
+    private static readonly int[] LowerTeeth = [48, 47, 46, 45, 44, 43, 42, 41, 31, 32, 33, 34, 35, 36, 37, 38];
 
     private string FormTitle => _editingId is null ? Session.T("New treatment", "علاج جديد") : Session.T("Edit treatment", "تعديل العلاج");
 
@@ -238,7 +259,7 @@
         StateHasChanged();
         try
         {
-            var result = await Api.GetTreatmentRecordsAsync(_page, _pageSize, _patientFilter, _doctorFilter);
+            var result = await Api.GetTreatmentRecordsAsync(_page, _pageSize, _patientFilter, _doctorFilter, toothNumber: _toothFilter);
             _records = result.Items ?? [];
             _total = result.TotalCount;
             _totalPages = result.TotalPages;

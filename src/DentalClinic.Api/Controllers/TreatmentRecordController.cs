@@ -27,7 +27,7 @@ public class TreatmentRecordController(ISender sender, IUser user) : ApiControll
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
     [EndpointSummary("Retrieves a paginated list of treatment records.")]
-    [EndpointDescription("Retrieves treatment records with optional filtering by PatientId or DoctorId.")]
+    [EndpointDescription("Retrieves treatment records with optional filtering by patient, doctor, appointment, or FDI tooth number.")]
     [EndpointName("GetTreatmentRecords")]
     [MapToApiVersion("1.0")]
     [ProducesDefaultResponseType]
@@ -39,7 +39,8 @@ public class TreatmentRecordController(ISender sender, IUser user) : ApiControll
             PageSize: request.PageSize,
             PatientId: request.PatientId,
             DoctorId: request.DoctorId,
-            AppointmentId: request.AppointmentId);
+            AppointmentId: request.AppointmentId,
+            ToothNumber: request.ToothNumber);
 
         var result = await sender.Send(query, ct);
 

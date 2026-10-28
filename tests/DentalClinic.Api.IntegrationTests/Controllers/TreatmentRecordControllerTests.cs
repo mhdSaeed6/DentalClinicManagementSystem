@@ -62,6 +62,50 @@ public class TreatmentRecordControllerTests : IAsyncLifetime
         Assert.NotNull(result.Items);
     }
 
+    [Fact]
+    public async Task GetTreatmentRecords_WithToothNumberFilter_ShouldReturnOnlyMatchingRecords()
+    {
+        // Arrange — three records on two different teeth.
+        var patientId = await CreateTestPatientAsync();
+        var doctorId = await CreateTestDoctorAsync();
+
+        foreach (var tooth in new[] { 16, 21, 16 })
+        {
+            var createRequest = new CreateTreatmentRecordRequest
+            {
+                PatientId = patientId,
+                DoctorId = doctorId,
+                ToothNumber = tooth,
+                ProcedureDetails = $"Treatment on tooth {tooth}",
+                Cost = 50.00m
+            };
+
+            var createResponse = await _client.PostAsJsonAsync("/api/v1.0/treatment-records", createRequest);
+            Assert.Equal(HttpStatusCode.Created, createResponse.StatusCode);
+        }
+
+        // Act
+        var response = await _client.GetAsync("/api/v1.0/treatment-records?toothNumber=16");
+
+        // Assert — records on tooth 21 are never returned.
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var result = await response.Content.ReadFromJsonAsync<PaginatedList<TreatmentRecordDto>>();
+        Assert.NotNull(result);
+        Assert.Equal(2, result.TotalCount);
+        Assert.All(result.Items!, item => Assert.Equal(16, item.ToothNumber));
+    }
+
+    [Fact]
+    public async Task GetTreatmentRecords_WithInvalidToothNumber_ShouldReturnBadRequest()
+    {
+        // Act — 99 is not a valid FDI tooth number.
+        var response = await _client.GetAsync("/api/v1.0/treatment-records?toothNumber=99");
+
+        // Assert
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
     // -------------------------------------------------------------------------
     // 2. GET /api/v1.0/treatment-records/{id}
     // -------------------------------------------------------------------------
