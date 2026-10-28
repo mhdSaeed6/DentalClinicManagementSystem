@@ -233,6 +233,15 @@ public static class ClinicFormatting
         return $"{region}·{position}";
     }
 
+    /// <summary>
+    /// Null-tolerant overload (S8): a treatment may be recorded without a
+    /// specific tooth, and an em dash keeps the badge column visually aligned
+    /// without pretending a tooth was chosen.
+    /// </summary>
+    public static string ToothLabel(int? toothNumber) => toothNumber is null
+        ? "—"
+        : ToothLabel(toothNumber.Value);
+
     public static string FileSize(long bytes) => bytes switch
     {
         < 1024 => $"{bytes} B",

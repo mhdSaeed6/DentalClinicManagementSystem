@@ -38,6 +38,17 @@ public class CreateTreatmentRecordCommandValidatorTests(WebAppFactory factory)
         Assert.True(result.IsError);
     }
 
+    [Fact]
+    public async Task CreateTreatmentRecord_ShouldPassValidation_WhenToothNumberIsNull()
+    {
+        // S8: null = علاج غير مرتبط بسن محدد — التحقق يمر والفشل لاحقاً من المعالج
+        // (مريض غير موجود) وليس من الخاصية ToothNumber.
+        var command = CreateValidCommand() with { ToothNumber = null };
+        var result = await _mediator.Send(command);
+        Assert.True(result.IsError);
+        Assert.NotEqual("ToothNumber", result.TopError.Code);
+    }
+
     [Theory]
     [InlineData("")]
     [InlineData("   ")]

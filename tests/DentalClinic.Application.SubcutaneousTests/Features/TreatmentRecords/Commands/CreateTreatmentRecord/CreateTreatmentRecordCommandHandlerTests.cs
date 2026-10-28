@@ -49,6 +49,33 @@ public class CreateTreatmentRecordCommandHandlerTests(WebAppFactory factory)
     }
 
     [Fact]
+    public async Task Handle_WithNullToothNumber_ShouldCreateRecordWithoutTooth()
+    {
+        // S8: a tooth-less treatment persists ToothNumber = null.
+        var (patient, doctor) = await SeedPatientAndDoctorAsync();
+        var command = new CreateTreatmentRecordCommand(
+            patient.Id,
+            doctor.Id,
+            null,
+            null,
+            "General consultation",
+            50);
+
+        var result = await _mediator.Send(command);
+
+        Assert.True(result.IsSuccess);
+        Assert.NotNull(result.Value);
+        Assert.Null(result.Value.ToothNumber);
+
+        var dbRecord = await _context.TreatmentRecords
+            .AsNoTracking()
+            .FirstOrDefaultAsync(t => t.Id == result.Value.Id);
+
+        Assert.NotNull(dbRecord);
+        Assert.Null(dbRecord.ToothNumber);
+    }
+
+    [Fact]
     public async Task Handle_WithNonExistingPatient_ShouldReturnPatientNotFound()
     {
         // Arrange

@@ -59,6 +59,21 @@ public class CompleteAppointmentCommandValidatorTests(WebAppFactory factory)
         Assert.Contains("ToothNumber", result.TopError.Code);
     }
 
+    [Fact]
+    public async Task CompleteAppointment_ShouldPassValidation_WhenTreatmentToothNumberIsNull()
+    {
+        // S8: a treatment may be recorded without a tooth — validation must pass
+        // and the failure must come later from the handler (Appointment.NotFound).
+        var command = new CompleteAppointmentCommand(
+            Guid.NewGuid(),
+            [new CompleteAppointmentTreatment(null, "General consultation", 10m)]);
+
+        var result = await _mediator.Send(command);
+
+        Assert.True(result.IsError);
+        Assert.Equal("Appointment.NotFound", result.TopError.Code);
+    }
+
     [Theory]
     [InlineData("")]
     [InlineData("   ")]

@@ -9,6 +9,6 @@ public sealed record CreateTreatmentRecordCommand(
     Guid PatientId,
     Guid DoctorId,
     Guid? AppointmentId,
-    int ToothNumber,
+    int? ToothNumber,
     string ProcedureDetails,
     decimal Cost) : IRequest<Result<TreatmentRecordDto>>;

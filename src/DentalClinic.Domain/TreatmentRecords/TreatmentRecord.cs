@@ -17,7 +17,9 @@ public class TreatmentRecord : AuditableEntity
     public Doctor? Doctor { get; set; }
     public Appointment? Appointment { get; set; }
 
-    public int ToothNumber { get; private set; }
+    // قابل للـ null عمداً: بعض العلاجات لا ترتبط بسن محدد (استشارة عامة مثلًا).
+    // S8 — nullable ToothNumber; a provided value must still be a valid FDI tooth.
+    public int? ToothNumber { get; private set; }
     public string ProcedureDetails { get; private set; } = default!;
     public decimal Cost { get; private set; }
 
@@ -28,7 +30,7 @@ public class TreatmentRecord : AuditableEntity
         Guid patientId,
         Guid doctorId,
         Guid? appointmentId,
-        int toothNumber,
+        int? toothNumber,
         string procedureDetails,
         decimal cost)
         : base(id)
@@ -44,13 +46,13 @@ public class TreatmentRecord : AuditableEntity
     public static Result<TreatmentRecord> Create(
         Guid patientId,
         Guid doctorId,
-        int toothNumber,
+        int? toothNumber,
         string procedureDetails,
         decimal cost,
         Guid? appointmentId = null)
     {
-        // 1. التحقق من رقم السن عبر FdiTooth
-        if (!IsValidToothNumber(toothNumber))
+        // 1. التحقق من رقم السن عبر FdiTooth — null مسموح (علاج غير مرتبط بسن محدد)
+        if (toothNumber.HasValue && !IsValidToothNumber(toothNumber.Value))
         {
             return TreatmentRecordErrors.InvalidToothNumber;
         }
@@ -89,13 +91,13 @@ public class TreatmentRecord : AuditableEntity
     public Result<Updated> Update(
         Guid patientId,
         Guid doctorId,
-        int toothNumber,
+        int? toothNumber,
         string procedureDetails,
         decimal cost,
         Guid? appointmentId = null)
     {
-        // 1. التحقق من رقم السن عبر FdiTooth
-        if (!IsValidToothNumber(toothNumber))
+        // 1. التحقق من رقم السن عبر FdiTooth — null مسموح (يمسح الارتباط بالسن)
+        if (toothNumber.HasValue && !IsValidToothNumber(toothNumber.Value))
         {
             return TreatmentRecordErrors.InvalidToothNumber;
         }

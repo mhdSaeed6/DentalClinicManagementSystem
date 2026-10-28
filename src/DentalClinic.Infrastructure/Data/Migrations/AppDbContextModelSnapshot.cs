@@ -591,7 +591,7 @@ namespace DentalClinic.Infrastructure.Data.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<int>("ToothNumber")
+                    b.Property<int?>("ToothNumber")
                         .HasColumnType("int");
 
                     b.HasKey("Id");

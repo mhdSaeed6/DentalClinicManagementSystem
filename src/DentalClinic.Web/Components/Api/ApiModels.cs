@@ -361,7 +361,8 @@ public sealed class TreatmentRecordDto
 
     public Guid? AppointmentId { get; set; }
 
-    public int ToothNumber { get; set; }
+    // S8 mirror of the nullable domain value — a treatment may have no tooth.
+    public int? ToothNumber { get; set; }
 
     public string ProcedureDetails { get; set; } = string.Empty;
 
@@ -418,7 +419,9 @@ public sealed class PatientToothSummaryDto
 
 public sealed class ToothHistoryDto
 {
-    public int ToothNumber { get; set; }
+    // S8 mirror of the nullable domain value — null = not tied to a tooth;
+    // the odontogram's per-tooth grouping skips such entries.
+    public int? ToothNumber { get; set; }
 
     public Guid TreatmentRecordId { get; set; }
 
@@ -537,7 +540,8 @@ public sealed class CompleteAppointmentRequest
 
 public sealed class CompleteAppointmentTreatmentRequest
 {
-    public int ToothNumber { get; set; } = 11;
+    // S8 mirror — null = not linked to a specific tooth.
+    public int? ToothNumber { get; set; } = 11;
 
     public string ProcedureDetails { get; set; } = string.Empty;
 
@@ -596,7 +600,8 @@ public sealed class TreatmentRecordFormRequest
 
     public Guid? AppointmentId { get; set; }
 
-    public int ToothNumber { get; set; } = 11;
+    // S8 mirror — null = not linked to a specific tooth.
+    public int? ToothNumber { get; set; } = 11;
 
     public string ProcedureDetails { get; set; } = string.Empty;
 

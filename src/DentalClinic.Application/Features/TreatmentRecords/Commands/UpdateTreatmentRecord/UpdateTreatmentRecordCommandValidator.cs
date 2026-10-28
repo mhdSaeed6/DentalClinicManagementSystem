@@ -16,8 +16,9 @@ public sealed class UpdateTreatmentRecordCommandValidator : AbstractValidator<Up
         RuleFor(x => x.DoctorId)
             .NotEmpty().WithMessage("DoctorId is required.");
 
+        // null toothNumber مسموح — يمسح الارتباط بالسن؛ القيمة المعطاة يجب أن تكون سناً FDI صالحاً.
         RuleFor(x => x.ToothNumber)
-            .Must(FdiTooth.IsValidToothNumber)
+            .Must(tooth => !tooth.HasValue || FdiTooth.IsValidToothNumber(tooth.Value))
             .WithMessage("Tooth number must be a valid FDI dental chart number (e.g., 11-18, 21-28, 51-55, 71-75).");
 
         RuleFor(x => x.ProcedureDetails)

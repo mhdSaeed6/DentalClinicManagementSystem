@@ -44,6 +44,17 @@ public class UpdateTreatmentRecordCommandValidatorTests(WebAppFactory factory)
         Assert.True(result.IsError);
     }
 
+    [Fact]
+    public async Task UpdateTreatmentRecord_ShouldPassValidation_WhenToothNumberIsNull()
+    {
+        // S8: null = يمسح الارتباط بالسن — التحقق يمر والفشل لاحقاً من المعالج
+        // (سجل غير موجود) وليس من الخاصية ToothNumber.
+        var command = CreateValidCommand() with { ToothNumber = null };
+        var result = await _mediator.Send(command);
+        Assert.True(result.IsError);
+        Assert.NotEqual("ToothNumber", result.TopError.Code);
+    }
+
     [Theory]
     [InlineData("")]
     [InlineData("   ")]

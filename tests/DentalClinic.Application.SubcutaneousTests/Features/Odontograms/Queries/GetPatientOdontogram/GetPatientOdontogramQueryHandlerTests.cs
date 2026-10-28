@@ -193,6 +193,36 @@ public class GetPatientOdontogramQueryHandlerTests(WebAppFactory factory)
         Assert.Empty(result.Value.History);
     }
 
+    [Fact]
+    public async Task Handle_WithRecordWithoutTooth_ShouldReturnItInHistoryWithNullToothNumber()
+    {
+        // Arrange (S8): a treatment recorded without a tooth is part of the
+        // payload but belongs to no tooth bucket — the per-tooth grouping
+        // (ToothNumber == tooth) skips it, and no condition row appears for it.
+        var patient = await SeedPatientAsync();
+        var contactInfo = ContactInfo.Create("+963977777777", null, true, null).Value;
+        var doctor = Doctor.Create("Omar", "Ali", "Endodontics", contactInfo, Gender.Male).Value;
+        await _context.Doctors.AddAsync(doctor);
+        await _context.SaveChangesAsync(default);
+
+        var consultation = TreatmentRecord.Create(patient.Id, doctor.Id, null, "General consultation.", 60, null).Value;
+        await _context.TreatmentRecords.AddRangeAsync(consultation);
+        await _context.SaveChangesAsync(default);
+
+        var query = new GetPatientOdontogramQuery(patient.Id, PatientAccessScope.None);
+
+        // Act
+        var result = await _mediator.Send(query);
+
+        // Assert
+        Assert.True(result.IsSuccess);
+        Assert.Empty(result.Value.Teeth);
+
+        var mapped = result.Value.History.Single(h => h.TreatmentRecordId == consultation.Id);
+        Assert.Null(mapped.ToothNumber);
+        Assert.Equal(1, result.Value.History.Count);
+    }
+
     private async Task<Patient> SeedPatientAsync()
     {
         var contactInfo = ContactInfo.Create("+963933333333", null, true, null).Value;

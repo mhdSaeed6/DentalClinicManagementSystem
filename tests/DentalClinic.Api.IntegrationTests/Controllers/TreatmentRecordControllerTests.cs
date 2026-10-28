@@ -220,6 +220,34 @@ public class TreatmentRecordControllerTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
+    [Fact]
+    public async Task CreateTreatmentRecord_WithNullToothNumber_ShouldReturnCreatedWithoutTooth()
+    {
+        // S8: a tooth-less treatment is accepted and persists ToothNumber = null.
+        var patientId = await CreateTestPatientAsync();
+        var doctorId = await CreateTestDoctorAsync();
+
+        var request = new CreateTreatmentRecordRequest
+        {
+            PatientId = patientId,
+            DoctorId = doctorId,
+            AppointmentId = null,
+            ToothNumber = null,
+            ProcedureDetails = "General consultation, no specific tooth",
+            Cost = 60.00m
+        };
+
+        // Act
+        var response = await _client.PostAsJsonAsync("/api/v1.0/treatment-records", request);
+
+        // Assert
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+
+        var createdRecord = await response.Content.ReadFromJsonAsync<TreatmentRecordDto>();
+        Assert.NotNull(createdRecord);
+        Assert.Null(createdRecord.ToothNumber);
+    }
+
     // -------------------------------------------------------------------------
     // 4. PUT /api/v1.0/treatment-records/{id}
     // -------------------------------------------------------------------------
@@ -264,6 +292,47 @@ public class TreatmentRecordControllerTests : IAsyncLifetime
         Assert.NotNull(updatedRecord);
         Assert.Equal("Surgical extraction completed", updatedRecord.ProcedureDetails);
         Assert.Equal(250.00m, updatedRecord.Cost);
+    }
+
+    [Fact]
+    public async Task UpdateTreatmentRecord_WithNullToothNumber_ShouldClearTooth()
+    {
+        // S8: updating with ToothNumber = null clears the tooth link.
+        var patientId = await CreateTestPatientAsync();
+        var doctorId = await CreateTestDoctorAsync();
+
+        var createRequest = new CreateTreatmentRecordRequest
+        {
+            PatientId = patientId,
+            DoctorId = doctorId,
+            AppointmentId = null,
+            ToothNumber = 16,
+            ProcedureDetails = "Tooth extraction preparation",
+            Cost = 100.00m
+        };
+
+        var createResponse = await _client.PostAsJsonAsync("/api/v1.0/treatment-records", createRequest);
+        var createdRecord = await createResponse.Content.ReadFromJsonAsync<TreatmentRecordDto>();
+
+        var updateRequest = new UpdateTreatmentRecordRequest
+        {
+            PatientId = patientId,
+            DoctorId = doctorId,
+            AppointmentId = null,
+            ToothNumber = null,
+            ProcedureDetails = "General consultation after review",
+            Cost = 40.00m
+        };
+
+        // Act
+        var response = await _client.PutAsJsonAsync($"/api/v1.0/treatment-records/{createdRecord!.Id}", updateRequest);
+
+        // Assert
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var updatedRecord = await response.Content.ReadFromJsonAsync<TreatmentRecordDto>();
+        Assert.NotNull(updatedRecord);
+        Assert.Null(updatedRecord.ToothNumber);
     }
 
     [Fact]

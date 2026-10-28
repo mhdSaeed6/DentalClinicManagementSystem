@@ -8,10 +8,12 @@ namespace DentalClinic.Application.Features.Appointments.Commands.CompleteAppoin
 /// A treatment performed during the visit, captured as part of completing the
 /// appointment. The patient, doctor and appointment link are always derived
 /// server-side from the appointment being completed, so they are intentionally
-/// not accepted from the caller.
+/// not accepted from the caller. <see cref="ToothNumber"/> may be null — a
+/// treatment does not have to be tied to a specific tooth (e.g. a general
+/// consultation); a provided value must still be a valid FDI tooth number.
 /// </summary>
 public sealed record CompleteAppointmentTreatment(
-    int ToothNumber,
+    int? ToothNumber,
     string ProcedureDetails,
     decimal Cost);
 
