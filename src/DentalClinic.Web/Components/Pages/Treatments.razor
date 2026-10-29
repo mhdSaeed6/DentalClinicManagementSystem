@@ -34,6 +34,21 @@
                 <option value="@patient.Id">@FullName(patient.FirstName, patient.LastName)</option>
             }
         </select>
+        <select class="select" style="max-width:140px" @bind="_toothFilter" @bind:after="ApplyFilter">
+            <option value="">@Session.T("All teeth", "كل الأسنان")</option>
+            <optgroup label="@Session.T("Upper", "الفك العلوي")">
+                @foreach (var tooth in UpperTeeth)
+                {
+                    <option value="@tooth">@ClinicFormatting.ToothLabel(tooth)</option>
+                }
+            </optgroup>
+            <optgroup label="@Session.T("Lower", "الفك السفلي")">
+                @foreach (var tooth in LowerTeeth)
+                {
+                    <option value="@tooth">@ClinicFormatting.ToothLabel(tooth)</option>
+                }
+            </optgroup>
+        </select>
         <div class="spacer" style="flex:1"></div>
         <span class="badge muted no-dot">@_total @Session.T("records", "سجل")</span>
     </div>
@@ -111,9 +126,13 @@
 
     <h3 class="mb-2">@Session.T("FDI tooth chart", "مخطط الأسنان FDI")</h3>
     <div class="mb-2 fs-xs text-soft">
-        @Session.T("Selected tooth:", "السن المحدد:") <span class="badge brand no-dot">@ClinicFormatting.ToothLabel(_form.ToothNumber)</span>
+        @Session.T("Selected tooth:", "السن المحدد:") <span class="badge brand no-dot">@ClinicFormatting.ToothLabel(_noTooth ? (int?)null : _chartTooth)</span>
     </div>
-    <ToothChart @bind-Value="_form.ToothNumber" />
+    <label class="check mb-2">
+        <input type="checkbox" @bind="_noTooth" />
+        <span>@Session.T("Not linked to a specific tooth", "غير مرتبط بسن محدد")</span>
+    </label>
+    <ToothChart @bind-Value="_chartTooth" />
 
     <div class="form-grid">
         <div class="field">
@@ -190,8 +209,19 @@
     private Guid? _editingId;
     private TreatmentRecordFormRequest _form = new();
 
+    // S8: a treatment may be recorded without a tooth — the checkbox keeps the
+    // posted ToothNumber null while the chart selection lives separately.
+    private int _chartTooth = 11;
+    private bool _noTooth;
+
     private Guid? _doctorFilter;
     private Guid? _patientFilter;
+    private int? _toothFilter;
+
+    // Same permanent-tooth layout as ToothChart (left untouched by design); pediatric teeth are out of UI scope.
+    private static readonly int[] UpperTeeth = [18, 17, 16, 15, 14, 13, 12, 11, 21, 22, 23, 24, 25, 26, 27, 28];
+
+    private static readonly int[] LowerTeeth = [48, 47, 46, 45, 44, 43, 42, 41, 31, 32, 33, 34, 35, 36, 37, 38];
 
     private string FormTitle => _editingId is null ? Session.T("New treatment", "علاج جديد") : Session.T("Edit treatment", "تعديل العلاج");
 
@@ -238,7 +268,7 @@
         StateHasChanged();
         try
         {
-            var result = await Api.GetTreatmentRecordsAsync(_page, _pageSize, _patientFilter, _doctorFilter);
+            var result = await Api.GetTreatmentRecordsAsync(_page, _pageSize, _patientFilter, _doctorFilter, toothNumber: _toothFilter);
             _records = result.Items ?? [];
             _total = result.TotalCount;
             _totalPages = result.TotalPages;
@@ -270,7 +300,9 @@
     {
         _editingId = null;
         var patientId = _form.PatientId;
-        _form = new TreatmentRecordFormRequest { PatientId = patientId, ToothNumber = 11 };
+        _form = new TreatmentRecordFormRequest { PatientId = patientId };
+        _chartTooth = 11;
+        _noTooth = false;
         _formError = null;
         _formOpen = true;
     }
@@ -283,10 +315,11 @@
             PatientId = record.PatientId,
             DoctorId = record.DoctorId,
             AppointmentId = record.AppointmentId,
-            ToothNumber = record.ToothNumber,
             ProcedureDetails = record.ProcedureDetails,
             Cost = record.Cost,
         };
+        _chartTooth = record.ToothNumber ?? 11;
+        _noTooth = record.ToothNumber is null;
         _formError = null;
         _formOpen = true;
     }
@@ -312,6 +345,9 @@
             _formError = Session.T("Procedure details are required.", "تفاصيل الإجراء مطلوبة.");
             return;
         }
+
+        // S8: the checkbox wins over the chart — null posts a tooth-less treatment.
+        _form.ToothNumber = _noTooth ? null : _chartTooth;
 
         _saving = true;
         try

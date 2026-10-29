@@ -259,6 +259,7 @@ public sealed class ApiClient
         Guid? patientId = null,
         Guid? doctorId = null,
         Guid? appointmentId = null,
+        int? toothNumber = null,
         CancellationToken ct = default)
     {
         var query = Query(
@@ -266,7 +267,8 @@ public sealed class ApiClient
             ("PageSize", pageSize),
             ("PatientId", patientId),
             ("DoctorId", doctorId),
-            ("AppointmentId", appointmentId));
+            ("AppointmentId", appointmentId),
+            ("ToothNumber", toothNumber));
 
         return GetAsync<PaginatedList<TreatmentRecordDto>>($"treatment-records?{query}", ct);
     }
@@ -279,6 +281,23 @@ public sealed class ApiClient
 
     public Task<TreatmentRecordDto> UpdateTreatmentRecordAsync(Guid id, TreatmentRecordFormRequest request, CancellationToken ct = default) =>
         PutAsync<TreatmentRecordDto>($"treatment-records/{id}", request, ct);
+
+    // -----------------------------------------------------------------------
+    // Odontograms
+    // -----------------------------------------------------------------------
+
+    public Task<PatientOdontogramDto> GetOdontogramAsync(Guid patientId, CancellationToken ct = default) =>
+        GetAsync<PatientOdontogramDto>($"patients/{patientId}/odontogram", ct);
+
+    public Task<PatientToothSummaryDto> UpsertToothAsync(
+        Guid patientId,
+        int toothNumber,
+        UpsertToothConditionRequest request,
+        CancellationToken ct = default) =>
+        PutAsync<PatientToothSummaryDto>($"patients/{patientId}/odontogram/teeth/{toothNumber}", request, ct);
+
+    public Task ClearToothAsync(Guid patientId, int toothNumber, CancellationToken ct = default) =>
+        DeleteAsync($"patients/{patientId}/odontogram/teeth/{toothNumber}", ct);
 
     // -----------------------------------------------------------------------
     // Core request pipeline

@@ -97,5 +97,13 @@ public class MigrationTests : IClassFixture<MsSqlMigrationFixture>
             .ToListAsync();
 
         Assert.Empty(rawToken);
+
+        // The odontogram table must exist after replaying the real migration chain.
+        var patientTeethTable = await context.Database
+            .SqlQueryRaw<string>(
+                "SELECT [name] FROM sys.tables WHERE [name] = 'PatientTeeth'")
+            .ToListAsync();
+
+        Assert.NotEmpty(patientTeethTable);
     }
 }

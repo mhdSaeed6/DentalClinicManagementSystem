@@ -605,8 +605,13 @@
 
             <div class="complete-add-title">
                 <span>@Session.T("Add a treatment", "إضافة علاج")</span>
-                <span class="badge brand no-dot">@ClinicFormatting.ToothLabel(_completeTooth)</span>
+                <span class="badge brand no-dot">@ClinicFormatting.ToothLabel(_completeNoTooth ? (int?)null : _completeTooth)</span>
             </div>
+
+            <label class="check-row mb-2" style="display:flex;align-items:center;gap:8px">
+                <input type="checkbox" @bind="_completeNoTooth" />
+                <span class="fs-sm">@Session.T("Not linked to a specific tooth", "غير مرتبط بسن محدد")</span>
+            </label>
 
             <ToothChart @bind-Value="_completeTooth" />
 
@@ -686,6 +691,9 @@
     private string? _completeError;
     private List<CompleteAppointmentTreatmentRequest> _completeTreatments = [];
     private int _completeTooth = 11;
+
+    // S8: checked → the added treatment posts ToothNumber = null (not tooth-specific).
+    private bool _completeNoTooth;
     private string _completeProcedure = string.Empty;
     private decimal _completeCost;
     private Guid? _completeServiceId;
@@ -914,6 +922,7 @@
         _completeServiceId = appointment.ServiceId;
         _completeTreatments = [];
         _completeTooth = 11;
+        _completeNoTooth = false;
         _completeProcedure = string.Empty;
         _completeCost = 0;
         _completeError = null;
@@ -940,7 +949,8 @@
 
         _completeTreatments.Add(new CompleteAppointmentTreatmentRequest
         {
-            ToothNumber = _completeTooth,
+            // S8: the checkbox wins over the chart — null posts a tooth-less treatment.
+            ToothNumber = _completeNoTooth ? (int?)null : _completeTooth,
             ProcedureDetails = _completeProcedure.Trim(),
             Cost = _completeCost,
         });
@@ -948,6 +958,7 @@
         _completeProcedure = string.Empty;
         _completeCost = 0;
         _completeTooth = 11;
+        _completeNoTooth = false;
     }
 
     private void RemoveCompleteTreatment(int index)

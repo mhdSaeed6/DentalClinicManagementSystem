@@ -24,8 +24,9 @@ public sealed class CompleteAppointmentCommandValidator : AbstractValidator<Comp
         // consultation-only visit with no treatment records.
         RuleForEach(x => x.Treatments).ChildRules(treatment =>
         {
+            // null toothNumber مسموح — علاج غير مرتبط بسن محدد؛ القيمة المعطاة يجب أن تكون سناً FDI صالحاً.
             treatment.RuleFor(x => x.ToothNumber)
-                .Must(TreatmentRecord.IsValidToothNumber)
+                .Must(tooth => !tooth.HasValue || TreatmentRecord.IsValidToothNumber(tooth.Value))
                 .WithMessage("Tooth number must be a valid FDI dental chart number (e.g., 11-18, 21-28, 51-55, 71-75).");
 
             treatment.RuleFor(x => x.ProcedureDetails)

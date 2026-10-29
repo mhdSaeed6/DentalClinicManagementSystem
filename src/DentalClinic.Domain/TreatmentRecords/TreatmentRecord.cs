@@ -1,5 +1,6 @@
 using DentalClinic.Domain.Appointments;
 using DentalClinic.Domain.Common.Results;
+using DentalClinic.Domain.Common.ValueObjects;
 using DentalClinic.Domain.Doctors;
 using DentalClinic.Domain.Patients;
 
@@ -16,7 +17,9 @@ public class TreatmentRecord : AuditableEntity
     public Doctor? Doctor { get; set; }
     public Appointment? Appointment { get; set; }
 
-    public int ToothNumber { get; private set; }
+    // قابل للـ null عمداً: بعض العلاجات لا ترتبط بسن محدد (استشارة عامة مثلًا).
+    // S8 — nullable ToothNumber; a provided value must still be a valid FDI tooth.
+    public int? ToothNumber { get; private set; }
     public string ProcedureDetails { get; private set; } = default!;
     public decimal Cost { get; private set; }
 
@@ -27,7 +30,7 @@ public class TreatmentRecord : AuditableEntity
         Guid patientId,
         Guid doctorId,
         Guid? appointmentId,
-        int toothNumber,
+        int? toothNumber,
         string procedureDetails,
         decimal cost)
         : base(id)
@@ -43,13 +46,13 @@ public class TreatmentRecord : AuditableEntity
     public static Result<TreatmentRecord> Create(
         Guid patientId,
         Guid doctorId,
-        int toothNumber,
+        int? toothNumber,
         string procedureDetails,
         decimal cost,
         Guid? appointmentId = null)
     {
-        // 1. التحقق من رقم السن عبر Private Method
-        if (!IsValidToothNumber(toothNumber))
+        // 1. التحقق من رقم السن عبر FdiTooth — null مسموح (علاج غير مرتبط بسن محدد)
+        if (toothNumber.HasValue && !IsValidToothNumber(toothNumber.Value))
         {
             return TreatmentRecordErrors.InvalidToothNumber;
         }
@@ -88,13 +91,13 @@ public class TreatmentRecord : AuditableEntity
     public Result<Updated> Update(
         Guid patientId,
         Guid doctorId,
-        int toothNumber,
+        int? toothNumber,
         string procedureDetails,
         decimal cost,
         Guid? appointmentId = null)
     {
-        // 1. التحقق من رقم السن عبر Private Method
-        if (!IsValidToothNumber(toothNumber))
+        // 1. التحقق من رقم السن عبر FdiTooth — null مسموح (يمسح الارتباط بالسن)
+        if (toothNumber.HasValue && !IsValidToothNumber(toothNumber.Value))
         {
             return TreatmentRecordErrors.InvalidToothNumber;
         }
@@ -132,18 +135,9 @@ public class TreatmentRecord : AuditableEntity
 
     // Helper Method للتحقق من أرقام الأسنان المقبولة (FDI).
     // Public so application validators reuse the single source of truth.
+    // Delegates to FdiTooth — the single canonical copy of FDI validation.
     public static bool IsValidToothNumber(int number)
     {
-        bool isPermanent = (number >= 11 && number <= 18) ||
-                            (number >= 21 && number <= 28) ||
-                            (number >= 31 && number <= 38) ||
-                            (number >= 41 && number <= 48);
-
-        bool isPediatric = (number >= 51 && number <= 55) ||
-                            (number >= 61 && number <= 65) ||
-                            (number >= 71 && number <= 75) ||
-                            (number >= 81 && number <= 85);
-
-        return isPermanent || isPediatric;
+        return FdiTooth.IsValidToothNumber(number);
     }
 }

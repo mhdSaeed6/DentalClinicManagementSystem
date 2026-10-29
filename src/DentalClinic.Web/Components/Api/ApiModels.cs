@@ -361,7 +361,73 @@ public sealed class TreatmentRecordDto
 
     public Guid? AppointmentId { get; set; }
 
+    // S8 mirror of the nullable domain value — a treatment may have no tooth.
+    public int? ToothNumber { get; set; }
+
+    public string ProcedureDetails { get; set; } = string.Empty;
+
+    public decimal Cost { get; set; }
+}
+
+// ---------------------------------------------------------------------------
+// Odontograms
+// ---------------------------------------------------------------------------
+
+public enum ToothCondition
+{
+    Healthy,
+    Caries,
+    Filled,
+    Crown,
+    Bridge,
+    Implant,
+    Extracted,
+    Missing,
+}
+
+public enum ToothSurface
+{
+    Occlusal,
+    Mesial,
+    Distal,
+    Buccal,
+    Lingual,
+    Incisal,
+}
+
+public sealed class PatientOdontogramDto
+{
+    public Guid PatientId { get; set; }
+
+    public List<PatientToothSummaryDto> Teeth { get; set; } = [];
+
+    public List<ToothHistoryDto> History { get; set; } = [];
+}
+
+public sealed class PatientToothSummaryDto
+{
     public int ToothNumber { get; set; }
+
+    public ToothCondition Condition { get; set; }
+
+    public ToothSurface? Surface { get; set; }
+
+    public string? Notes { get; set; }
+
+    public DateTimeOffset? LastModifiedUtc { get; set; }
+}
+
+public sealed class ToothHistoryDto
+{
+    // S8 mirror of the nullable domain value — null = not tied to a tooth;
+    // the odontogram's per-tooth grouping skips such entries.
+    public int? ToothNumber { get; set; }
+
+    public Guid TreatmentRecordId { get; set; }
+
+    public DateTimeOffset RecordedAtUtc { get; set; }
+
+    public Guid DoctorId { get; set; }
 
     public string ProcedureDetails { get; set; } = string.Empty;
 
@@ -474,7 +540,8 @@ public sealed class CompleteAppointmentRequest
 
 public sealed class CompleteAppointmentTreatmentRequest
 {
-    public int ToothNumber { get; set; } = 11;
+    // S8 mirror — null = not linked to a specific tooth.
+    public int? ToothNumber { get; set; } = 11;
 
     public string ProcedureDetails { get; set; } = string.Empty;
 
@@ -533,9 +600,19 @@ public sealed class TreatmentRecordFormRequest
 
     public Guid? AppointmentId { get; set; }
 
-    public int ToothNumber { get; set; } = 11;
+    // S8 mirror — null = not linked to a specific tooth.
+    public int? ToothNumber { get; set; } = 11;
 
     public string ProcedureDetails { get; set; } = string.Empty;
 
     public decimal Cost { get; set; }
+}
+
+public sealed class UpsertToothConditionRequest
+{
+    public ToothCondition Condition { get; set; }
+
+    public ToothSurface? Surface { get; set; }
+
+    public string? Notes { get; set; }
 }

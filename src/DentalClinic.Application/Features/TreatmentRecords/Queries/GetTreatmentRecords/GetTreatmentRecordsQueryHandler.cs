@@ -38,6 +38,11 @@ public class GetTreatmentRecordsQueryHandler(IAppDbContext context) : IRequestHa
             query = query.Where(r => r.AppointmentId == request.AppointmentId.Value);
         }
 
+        if (request.ToothNumber.HasValue)
+        {
+            query = query.Where(r => r.ToothNumber == request.ToothNumber.Value);
+        }
+
         var totalCount = await query.CountAsync(cancellationToken);
 
         var records = await query

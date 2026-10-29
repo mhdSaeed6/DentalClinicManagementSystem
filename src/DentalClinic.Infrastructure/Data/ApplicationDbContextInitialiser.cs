@@ -4,6 +4,7 @@ using DentalClinic.Domain.Common.Enums;
 using DentalClinic.Domain.Common.ValueObjects;
 using DentalClinic.Domain.Doctors;
 using DentalClinic.Domain.Identity;
+using DentalClinic.Domain.Odontograms;
 using DentalClinic.Domain.Patients;
 using DentalClinic.Domain.Services;
 using DentalClinic.Infrastructure.Identity;
@@ -252,6 +253,69 @@ public class ApplicationDbContextInitialiser(
                 _context.Appointments.Add(sampleAppointment);
                 await _context.SaveChangesAsync();
             }
+        }
+
+        // 8. Demo Odontogram Seed (S6) — بيانات عرض لحالات الأسنان (التطوير فقط مثل بقية المهيأ).
+        // Demo per-tooth conditions for the seeded patients, built through the
+        // PatientTooth.Create factory like every other seeded domain object.
+        var demoPatients = await _context.Patients.ToListAsync();
+        var demoPatientIds = demoPatients
+            .Select(p => p.Id)
+            .ToList();
+
+        // الصفوف المحذوفة ناعماً تعد أيضاً "موجودة" (IgnoreQueryFilters): كي لا يعيد المهيأ إضافة سن مسحه المستخدم
+        // ولن يمس الفهرس الفريد المصفى على (PatientId, ToothNumber) عند إعادة تشغيل الحاوية — مثالي التكرارية.
+        // Soft-deleted rows count as "already exists" too: a restart never hits the
+        // filtered unique index and never resurrects a condition the clinician cleared.
+        var seededTeeth = await _context.PatientTeeth
+            .IgnoreQueryFilters()
+            .Where(pt => demoPatientIds.Contains(pt.PatientId))
+            .Select(pt => new { pt.PatientId, pt.ToothNumber })
+            .ToListAsync();
+
+        var seededPairs = new HashSet<(Guid PatientId, int ToothNumber)>();
+
+        foreach (var seededTooth in seededTeeth)
+        {
+            seededPairs.Add((seededTooth.PatientId, seededTooth.ToothNumber));
+        }
+
+        var michaelPatient = demoPatients.FirstOrDefault(p => p.FirstName == "Michael" && p.LastName == "Brown");
+        var emmaPatient = demoPatients.FirstOrDefault(p => p.FirstName == "Emma" && p.LastName == "Wilson");
+
+        // نصوص عامة للعرض فقط — لا بيانات حقيقية. Generic demo notes only — no real data.
+        var demoTeeth = new (Patient? Patient, int ToothNumber, ToothCondition Condition, ToothSurface? Surface, string? Notes)[]
+        {
+            (michaelPatient, 16, ToothCondition.Caries, ToothSurface.Occlusal, "Demo row — occlusal caries flagged at the last check-up."),
+            (michaelPatient, 26, ToothCondition.Filled, ToothSurface.Mesial, "Demo row — old composite filling, intact margins."),
+            (michaelPatient, 36, ToothCondition.Crown, null, null),
+            (emmaPatient, 11, ToothCondition.Missing, null, null),
+            (emmaPatient, 21, ToothCondition.Healthy, ToothSurface.Incisal, "Demo row — routine review, no findings.")
+        };
+
+        var addedTeeth = 0;
+
+        foreach (var demo in demoTeeth)
+        {
+            if (demo.Patient is null || seededPairs.Contains((demo.Patient.Id, demo.ToothNumber)))
+            {
+                continue;
+            }
+
+            var toothRes = PatientTooth.Create(demo.Patient.Id, demo.ToothNumber, demo.Condition, demo.Surface, demo.Notes);
+
+            if (toothRes.IsError)
+            {
+                throw new Exception($"PatientTooth Seeding Failed: {toothRes.Errors}");
+            }
+
+            _context.PatientTeeth.Add(toothRes.Value);
+            addedTeeth++;
+        }
+
+        if (addedTeeth > 0)
+        {
+            await _context.SaveChangesAsync();
         }
     }
 

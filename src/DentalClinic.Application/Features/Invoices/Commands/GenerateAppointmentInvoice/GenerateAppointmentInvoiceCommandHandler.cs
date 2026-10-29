@@ -191,9 +191,15 @@ public class GenerateAppointmentInvoiceCommandHandler(
                 continue;
             }
 
+            // A treatment not tied to a tooth must not render "(Tooth )" on the
+            // persisted invoice line — omit the suffix when there is no tooth.
+            var description = treatment.ToothNumber is null
+                ? treatment.ProcedureDetails
+                : $"{treatment.ProcedureDetails} (Tooth {treatment.ToothNumber})";
+
             lines.Add(new InvoiceLineDto(
                 Guid.Empty,
-                $"{treatment.ProcedureDetails} (Tooth {treatment.ToothNumber})",
+                description,
                 treatment.Cost));
             treatmentSubtotal += treatment.Cost;
         }

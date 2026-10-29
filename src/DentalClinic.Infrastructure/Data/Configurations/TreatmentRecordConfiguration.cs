@@ -23,7 +23,14 @@ public class TreatmentRecordConfiguration : IEntityTypeConfiguration<TreatmentRe
             .HasPrecision(18, 2)
             .IsRequired();
 
-        // 4. Foreign Key Indexes for Performance
+        // 4. S8: a treatment may be recorded without a specific tooth (e.g. a
+        //    general consultation) — null means "not linked to a tooth". Kept
+        //    explicit so a future convention change cannot silently flip it back
+        //    to required.
+        builder.Property(t => t.ToothNumber)
+            .IsRequired(false);
+
+        // 5. Foreign Key Indexes for Performance
         builder.HasIndex(t => t.PatientId);
         builder.HasIndex(t => t.DoctorId);
         builder.HasIndex(t => t.AppointmentId);

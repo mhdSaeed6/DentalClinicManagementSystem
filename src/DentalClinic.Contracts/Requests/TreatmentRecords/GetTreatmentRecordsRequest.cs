@@ -8,5 +8,6 @@ public class GetTreatmentRecordsRequest
     public Guid? PatientId { get; set; }
     public Guid? DoctorId { get; set; }
     public Guid? AppointmentId { get; set; }
+    public int? ToothNumber { get; set; }
 }
 

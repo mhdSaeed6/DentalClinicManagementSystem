@@ -1,3 +1,4 @@
+using DentalClinic.Domain.Common.ValueObjects;
 using FluentValidation;
 
 namespace DentalClinic.Application.Features.TreatmentRecords.Commands.UpdateTreatmentRecord;
@@ -15,8 +16,9 @@ public sealed class UpdateTreatmentRecordCommandValidator : AbstractValidator<Up
         RuleFor(x => x.DoctorId)
             .NotEmpty().WithMessage("DoctorId is required.");
 
+        // null toothNumber مسموح — يمسح الارتباط بالسن؛ القيمة المعطاة يجب أن تكون سناً FDI صالحاً.
         RuleFor(x => x.ToothNumber)
-            .Must(IsValidToothNumber)
+            .Must(tooth => !tooth.HasValue || FdiTooth.IsValidToothNumber(tooth.Value))
             .WithMessage("Tooth number must be a valid FDI dental chart number (e.g., 11-18, 21-28, 51-55, 71-75).");
 
         RuleFor(x => x.ProcedureDetails)
@@ -25,20 +27,5 @@ public sealed class UpdateTreatmentRecordCommandValidator : AbstractValidator<Up
 
         RuleFor(x => x.Cost)
             .GreaterThanOrEqualTo(0).WithMessage("Cost cannot be negative.");
-    }
-
-    private static bool IsValidToothNumber(int number)
-    {
-        bool isPermanent = (number >= 11 && number <= 18) ||
-                            (number >= 21 && number <= 28) ||
-                            (number >= 31 && number <= 38) ||
-                            (number >= 41 && number <= 48);
-
-        bool isPediatric = (number >= 51 && number <= 55) ||
-                            (number >= 61 && number <= 65) ||
-                            (number >= 71 && number <= 75) ||
-                            (number >= 81 && number <= 85);
-
-        return isPermanent || isPediatric;
     }
 }
