@@ -30,9 +30,32 @@ public class TreatmentRecordConfiguration : IEntityTypeConfiguration<TreatmentRe
         builder.Property(t => t.ToothNumber)
             .IsRequired(false);
 
-        // 5. Foreign Key Indexes for Performance
+        // 5. P1.1 — EstimatedCost is the plan-time estimate; never billed and
+        //    always distinct from Cost (D-P2). Nullable: ad-hoc work has no
+        //    estimate.
+        builder.Property(t => t.EstimatedCost)
+            .HasPrecision(18, 2)
+            .IsRequired(false);
+
+        // 6. P1.1 — session grouping for per-session totals and printing.
+        builder.Property(t => t.SessionNumber)
+            .HasDefaultValue(1);
+
+        // 7. P1.1 — the plan reference is soft-deleted by plan soft delete
+        //    only (D-P5); Restrict blocks accidental hard-deletion of a plan
+        //    that still holds items.
+        builder.HasOne(t => t.Plan)
+            .WithMany()
+            .HasForeignKey(t => t.PlanId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        // 8. Foreign Key Indexes for Performance
         builder.HasIndex(t => t.PatientId);
         builder.HasIndex(t => t.DoctorId);
         builder.HasIndex(t => t.AppointmentId);
+        builder.HasIndex(t => t.PlanId);
+
+        // 9. List queries filter by patient then status (P1.2)
+        builder.HasIndex(t => new { t.PatientId, t.Status });
     }
 }

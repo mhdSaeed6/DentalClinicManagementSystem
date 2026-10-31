@@ -9,6 +9,7 @@ using DentalClinic.Domain.Invoices;
 using DentalClinic.Domain.Odontograms;
 using DentalClinic.Domain.Patients;
 using DentalClinic.Domain.Services;
+using DentalClinic.Domain.TreatmentPlans;
 using DentalClinic.Domain.TreatmentRecords;
 using DentalClinic.Infrastructure.Identity;
 
@@ -38,6 +39,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> contextOptions) : Ident
     public DbSet<Payment> Payments => Set<Payment>();
 
     public DbSet<TreatmentRecord> TreatmentRecords => Set<TreatmentRecord>();
+
+    public DbSet<TreatmentPlan> TreatmentPlans => Set<TreatmentPlan>();
 
     public DbSet<PatientTooth> PatientTeeth => Set<PatientTooth>();
 
