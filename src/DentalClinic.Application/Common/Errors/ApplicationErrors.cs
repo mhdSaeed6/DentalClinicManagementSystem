@@ -1,4 +1,4 @@
-﻿using DentalClinic.Domain.Common.Results;
+using DentalClinic.Domain.Common.Results;
 
 namespace DentalClinic.Application.Common.Errors;
 
@@ -66,6 +66,31 @@ public static class ApplicationErrors
         Error.Forbidden(
             code: "TreatmentRecord.AccessForbidden",
             description: "You are not allowed to access this treatment record.");
+
+    public static Error TreatmentPlanNotFound =>
+        Error.NotFound(
+            code: "TreatmentPlan.NotFound",
+            description: "Treatment plan not found.");
+
+    public static Error TreatmentPlanAccessForbidden =>
+        Error.Forbidden(
+            code: "TreatmentPlan.AccessForbidden",
+            description: "You are not allowed to access this treatment plan.");
+
+    public static Error TreatmentPlanItemNotFound =>
+        Error.NotFound(
+            code: "TreatmentPlan.ItemNotFound",
+            description: "Treatment plan item not found.");
+
+    public static Error TreatmentPlanItemOnIssuedInvoice =>
+        Error.Conflict(
+            code: "TreatmentPlan.ItemOnIssuedInvoice",
+            description: "The plan item's appointment already has an issued invoice, so it cannot be reopened.");
+
+    public static Error TreatmentPlanItemAppointmentMismatch =>
+        Error.Validation(
+            code: "TreatmentPlan.ItemAppointmentMismatch",
+            description: "The appointment does not belong to the plan item's patient and doctor.");
 
     public static Error ClinicalWriteForbidden =>
         Error.Forbidden(

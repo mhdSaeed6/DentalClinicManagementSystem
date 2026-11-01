@@ -186,7 +186,10 @@ public class GenerateAppointmentInvoiceCommandHandler(
 
         foreach (var treatment in treatments)
         {
-            if (treatment.Cost <= 0)
+            // P1.2/D-P3: only performed work is billable. Planned items stay
+            // silent until performed; cancelled items remain in history but
+            // never reach an invoice (nothing retroactively rewrites one).
+            if (treatment.Status is not TreatmentRecordStatus.Performed || treatment.Cost <= 0)
             {
                 continue;
             }
