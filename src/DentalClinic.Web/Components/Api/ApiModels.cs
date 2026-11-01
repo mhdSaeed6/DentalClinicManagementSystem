@@ -369,6 +369,91 @@ public sealed class TreatmentRecordDto
     public decimal Cost { get; set; }
 }
 
+public enum TreatmentPlanStatus
+{
+    Draft = 1,
+    Active = 2,
+    Completed = 3,
+    Cancelled = 4,
+}
+
+public enum TreatmentRecordStatus
+{
+    Planned = 1,
+    Performed = 2,
+    Cancelled = 3,
+}
+
+public class TreatmentPlanDto
+{
+    public Guid Id { get; set; }
+
+    public Guid PatientId { get; set; }
+
+    public Guid DoctorId { get; set; }
+
+    public string PatientName { get; set; } = string.Empty;
+
+    public string DoctorName { get; set; } = string.Empty;
+
+    public string Title { get; set; } = string.Empty;
+
+    public string? Notes { get; set; }
+
+    public TreatmentPlanStatus Status { get; set; }
+
+    public DateTimeOffset CreatedOnUtc { get; set; }
+
+    public int ItemCount { get; set; }
+
+    public decimal EstimatedTotal { get; set; }
+
+    public decimal PerformedTotal { get; set; }
+}
+
+public sealed class TreatmentPlanDetailDto : TreatmentPlanDto
+{
+    public List<TreatmentPlanItemDto> Items { get; set; } = [];
+}
+
+public sealed class TreatmentPlanItemDto
+{
+    public Guid Id { get; set; }
+
+    public Guid? PlanId { get; set; }
+
+    public Guid PatientId { get; set; }
+
+    public Guid DoctorId { get; set; }
+
+    public Guid? AppointmentId { get; set; }
+
+    public int? ToothNumber { get; set; }
+
+    public string ProcedureDetails { get; set; } = string.Empty;
+
+    public TreatmentRecordStatus Status { get; set; }
+
+    public decimal Cost { get; set; }
+
+    public decimal? EstimatedCost { get; set; }
+
+    public int SessionNumber { get; set; }
+}
+
+public sealed class TreatmentPlanSessionDto
+{
+    public int SessionNumber { get; set; }
+
+    public int ItemCount { get; set; }
+
+    public decimal EstimatedTotal { get; set; }
+
+    public decimal PerformedTotal { get; set; }
+
+    public decimal GrandTotal { get; set; }
+}
+
 // ---------------------------------------------------------------------------
 // Odontograms
 // ---------------------------------------------------------------------------
@@ -606,6 +691,35 @@ public sealed class TreatmentRecordFormRequest
     public string ProcedureDetails { get; set; } = string.Empty;
 
     public decimal Cost { get; set; }
+}
+
+public sealed class TreatmentPlanFormRequest
+{
+    public Guid PatientId { get; set; }
+
+    public Guid DoctorId { get; set; }
+
+    public string Title { get; set; } = string.Empty;
+
+    public string? Notes { get; set; }
+}
+
+public sealed class TreatmentPlanItemFormRequest
+{
+    public int? ToothNumber { get; set; }
+
+    public string ProcedureDetails { get; set; } = string.Empty;
+
+    public decimal? EstimatedCost { get; set; }
+
+    public int SessionNumber { get; set; } = 1;
+}
+
+public sealed class PerformTreatmentPlanItemRequest
+{
+    public decimal ActualCost { get; set; }
+
+    public Guid? AppointmentId { get; set; }
 }
 
 public sealed class UpsertToothConditionRequest

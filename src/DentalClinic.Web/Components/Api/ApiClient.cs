@@ -283,6 +283,79 @@ public sealed class ApiClient
         PutAsync<TreatmentRecordDto>($"treatment-records/{id}", request, ct);
 
     // -----------------------------------------------------------------------
+    // Treatment plans
+    // -----------------------------------------------------------------------
+
+    public Task<PaginatedList<TreatmentPlanDto>> GetTreatmentPlansAsync(
+        int page,
+        int pageSize,
+        Guid? patientId = null,
+        Guid? doctorId = null,
+        int? status = null,
+        CancellationToken ct = default) =>
+        GetAsync<PaginatedList<TreatmentPlanDto>>(
+            "treatment-plans?" + Query(
+                ("PageNumber", page),
+                ("PageSize", pageSize),
+                ("PatientId", patientId),
+                ("DoctorId", doctorId),
+                ("Status", status)),
+            ct);
+
+    public Task<TreatmentPlanDetailDto> GetTreatmentPlanAsync(Guid id, CancellationToken ct = default) =>
+        GetAsync<TreatmentPlanDetailDto>($"treatment-plans/{id}", ct);
+
+    public Task<TreatmentPlanDto> CreateTreatmentPlanAsync(TreatmentPlanFormRequest request, CancellationToken ct = default) =>
+        PostAsync<TreatmentPlanDto>("treatment-plans", request, ct);
+
+    public Task UpdateTreatmentPlanAsync(Guid planId, TreatmentPlanFormRequest request, CancellationToken ct = default) =>
+        PutNoContentAsync($"treatment-plans/{planId}", request, ct);
+
+    public Task DeleteTreatmentPlanAsync(Guid planId, bool confirmPerformedItems = false, CancellationToken ct = default) =>
+        DeleteAsync($"treatment-plans/{planId}?confirmPerformedItems={confirmPerformedItems}", ct);
+
+    public Task ActivateTreatmentPlanAsync(Guid planId, CancellationToken ct = default) =>
+        PostNoContentAsync($"treatment-plans/{planId}/activate", ct);
+
+    public Task CompleteTreatmentPlanAsync(Guid planId, CancellationToken ct = default) =>
+        PostNoContentAsync($"treatment-plans/{planId}/complete", ct);
+
+    public Task CancelTreatmentPlanAsync(Guid planId, CancellationToken ct = default) =>
+        PostNoContentAsync($"treatment-plans/{planId}/cancel", ct);
+
+    public Task<TreatmentPlanItemDto> AddTreatmentPlanItemAsync(
+        Guid planId,
+        TreatmentPlanItemFormRequest request,
+        CancellationToken ct = default) =>
+        PostAsync<TreatmentPlanItemDto>($"treatment-plans/{planId}/items", request, ct);
+
+    public Task<TreatmentPlanItemDto> UpdateTreatmentPlanItemAsync(
+        Guid planId,
+        Guid itemId,
+        TreatmentPlanItemFormRequest request,
+        CancellationToken ct = default) =>
+        PutAsync<TreatmentPlanItemDto>($"treatment-plans/{planId}/items/{itemId}", request, ct);
+
+    public Task CancelTreatmentPlanItemAsync(Guid planId, Guid itemId, CancellationToken ct = default) =>
+        PostAsync<TreatmentPlanItemDto>($"treatment-plans/{planId}/items/{itemId}/cancel", null, ct);
+
+    public Task ReopenTreatmentPlanItemAsync(Guid planId, Guid itemId, CancellationToken ct = default) =>
+        PostAsync<TreatmentPlanItemDto>($"treatment-plans/{planId}/items/{itemId}/reopen", null, ct);
+
+    public Task<TreatmentPlanItemDto> PerformTreatmentPlanItemAsync(
+        Guid planId,
+        Guid itemId,
+        PerformTreatmentPlanItemRequest request,
+        CancellationToken ct = default) =>
+        PostAsync<TreatmentPlanItemDto>($"treatment-plans/{planId}/items/{itemId}/perform", request, ct);
+
+    public Task DeleteTreatmentPlanItemAsync(Guid planId, Guid itemId, CancellationToken ct = default) =>
+        DeleteAsync($"treatment-plans/{planId}/items/{itemId}", ct);
+
+    public Task<List<TreatmentPlanSessionDto>> GetTreatmentPlanSessionsAsync(Guid planId, CancellationToken ct = default) =>
+        GetAsync<List<TreatmentPlanSessionDto>>($"treatment-plans/{planId}/sessions", ct);
+
+    // -----------------------------------------------------------------------
     // Odontograms
     // -----------------------------------------------------------------------
 
@@ -314,6 +387,24 @@ public sealed class ApiClient
 
     private async Task<T> PatchAsync<T>(string url, object? body, CancellationToken ct) =>
         await ExecuteAsync<T>(HttpMethod.Patch, url, body, ct);
+
+    private Task PostNoContentAsync(string url, CancellationToken ct) =>
+        SendNoContentAsync(HttpMethod.Post, url, null, ct);
+
+    private Task PutNoContentAsync(string url, object? body, CancellationToken ct) =>
+        SendNoContentAsync(HttpMethod.Put, url, body, ct);
+
+    private async Task SendNoContentAsync(HttpMethod method, string url, object? body, CancellationToken ct)
+    {
+        var response = await SendAsync(method, url, body, ct);
+
+        if (response.StatusCode == HttpStatusCode.Unauthorized && await TryRefreshAsync(ct))
+        {
+            response = await SendAsync(method, url, body, ct);
+        }
+
+        await EnsureSuccessAsync(response, ct);
+    }
 
     private async Task DeleteAsync(string url, CancellationToken ct)
     {

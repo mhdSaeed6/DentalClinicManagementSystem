@@ -1,0 +1,949 @@
+@page "/treatment-plans"
+@inject ApiClient Api
+@inject ClinicSessionState Session
+@inject NotificationService Notifier
+
+<PageTitle>@Session.T("Treatment plans", "خطط العلاج") · @Session.T("Al Noor Dental", "عيادة النور")</PageTitle>
+
+<PageHeader Title="@Session.T("Treatment plans", "خطط العلاج")"
+            Subtitle="@Session.T("Plan sessions, estimates and performed work.", "خطط الجلسات والتقديرات والأعمال المنجزة.")">
+    <Actions>
+        <select class="select filter-select" @bind="_statusFilter" @bind:after="ApplyFilterAsync">
+            <option value="">@Session.T("All statuses", "كل الحالات")</option>
+            <option value="@((int)TreatmentPlanStatus.Draft)">@Session.T("Draft", "مسودة")</option>
+            <option value="@((int)TreatmentPlanStatus.Active)">@Session.T("Active", "نشطة")</option>
+            <option value="@((int)TreatmentPlanStatus.Completed)">@Session.T("Completed", "مكتملة")</option>
+            <option value="@((int)TreatmentPlanStatus.Cancelled)">@Session.T("Cancelled", "ملغاة")</option>
+        </select>
+        <button type="button" class="btn btn-outline" @onclick="LoadAsync" disabled="@_loading">
+            <ClinicIcon Name="refresh" Class="sm" /> @Session.T("Refresh", "تحديث")
+        </button>
+        <button type="button" class="btn btn-primary" @onclick="OpenCreate">
+            <ClinicIcon Name="plus" Class="sm" /> @Session.T("New plan", "خطة جديدة")
+        </button>
+    </Actions>
+</PageHeader>
+
+<div class="card">
+    @if (_loading)
+    {
+        <div class="card-body">
+            <div class="skeleton row"></div>
+            <div class="skeleton row"></div>
+        </div>
+    }
+    else if (_plans.Count == 0)
+    {
+        <EmptyState Icon="clipboard" Title="@Session.T("No treatment plans", "لا توجد خطط علاج")"
+                    Message="@Session.T("Create a plan to organize multi-session care.", "أنشئ خطة لتنظيم العلاج على عدة جلسات.")">
+            <ActionContent><button type="button" class="btn btn-primary" @onclick="OpenCreate">@Session.T("New plan", "خطة جديدة")</button></ActionContent>
+        </EmptyState>
+    }
+    else
+    {
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>@Session.T("Plan", "الخطة")</th>
+                        <th>@Session.T("Patient", "المريض")</th>
+                        <th>@Session.T("Doctor", "الطبيب")</th>
+                        <th>@Session.T("Status", "الحالة")</th>
+                        <th>@Session.T("Items", "العناصر")</th>
+                        <th>@Session.T("Estimated", "التقديري")</th>
+                        <th>@Session.T("Performed", "المنجز")</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var plan in _plans)
+                    {
+                        <tr @key="plan.Id">
+                            <td class="cell-main">@plan.Title</td>
+                            <td>@plan.PatientName</td>
+                            <td>@plan.DoctorName</td>
+                            <td><span class="badge @PlanStatusClass(plan.Status) no-dot">@PlanStatusLabel(plan.Status)</span></td>
+                            <td>@plan.ItemCount</td>
+                            <td class="mono">@ClinicFormatting.Money(plan.EstimatedTotal)</td>
+                            <td class="mono text-success">@ClinicFormatting.Money(plan.PerformedTotal)</td>
+                            <td>
+                                <button type="button" class="btn btn-outline btn-sm" @onclick="() => OpenDetailsAsync(plan.Id)">
+                                    @Session.T("Manage", "إدارة")
+                                </button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        <Pager PageNumber="_page" PageSize="PageSize" TotalCount="_total" TotalPages="_totalPages"
+               OnPageChange="GoToPage" />
+    }
+</div>
+
+<Modal IsOpen="_formOpen" Title="@(_editingPlan ? Session.T("Edit treatment plan", "تعديل خطة العلاج") : Session.T("New treatment plan", "خطة علاج جديدة"))" OnClose="CloseForm">
+    <ChildContent>
+        @if (!string.IsNullOrWhiteSpace(_error))
+        {
+            <div class="badge danger no-dot mb-2">@_error</div>
+        }
+        <div class="field">
+            <label class="label">@Session.T("Patient", "المريض")</label>
+            <select class="select" @bind="_form.PatientId" disabled="@_editingPlan">
+                <option value="@Guid.Empty">@Session.T("— Select —", "— اختر —")</option>
+                @foreach (var patient in _patients)
+                {
+                    <option value="@patient.Id">@patient.FirstName @patient.LastName</option>
+                }
+            </select>
+        </div>
+        <div class="field">
+            <label class="label">@Session.T("Doctor", "الطبيب")</label>
+            <select class="select" @bind="_form.DoctorId" disabled="@_editingPlan">
+                <option value="@Guid.Empty">@Session.T("— Select —", "— اختر —")</option>
+                @foreach (var doctor in _doctors)
+                {
+                    <option value="@doctor.Id">@doctor.FirstName @doctor.LastName</option>
+                }
+            </select>
+        </div>
+        <div class="field">
+            <label class="label">@Session.T("Title", "العنوان")</label>
+            <input class="input" @bind="_form.Title" maxlength="200" />
+        </div>
+        <div class="field">
+            <label class="label">@Session.T("Notes", "ملاحظات")</label>
+            <textarea class="textarea" @bind="_form.Notes" maxlength="1000"></textarea>
+        </div>
+    </ChildContent>
+    <Footer>
+        <button type="button" class="btn btn-ghost" @onclick="CloseForm">@Session.T("Cancel", "إلغاء")</button>
+        <button type="button" class="btn btn-primary" @onclick="SaveAsync" disabled="@_saving">@Session.T("Save",
+                       "حفظ")</button>
+    </Footer>
+</Modal>
+
+<Drawer IsOpen="_drawerOpen" Title="@(_selected?.Title ?? string.Empty)" OnClose="() => _drawerOpen = false">
+    @if (_selected is not null)
+    {
+        <div class="flex-between mb-2">
+            <span>@_selected.PatientName · @_selected.DoctorName</span>
+            <span class="badge @PlanStatusClass(_selected.Status) no-dot">@PlanStatusLabel(_selected.Status)</span>
+        </div>
+        <div class="flex gap-1 flex-wrap mb-3">
+            @if (_selected.Status is TreatmentPlanStatus.Draft)
+            {
+                <button type="button" class="btn btn-primary btn-sm" @onclick="ActivatePlanAsync">
+                    @Session.T("Activate", "تفعيل")
+                </button>
+            }
+            @if (_selected.Status is TreatmentPlanStatus.Active)
+            {
+                <button type="button" class="btn btn-primary btn-sm" @onclick="AskCompletePlan">
+                    @Session.T("Complete", "إنهاء")
+                </button>
+            }
+            @if (_selected.Status is TreatmentPlanStatus.Draft or TreatmentPlanStatus.Active)
+            {
+                <button type="button" class="btn btn-outline btn-sm" @onclick="AskCancelPlan">
+                    @Session.T("Cancel plan", "إلغاء الخطة")
+                </button>
+                <button type="button" class="btn btn-outline btn-sm" @onclick="OpenEdit">
+                    @Session.T("Edit", "تعديل")
+                </button>
+            }
+            @if (_selected.Status is not TreatmentPlanStatus.Cancelled)
+            {
+                <button type="button" class="btn btn-outline btn-sm" @onclick="OpenAddItem">
+                    @Session.T("Add item", "إضافة عنصر")
+                </button>
+            }
+            <a class="btn btn-outline btn-sm" href="@($"/treatment-plans/{_selected.Id}/print")">
+                @Session.T("Print", "طباعة")
+            </a>
+            @if (_selected.Status is TreatmentPlanStatus.Draft or TreatmentPlanStatus.Active)
+            {
+                <button type="button" class="btn btn-danger btn-sm" @onclick="AskDeletePlan">
+                    @Session.T("Delete", "حذف")
+                </button>
+            }
+        </div>
+        <div class="flex-between mb-2">
+            <span>@Session.T("Estimated", "التقديري")</span><strong
+            class="mono">@ClinicFormatting.Money(_selected.EstimatedTotal)</strong>
+        </div>
+        <div class="flex-between mb-3">
+            <span>@Session.T("Performed", "المنجز")</span><strong
+            class="mono text-success">@ClinicFormatting.Money(_selected.PerformedTotal)</strong>
+        </div>
+        <div class="flex-between mb-2">
+            <strong>@Session.T("Sessions", "الجلسات")</strong>
+            <button type="button" class="btn btn-outline btn-sm" @onclick="LoadSessionsAsync">
+                @Session.T("Refresh totals", "تحديث الإجماليات")
+            </button>
+        </div>
+        @foreach (var session in _sessions)
+        {
+            <div class="flex-between fs-sm mb-1">
+                <span>@Session.T("Session", "الجلسة") @session.SessionNumber · @session.ItemCount @Session.T("items",
+                     "عناصر")</span>
+                <span class="mono">@ClinicFormatting.Money(session.GrandTotal)</span>
+            </div>
+        }
+
+        @foreach (var group in TreatmentPlanFormatting.GroupBySession(_selected.Items))
+        {
+            <div class="flex-between mt-3 mb-2">
+                <strong>@Session.T("Session", "الجلسة") @group.SessionNumber</strong>
+                <span class="mono fs-sm">@ClinicFormatting.Money(group.GrandTotal)</span>
+            </div>
+            @foreach (var item in group.Items)
+            {
+                <div class="card mb-2" @key="item.Id">
+                    <div class="card-body tight">
+                        <div class="flex-between">
+                            <strong>@item.ProcedureDetails</strong>
+                            <span class="badge @ItemStatusClass(item.Status) no-dot">@ItemStatusLabel(item.Status)</span>
+                        </div>
+                        <div class="fs-sm text-soft">
+                            @if (item.ToothNumber is { } tooth)
+                            {
+                                <span>@Session.T("Tooth", "السن") @tooth · </span>
+                            }
+                            @ClinicFormatting.Money(ItemAmount(item))
+                            @if (item.AppointmentId.HasValue)
+                            {
+                                <span> · @Session.T("Linked to an appointment", "مرتبط بموعد")</span>
+                            }
+                        </div>
+                        <div class="flex gap-1 mt-2 flex-wrap">
+                            @if (item.Status is TreatmentRecordStatus.Planned)
+                            {
+                                <button type="button" class="btn btn-primary btn-sm"
+                                        @onclick="() => OpenPerformAsync(item)">@Session.T("Mark performed", "تحديد كمنجز")</button>
+                                <button type="button" class="btn btn-outline btn-sm"
+                                        @onclick="() => OpenEditItem(item)">@Session.T("Edit", "تعديل")</button>
+                                <button type="button" class="btn btn-outline btn-sm"
+                                        @onclick="() => AskCancelItem(item)">@Session.T("Cancel", "إلغاء")</button>
+                            }
+                            else if (item.Status is TreatmentRecordStatus.Performed)
+                            {
+                                <button type="button" class="btn btn-outline btn-sm"
+                                        @onclick="() => OpenEditItem(item)">@Session.T("Edit", "تعديل")</button>
+                                <button type="button" class="btn btn-outline btn-sm"
+                                        @onclick="() => AskReopenItem(item)">@Session.T("Reopen", "إعادة فتح")</button>
+                            }
+                            <button type="button" class="btn btn-ghost btn-sm"
+                                    @onclick="() => AskRemoveItem(item)">@Session.T("Remove", "إزالة")</button>
+                        </div>
+                    </div>
+                </div>
+            }
+        }
+    }
+</Drawer>
+
+<Modal IsOpen="_itemFormOpen"
+   Title="@(_editingItem is null ? Session.T("Add plan item", "إضافة عنصر للخطة") : Session.T("Edit plan item", "تعديل عنصر الخطة"))"
+   OnClose="CloseItemForm">
+<ChildContent>
+    @if (!string.IsNullOrWhiteSpace(_error))
+    {
+        <div class="badge danger no-dot mb-2">@_error</div>
+    }
+    <div class="field">
+        <label class="label">@Session.T("Tooth (optional)", "السن (اختياري)")</label>
+        <input type="number" min="11" max="85" class="input" @bind="_itemForm.ToothNumber" />
+    </div>
+    <div class="field">
+        <label class="label">@Session.T("Procedure", "الإجراء")</label>
+        <textarea class="textarea" @bind="_itemForm.ProcedureDetails" maxlength="1000"></textarea>
+    </div>
+    <div class="form-grid">
+        <div class="field">
+            <label class="label">@Session.T("Estimated cost", "التكلفة التقديرية")</label>
+            <input type="number" min="0" step="0.01" class="input" @bind="_itemForm.EstimatedCost" />
+        </div>
+        <div class="field">
+            <label class="label">@Session.T("Session", "الجلسة")</label>
+            <input type="number" min="1" class="input" @bind="_itemForm.SessionNumber" />
+        </div>
+    </div>
+</ChildContent>
+<Footer>
+    <button type="button" class="btn btn-ghost" @onclick="CloseItemForm">@Session.T("Cancel", "إلغاء")</button>
+    <button type="button" class="btn btn-primary" @onclick="SaveItemAsync" disabled="@_saving">@Session.T("Save",
+               "حفظ")</button>
+    </Footer>
+</Modal>
+
+<Modal IsOpen="_performOpen" Title="@Session.T("Mark item as performed", "تحديد العنصر كمنجز")" OnClose="ClosePerform">
+    <ChildContent>
+        @if (_performItem is not null)
+        {
+            <p class="mb-2"><strong>@_performItem.ProcedureDetails</strong></p>
+        }
+        <div class="field">
+            <label class="label">@Session.T("Actual cost", "التكلفة الفعلية")</label>
+            <input type="number" min="0" step="0.01" class="input" @bind="_performActualCost" />
+        </div>
+        <div class="field">
+            <label class="label">@Session.T("Appointment (optional)", "الموعد (اختياري)")</label>
+            <select class="select" @bind="_performAppointmentId">
+                <option value="">@Session.T("— No appointment —", "— بدون موعد —")</option>
+                @foreach (var appointment in _performAppointments)
+                {
+                    <option value="@appointment.Id">@ClinicFormatting.DateTimeLabel(appointment.ScheduledDateTime)</option>
+                }
+            </select>
+        </div>
+        <p class="fs-sm text-soft">
+            @Session.T(
+                "Only performed items with an appointment appear on that appointment's invoice.",
+                "تظهر العناصر المنجزة المرتبطة بموعد فقط على فاتورة ذلك الموعد.")
+        </p>
+    </ChildContent>
+    <Footer>
+        <button type="button" class="btn btn-ghost" @onclick="ClosePerform">@Session.T("Cancel", "إلغاء")</button>
+        <button type="button" class="btn btn-primary" @onclick="SavePerformAsync" disabled="@_saving">@Session.T("Confirm",
+                   "تأكيد")</button>
+    </Footer>
+</Modal>
+
+    <ConfirmDialog IsOpen="_confirmOpen"
+                   Title="@_confirmTitle"
+                   Message="@_confirmMessage"
+                   Detail="@_confirmDetail"
+                   ConfirmLabel="@_confirmLabel"
+                   CancelLabel="@Session.T("Cancel", "إلغاء")"
+                   OnConfirm="RunConfirmedAsync"
+                   OnCancel="CloseConfirm" />
+
+@code {
+    private List<TreatmentPlanDto> _plans = [];
+    private List<PatientDto> _patients = [];
+    private List<DoctorDto> _doctors = [];
+    private TreatmentPlanDetailDto? _selected;
+    private List<TreatmentPlanSessionDto> _sessions = [];
+    private TreatmentPlanFormRequest _form = new();
+    private int _page = 1;
+    private const int PageSize = 10;
+    private int _total;
+    private int _totalPages;
+    private int? _statusFilter;
+    private bool _loading = true;
+    private bool _saving;
+    private bool _formOpen;
+    private bool _drawerOpen;
+    private bool _itemFormOpen;
+    private bool _editingPlan;
+    private string? _error;
+    private TreatmentPlanItemDto? _editingItem;
+    private TreatmentPlanItemFormRequest _itemForm = new();
+
+    private bool _performOpen;
+    private TreatmentPlanItemDto? _performItem;
+    private decimal _performActualCost;
+    private Guid? _performAppointmentId;
+    private List<AppointmentDto> _performAppointments = [];
+
+    private bool _confirmOpen;
+    private string _confirmTitle = string.Empty;
+    private string _confirmMessage = string.Empty;
+    private string? _confirmDetail;
+    private string _confirmLabel = string.Empty;
+    private Func<Task>? _confirmAction;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadLookupsAsync();
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        try
+        {
+            var result = await Api.GetTreatmentPlansAsync(_page, PageSize, status: _statusFilter);
+            _plans = result.Items ?? [];
+            _total = result.TotalCount;
+            _totalPages = result.TotalPages;
+        }
+        catch (ApiException ex)
+        {
+            Notifier.Error(Session.T("Could not load treatment plans", "تعذّر تحميل خطط العلاج"), ex.Message);
+        }
+        catch (Exception)
+        {
+            Notifier.Error(
+                Session.T("Could not load treatment plans", "تعذّر تحميل خطط العلاج"),
+                Session.T("Unexpected error. Please try again.", "حدث خطأ غير متوقع. يرجى المحاولة مجدداً."));
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task LoadLookupsAsync()
+    {
+        try
+        {
+            var patients = await Api.GetPatientsAsync(1, 100, null);
+            var doctors = await Api.GetDoctorsAsync(1, 100, null);
+            _patients = patients.Items ?? [];
+            _doctors = doctors.Items ?? [];
+        }
+        catch (ApiException ex)
+        {
+            Notifier.Error(Session.T("Could not load patients and doctors", "تعذّر تحميل المرضى والأطباء"), ex.Message);
+        }
+    }
+
+    private async Task ApplyFilterAsync()
+    {
+        _page = 1;
+        await LoadAsync();
+    }
+
+    private void OpenCreate()
+    {
+        _error = null;
+        _form = new();
+        _editingPlan = false;
+        _formOpen = true;
+    }
+
+    private void CloseForm()
+    {
+        _formOpen = false;
+        _error = null;
+    }
+
+    private async Task SaveAsync()
+    {
+        _error = null;
+
+        if (_form.PatientId == Guid.Empty || _form.DoctorId == Guid.Empty)
+        {
+            _error = Session.T("Select a patient and a doctor.", "اختر المريض والطبيب.");
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_form.Title))
+        {
+            _error = Session.T("A plan title is required.", "عنوان الخطة مطلوب.");
+            return;
+        }
+
+        _saving = true;
+        try
+        {
+            if (!_editingPlan)
+            {
+                await Api.CreateTreatmentPlanAsync(_form);
+                Notifier.Success(Session.T("Plan created", "تم إنشاء الخطة"));
+            }
+            else
+            {
+                if (_selected is null)
+                {
+                    return;
+                }
+
+                await Api.UpdateTreatmentPlanAsync(_selected.Id, _form);
+                Notifier.Success(Session.T("Plan updated", "تم تحديث الخطة"));
+            }
+
+            _formOpen = false;
+            await LoadAsync();
+            if (_selected is not null)
+            {
+                await RefreshSelectedAsync();
+            }
+        }
+        catch (ApiException ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task OpenDetailsAsync(Guid id)
+    {
+        try
+        {
+            var plan = await Api.GetTreatmentPlanAsync(id);
+            var sessions = await Api.GetTreatmentPlanSessionsAsync(id);
+            _selected = plan;
+            _sessions = sessions;
+            _drawerOpen = true;
+        }
+        catch (ApiException ex)
+        {
+            Notifier.Error(Session.T("Could not open the plan", "تعذّر فتح الخطة"), ex.Message);
+        }
+    }
+
+    private async Task RefreshSelectedAsync()
+    {
+        if (_selected is null)
+        {
+            return;
+        }
+
+        var id = _selected.Id;
+        try
+        {
+            _selected = await Api.GetTreatmentPlanAsync(id);
+            _sessions = await Api.GetTreatmentPlanSessionsAsync(id);
+        }
+        catch (ApiException ex) when (ex.IsNotFound)
+        {
+            _selected = null;
+            _sessions = [];
+            _drawerOpen = false;
+        }
+        catch (ApiException ex)
+        {
+            Notifier.Error(Session.T("Could not refresh the plan", "تعذّر تحديث الخطة"), ex.Message);
+        }
+    }
+
+    private async Task LoadSessionsAsync()
+    {
+        if (_selected is null)
+        {
+            return;
+        }
+
+        try
+        {
+            _sessions = await Api.GetTreatmentPlanSessionsAsync(_selected.Id);
+        }
+        catch (ApiException ex)
+        {
+            Notifier.Error(Session.T("Could not load session totals", "تعذّر تحميل إجماليات الجلسات"), ex.Message);
+        }
+    }
+
+    private void OpenEdit()
+    {
+        if (_selected is null)
+        {
+            return;
+        }
+
+        _form = new TreatmentPlanFormRequest
+        {
+            PatientId = _selected.PatientId,
+            DoctorId = _selected.DoctorId,
+            Title = _selected.Title,
+            Notes = _selected.Notes
+        };
+        _editingPlan = true;
+        _error = null;
+        _formOpen = true;
+    }
+
+    private void OpenAddItem()
+    {
+        _editingItem = null;
+        _itemForm = new();
+        _error = null;
+        _itemFormOpen = true;
+    }
+
+    private void OpenEditItem(TreatmentPlanItemDto item)
+    {
+        _editingItem = item;
+        _itemForm = new TreatmentPlanItemFormRequest
+        {
+            ToothNumber = item.ToothNumber,
+            ProcedureDetails = item.ProcedureDetails,
+            EstimatedCost = item.EstimatedCost,
+            SessionNumber = item.SessionNumber
+        };
+        _error = null;
+        _itemFormOpen = true;
+    }
+
+    private void CloseItemForm()
+    {
+        _itemFormOpen = false;
+        _error = null;
+    }
+
+    private async Task SaveItemAsync()
+    {
+        if (_selected is null)
+        {
+            return;
+        }
+
+        _error = null;
+        if (string.IsNullOrWhiteSpace(_itemForm.ProcedureDetails))
+        {
+            _error = Session.T("Procedure details are required.", "تفاصيل الإجراء مطلوبة.");
+            return;
+        }
+
+        if (_itemForm.SessionNumber < 1)
+        {
+            _error = Session.T("Session number must be at least 1.", "رقم الجلسة يجب أن يكون 1 على الأقل.");
+            return;
+        }
+
+        var planId = _selected.Id;
+        _saving = true;
+        try
+        {
+            if (_editingItem is null)
+            {
+                await Api.AddTreatmentPlanItemAsync(planId, _itemForm);
+                Notifier.Success(Session.T("Item added", "تمت إضافة العنصر"));
+            }
+            else
+            {
+                await Api.UpdateTreatmentPlanItemAsync(planId, _editingItem.Id, _itemForm);
+                Notifier.Success(Session.T("Item updated", "تم تحديث العنصر"));
+            }
+
+            _itemFormOpen = false;
+            await RefreshSelectedAsync();
+            await LoadAsync();
+        }
+        catch (ApiException ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task OpenPerformAsync(TreatmentPlanItemDto item)
+    {
+        if (_selected is null)
+        {
+            return;
+        }
+
+        _performItem = item;
+        _performActualCost = item.EstimatedCost ?? 0;
+        _performAppointmentId = item.AppointmentId;
+        _performAppointments = [];
+        _performOpen = true;
+
+        try
+        {
+            // The API only accepts an appointment for the plan's patient AND
+            // doctor, so never offer another doctor's appointments here.
+            var appointments = await Api.GetAppointmentsAsync(
+                1,
+                100,
+                patientId: _selected.PatientId,
+                doctorId: _selected.DoctorId);
+            _performAppointments = [.. (appointments.Items ?? [])
+                .Where(a => a.Status is not AppointmentStatus.Cancelled)];
+        }
+        catch (ApiException ex)
+        {
+            Notifier.Warning(Session.T("Could not load appointments", "تعذّر تحميل المواعيد"), ex.Message);
+        }
+    }
+
+    private void ClosePerform()
+    {
+        _performOpen = false;
+        _performItem = null;
+        _performAppointments = [];
+    }
+
+    private async Task SavePerformAsync()
+    {
+        if (_selected is null || _performItem is null)
+        {
+            return;
+        }
+
+        var planId = _selected.Id;
+        var itemId = _performItem.Id;
+        var request = new PerformTreatmentPlanItemRequest
+        {
+            ActualCost = _performActualCost,
+            AppointmentId = _performAppointmentId
+        };
+
+        _saving = true;
+        try
+        {
+            await Api.PerformTreatmentPlanItemAsync(planId, itemId, request);
+            _performOpen = false;
+            _performItem = null;
+            Notifier.Success(Session.T("Item marked as performed", "تم تحديد العنصر كمنجز"));
+            await RefreshSelectedAsync();
+            await LoadAsync();
+        }
+        catch (ApiException ex)
+        {
+            Notifier.Error(Session.T("Could not perform the item", "تعذّر تحديد العنصر كمنجز"), ex.Message);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private Task ActivatePlanAsync()
+    {
+        if (_selected is null)
+        {
+            return Task.CompletedTask;
+        }
+
+        var id = _selected.Id;
+        return RunActionAsync(
+            () => Api.ActivateTreatmentPlanAsync(id),
+            Session.T("Plan activated", "تم تفعيل الخطة"));
+    }
+
+    private void AskCompletePlan()
+    {
+        if (_selected is null)
+        {
+            return;
+        }
+
+        var id = _selected.Id;
+        AskConfirm(
+            Session.T("Complete plan", "إنهاء الخطة"),
+            Session.T("Mark this plan as completed?", "هل تريد إنهاء هذه الخطة؟"),
+            Session.T("Planned items that were never performed will not be billed.", "العناصر المخططة التي لم تُنفّذ لن تُحتسب."),
+            Session.T("Complete", "إنهاء"),
+            () => RunActionAsync(
+                () => Api.CompleteTreatmentPlanAsync(id),
+                Session.T("Plan completed", "تم إنهاء الخطة")));
+    }
+
+    private void AskCancelPlan()
+    {
+        if (_selected is null)
+        {
+            return;
+        }
+
+        var id = _selected.Id;
+        AskConfirm(
+            Session.T("Cancel plan", "إلغاء الخطة"),
+            Session.T("Cancel this treatment plan?", "هل تريد إلغاء خطة العلاج؟"),
+            Session.T("The plan's items stay in history; performed work is not undone.", "تبقى عناصر الخطة في السجل، ولا يُلغى العمل المنجز."),
+            Session.T("Cancel plan", "إلغاء الخطة"),
+            () => RunActionAsync(
+                () => Api.CancelTreatmentPlanAsync(id),
+                Session.T("Plan cancelled", "تم إلغاء الخطة")));
+    }
+
+    private void AskDeletePlan()
+    {
+        if (_selected is null)
+        {
+            return;
+        }
+
+        var plan = _selected;
+        var performedCount = plan.Items.Count(i => i.Status is TreatmentRecordStatus.Performed);
+        var detail = performedCount > 0
+            ? Session.T(
+                $"{performedCount} performed item(s) will be removed from the plan history. Issued invoices are not changed.",
+                $"سيُزال {performedCount} عنصر منجز من سجل الخطة. لن تتغيّر الفواتير الصادرة.")
+            : null;
+
+        AskConfirm(
+            Session.T("Delete plan", "حذف الخطة"),
+            Session.T($"Delete \"{plan.Title}\"?", $"حذف \"{plan.Title}\"؟"),
+            detail,
+            Session.T("Delete", "حذف"),
+            async () =>
+            {
+                // D-P5: the API requires an explicit confirmation
+                // only when performed work exists.
+                await Api.DeleteTreatmentPlanAsync(plan.Id, confirmPerformedItems: performedCount > 0);
+                _selected = null;
+                _sessions = [];
+                _drawerOpen = false;
+                Notifier.Success(Session.T("Plan deleted", "تم حذف الخطة"));
+                await LoadAsync();
+            });
+    }
+
+    private void AskCancelItem(TreatmentPlanItemDto item)
+    {
+        if (_selected is null)
+        {
+            return;
+        }
+
+        var planId = _selected.Id;
+        AskConfirm(
+            Session.T("Cancel item", "إلغاء العنصر"),
+            Session.T($"Cancel \"{item.ProcedureDetails}\"?", $"إلغاء \"{item.ProcedureDetails}\"؟"),
+            Session.T("Cancelled items remain in history and are never billed.", "تبقى العناصر الملغاة في السجل ولا تُحتسب في الفواتير."),
+            Session.T("Cancel item", "إلغاء العنصر"),
+            () => RunActionAsync(
+                () => Api.CancelTreatmentPlanItemAsync(planId, item.Id),
+                Session.T("Item cancelled", "تم إلغاء العنصر")));
+    }
+
+    private void AskRemoveItem(TreatmentPlanItemDto item)
+    {
+        if (_selected is null)
+        {
+            return;
+        }
+
+        var planId = _selected.Id;
+        var detail = item.Status is TreatmentRecordStatus.Performed
+            ? Session.T(
+                "This item is performed. Removing it hides it from the plan history; issued invoices are unchanged.",
+                "هذا العنصر منجز. ستُخفيه الإزالة من سجل الخطة، ولن تتغيّر الفواتير الصادرة.")
+            : null;
+
+        AskConfirm(
+            Session.T("Remove item", "إزالة العنصر"),
+            Session.T($"Remove \"{item.ProcedureDetails}\" from the plan?", $"إزالة \"{item.ProcedureDetails}\" من الخطة؟"),
+            detail,
+            Session.T("Remove", "إزالة"),
+            () => RunActionAsync(
+                () => Api.DeleteTreatmentPlanItemAsync(planId, item.Id),
+                Session.T("Item removed", "تمت إزالة العنصر")));
+    }
+
+    private void AskReopenItem(TreatmentPlanItemDto item)
+    {
+        if (_selected is null)
+        {
+            return;
+        }
+
+        var planId = _selected.Id;
+        AskConfirm(
+            Session.T("Reopen item", "إعادة فتح العنصر"),
+            Session.T($"Reopen \"{item.ProcedureDetails}\"?", $"إعادة فتح \"{item.ProcedureDetails}\"؟"),
+            Session.T(
+                "The item returns to planned and is no longer billed until it is performed again.",
+                "يعود العنصر إلى مخطط ولا يُحتسب في الفاتورة حتى يُنفّذ مرة أخرى."),
+            Session.T("Reopen", "إعادة فتح"),
+            () => RunActionAsync(
+                () => Api.ReopenTreatmentPlanItemAsync(planId, item.Id),
+                Session.T("Item reopened", "تمت إعادة فتح العنصر")));
+    }
+
+    private async Task RunActionAsync(Func<Task> action, string successMessage)
+    {
+        try
+        {
+            await action();
+            Notifier.Success(successMessage);
+            await RefreshSelectedAsync();
+            await LoadAsync();
+        }
+        catch (ApiException ex)
+        {
+            Notifier.Error(Session.T("Action failed", "فشل الإجراء"), ex.Message);
+        }
+        catch (Exception)
+        {
+            Notifier.Error(
+                Session.T("Action failed", "فشل الإجراء"),
+                Session.T("Unexpected error. Please try again.", "حدث خطأ غير متوقع. يرجى المحاولة مجدداً."));
+        }
+    }
+
+    private void AskConfirm(string title, string message, string? detail, string confirmLabel, Func<Task> action)
+    {
+        _confirmTitle = title;
+        _confirmMessage = message;
+        _confirmDetail = detail;
+        _confirmLabel = confirmLabel;
+        _confirmAction = action;
+        _confirmOpen = true;
+    }
+
+    private void CloseConfirm()
+    {
+        _confirmOpen = false;
+        _confirmAction = null;
+    }
+
+    private async Task RunConfirmedAsync()
+    {
+        var action = _confirmAction;
+        CloseConfirm();
+        if (action is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await action();
+        }
+        catch (ApiException ex)
+        {
+            Notifier.Error(Session.T("Action failed", "فشل الإجراء"), ex.Message);
+        }
+        catch (Exception)
+        {
+            Notifier.Error(
+                Session.T("Action failed", "فشل الإجراء"),
+                Session.T("Unexpected error. Please try again.", "حدث خطأ غير متوقع. يرجى المحاولة مجدداً."));
+        }
+    }
+
+    private static decimal ItemAmount(TreatmentPlanItemDto item) =>
+        item.Status is TreatmentRecordStatus.Performed ? item.Cost : item.EstimatedCost ?? 0;
+
+    private string PlanStatusLabel(TreatmentPlanStatus status) => status switch
+    {
+        TreatmentPlanStatus.Draft => Session.T("Draft", "مسودة"),
+        TreatmentPlanStatus.Active => Session.T("Active", "نشطة"),
+        TreatmentPlanStatus.Completed => Session.T("Completed", "مكتملة"),
+        TreatmentPlanStatus.Cancelled => Session.T("Cancelled", "ملغاة"),
+        _ => status.ToString()
+    };
+
+    private string PlanStatusClass(TreatmentPlanStatus status) => status switch
+    {
+        TreatmentPlanStatus.Active => "success",
+        TreatmentPlanStatus.Completed => "brand",
+        TreatmentPlanStatus.Cancelled => "danger",
+        _ => "muted"
+    };
+
+    private string ItemStatusLabel(TreatmentRecordStatus status) => status switch
+    {
+        TreatmentRecordStatus.Planned => Session.T("Planned", "مخطط"),
+        TreatmentRecordStatus.Performed => Session.T("Performed", "منجز"),
+        TreatmentRecordStatus.Cancelled => Session.T("Cancelled", "ملغى"),
+        _ => status.ToString()
+    };
+
+    private string ItemStatusClass(TreatmentRecordStatus status) => status switch
+    {
+        TreatmentRecordStatus.Performed => "success",
+        TreatmentRecordStatus.Cancelled => "danger",
+        _ => "muted"
+    };
+
+    private async Task GoToPage(int page)
+    {
+        _page = page;
+        await LoadAsync();
+    }
+}
