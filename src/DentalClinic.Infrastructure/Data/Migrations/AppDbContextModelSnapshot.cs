@@ -235,8 +235,15 @@ namespace DentalClinic.Infrastructure.Data.Migrations
                         .HasColumnType("bit")
                         .HasColumnName("HasManualAdjustments");
 
+                    b.Property<string>("InvoiceNumber")
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("bit");
+
+                    b.Property<DateTimeOffset?>("IssuedAtUtc")
+                        .HasColumnType("datetimeoffset");
 
                     b.Property<string>("LastModifiedBy")
                         .HasColumnType("nvarchar(max)");
@@ -275,7 +282,13 @@ namespace DentalClinic.Infrastructure.Data.Migrations
 
                     SqlServerKeyBuilderExtensions.IsClustered(b.HasKey("Id"));
 
-                    b.HasIndex("AppointmentId");
+                    b.HasIndex("AppointmentId")
+                        .IsUnique()
+                        .HasFilter("[AppointmentId] IS NOT NULL AND [IsDeleted] = 0");
+
+                    b.HasIndex("InvoiceNumber")
+                        .IsUnique()
+                        .HasFilter("[InvoiceNumber] IS NOT NULL");
 
                     b.HasIndex("LifecycleStatus");
 
@@ -332,6 +345,22 @@ namespace DentalClinic.Infrastructure.Data.Migrations
                     b.HasIndex("InvoiceId");
 
                     b.ToTable("InvoiceLines", (string)null);
+                });
+
+            modelBuilder.Entity("DentalClinic.Domain.Invoices.InvoiceNumberCounter", b =>
+                {
+                    b.Property<int>("Year")
+                        .HasColumnType("int");
+
+                    b.Property<int>("LastValue")
+                        .HasColumnType("int");
+
+                    b.HasKey("Year");
+
+                    b.ToTable("InvoiceNumberCounters", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_InvoiceNumberCounters_LastValue_NonNegative", "[LastValue] >= 0");
+                        });
                 });
 
             modelBuilder.Entity("DentalClinic.Domain.Invoices.Payment", b =>

@@ -5,6 +5,11 @@ namespace DentalClinic.Domain.UnitTests.Invoices;
 
 public class InvoiceLifecycleTest
 {
+    private const string TestNumber = "INV-2026-0001";
+
+    private static readonly DateTimeOffset TestIssuedAt =
+        new(2026, 1, 1, 9, 0, 0, TimeSpan.Zero);
+
     private static Invoice DraftInvoice(params (string Description, decimal Amount)[] lines)
     {
         var invoice = Invoice.Create(
@@ -47,6 +52,41 @@ public class InvoiceLifecycleTest
         Assert.Equal(0m, invoice.PaidAmount);
     }
 
+    [Fact]
+    public void CreateInvoice_BornIssued_ShouldCarryTheSuppliedNumber()
+    {
+        // A standalone invoice is a bill the moment it is created, so it takes
+        // its number from the caller instead of waiting for an Issue() call.
+        var invoice = Invoice.Create(
+            Guid.NewGuid(),
+            100m,
+            null,
+            InvoiceLifecycleStatus.Issued,
+            TestNumber,
+            TestIssuedAt).Value;
+
+        Assert.Equal(InvoiceLifecycleStatus.Issued, invoice.LifecycleStatus);
+        Assert.Equal(TestNumber, invoice.InvoiceNumber);
+        Assert.Equal(TestIssuedAt, invoice.IssuedAtUtc);
+    }
+
+    [Fact]
+    public void CreateInvoice_DraftCarryingANumber_ShouldBeRejected()
+    {
+        // A draft is not a bill; numbering it would let two drafts share a
+        // number or leak one that is later abandoned.
+        var result = Invoice.Create(
+            Guid.NewGuid(),
+            100m,
+            null,
+            InvoiceLifecycleStatus.Draft,
+            TestNumber,
+            TestIssuedAt);
+
+        Assert.True(result.IsError);
+        Assert.Equal(InvoiceErrors.InvalidState.Code, result.TopError.Code);
+    }
+
     // -----------------------------------------------------------------------
     // Draft cannot be paid
     // -----------------------------------------------------------------------
@@ -73,7 +113,7 @@ public class InvoiceLifecycleTest
     {
         var invoice = DraftInvoice(("Cleaning", 80m), ("Filling", 45m));
 
-        var result = invoice.Issue();
+        var result = invoice.Issue(TestNumber, TestIssuedAt);
 
         Assert.True(result.IsSuccess);
         Assert.Equal(InvoiceLifecycleStatus.Issued, invoice.LifecycleStatus);
@@ -86,16 +126,58 @@ public class InvoiceLifecycleTest
     public void Issue_WhenAlreadyIssued_ShouldBeIdempotentAndNotChangeTotals()
     {
         var invoice = DraftInvoice(("Cleaning", 80m));
-        invoice.Issue();
+        invoice.Issue(TestNumber, TestIssuedAt);
         invoice.RegisterPayment(30m);
 
-        var second = invoice.Issue();
+        // A second issuance must not consume the caller's new number.
+        var second = invoice.Issue("INV-2026-9999", TestIssuedAt.AddDays(1));
 
         Assert.True(second.IsSuccess);
         Assert.Equal(InvoiceLifecycleStatus.Issued, invoice.LifecycleStatus);
+        Assert.Equal(TestNumber, invoice.InvoiceNumber);
+        Assert.Equal(TestIssuedAt, invoice.IssuedAtUtc);
         Assert.Equal(30m, invoice.PaidAmount);
         Assert.Equal(PaymentStatus.PartiallyPaid, invoice.Status);
         Assert.Equal(80m, invoice.TotalAmount);
+    }
+
+    [Fact]
+    public void Issue_OnDraft_ShouldAssignTheNumberAndIssuanceInstantExactlyOnce()
+    {
+        var invoice = DraftInvoice(("Cleaning", 80m));
+
+        Assert.Null(invoice.InvoiceNumber);
+        Assert.Null(invoice.IssuedAtUtc);
+
+        var result = invoice.Issue(TestNumber, TestIssuedAt);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(TestNumber, invoice.InvoiceNumber);
+        Assert.Equal(TestIssuedAt, invoice.IssuedAtUtc);
+    }
+
+    [Fact]
+    public void Issue_WithBlankNumber_ShouldBeRejectedAndStayDraft()
+    {
+        var invoice = DraftInvoice(("Cleaning", 80m));
+
+        var result = invoice.Issue("   ", TestIssuedAt);
+
+        Assert.True(result.IsError);
+        Assert.Equal(InvoiceErrors.InvalidInvoiceNumber.Code, result.TopError.Code);
+        Assert.Equal(InvoiceLifecycleStatus.Draft, invoice.LifecycleStatus);
+        Assert.Null(invoice.InvoiceNumber);
+    }
+
+    [Fact]
+    public void Issue_WithOverlongNumber_ShouldBeRejected()
+    {
+        var invoice = DraftInvoice(("Cleaning", 80m));
+
+        var result = invoice.Issue(new string('X', Invoice.MaxInvoiceNumberLength + 1), TestIssuedAt);
+
+        Assert.True(result.IsError);
+        Assert.Equal(InvoiceErrors.InvalidInvoiceNumber.Code, result.TopError.Code);
     }
 
     [Fact]
@@ -104,7 +186,7 @@ public class InvoiceLifecycleTest
         // A draft that somehow ended up with no billable lines cannot be issued.
         var invoice = Invoice.Create(Guid.NewGuid(), 100m, null, InvoiceLifecycleStatus.Draft).Value;
 
-        var result = invoice.Issue();
+        var result = invoice.Issue(TestNumber, TestIssuedAt);
 
         Assert.True(result.IsError);
         Assert.Equal(InvoiceErrors.NoBillableItems.Code, result.TopError.Code);
@@ -115,7 +197,7 @@ public class InvoiceLifecycleTest
     public void Issue_ThenRegisterPayment_ShouldSucceed()
     {
         var invoice = DraftInvoice(("Cleaning", 80m));
-        invoice.Issue();
+        invoice.Issue(TestNumber, TestIssuedAt);
 
         var result = invoice.RegisterPayment(80m);
 
@@ -171,7 +253,7 @@ public class InvoiceLifecycleTest
     public void UpdateLine_OnIssued_ShouldBeRejected()
     {
         var invoice = DraftInvoice(("Cleaning", 80m));
-        invoice.Issue();
+        invoice.Issue(TestNumber, TestIssuedAt);
         var lineId = invoice.Lines.First().Id;
 
         var result = invoice.UpdateLine(lineId, "Cleaning", 999m);
@@ -185,7 +267,7 @@ public class InvoiceLifecycleTest
     public void UpdateLine_OnPartiallyPaid_ShouldBeRejected()
     {
         var invoice = DraftInvoice(("Cleaning", 80m));
-        invoice.Issue();
+        invoice.Issue(TestNumber, TestIssuedAt);
         invoice.RegisterPayment(40m);
         var lineId = invoice.Lines.First().Id;
 
@@ -284,7 +366,7 @@ public class InvoiceLifecycleTest
     public void EnsureEditable_OnIssued_ShouldBeRejected()
     {
         var invoice = DraftInvoice(("Cleaning", 80m));
-        invoice.Issue();
+        invoice.Issue(TestNumber, TestIssuedAt);
 
         var result = invoice.EnsureEditable();
 
@@ -296,7 +378,7 @@ public class InvoiceLifecycleTest
     public void ApplyLineChanges_OnIssued_ShouldBeRejected()
     {
         var invoice = DraftInvoice(("Cleaning", 80m));
-        invoice.Issue();
+        invoice.Issue(TestNumber, TestIssuedAt);
 
         var result = invoice.ApplyLineChanges([(null, "Something else", 10m)]);
 

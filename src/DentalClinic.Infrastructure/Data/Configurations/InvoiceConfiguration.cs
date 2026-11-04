@@ -52,6 +52,12 @@ public class InvoiceConfiguration : IEntityTypeConfiguration<Invoice>
             .HasMaxLength(20)
             .IsRequired();
 
+        // Identity of the bill. Null while the invoice is a draft, so the column
+        // must stay nullable; uniqueness is enforced only for the rows that
+        // actually carry a number.
+        builder.Property(i => i.InvoiceNumber)
+            .HasMaxLength(Invoice.MaxInvoiceNumberLength);
+
         builder.Property(i => i.HasManualAdjustments)
             .HasColumnName("HasManualAdjustments")
             .IsRequired();
@@ -66,8 +72,21 @@ public class InvoiceConfiguration : IEntityTypeConfiguration<Invoice>
             .IsRowVersion();
 
         builder.HasIndex(i => i.PatientId);
-        builder.HasIndex(i => i.AppointmentId);
         builder.HasIndex(i => i.Status);
         builder.HasIndex(i => i.LifecycleStatus);
+
+        // One bill per visit. The check in the handler is only a friendly
+        // pre-flight; this index is what actually makes the rule true under
+        // concurrency. Soft-deleted rows are excluded so a visit can be billed
+        // again after a mistaken invoice is deleted.
+        builder.HasIndex(i => i.AppointmentId)
+            .IsUnique()
+            .HasFilter("[AppointmentId] IS NOT NULL AND [IsDeleted] = 0");
+
+        // No two invoices may ever share a number. Drafts have no number, so
+        // they are excluded from the constraint rather than colliding on NULL.
+        builder.HasIndex(i => i.InvoiceNumber)
+            .IsUnique()
+            .HasFilter("[InvoiceNumber] IS NOT NULL");
     }
 }

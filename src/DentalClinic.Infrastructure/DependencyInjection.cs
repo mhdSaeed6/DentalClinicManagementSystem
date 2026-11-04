@@ -3,6 +3,7 @@ using DentalClinic.Application.Common.Interfaces;
 using DentalClinic.Infrastructure.Data;
 using DentalClinic.Infrastructure.Data.Interceptors;
 using DentalClinic.Infrastructure.Identity;
+using DentalClinic.Infrastructure.Invoices;
 using DentalClinic.Infrastructure.Settings;
 
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -45,6 +46,12 @@ public static class DependencyInjection
         });
 
         services.AddScoped<IAppDbContext>(provider => provider.GetRequiredService<AppDbContext>());
+
+        // Invoice numbering policy (prefix/padding/timezone) is bound lazily, so
+        // a test host's late configuration sources are still observed.
+        services.Configure<InvoiceNumberingSettings>(
+            configuration.GetSection(InvoiceNumberingSettings.SectionName));
+        services.AddScoped<IInvoiceNumberGenerator, InvoiceNumberGenerator>();
 
         // ربط AppSettings بالـ Configuration
         services.Configure<AppSettings>(configuration.GetSection("AppSettings"));

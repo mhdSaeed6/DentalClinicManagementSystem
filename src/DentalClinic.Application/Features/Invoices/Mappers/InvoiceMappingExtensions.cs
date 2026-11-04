@@ -11,6 +11,7 @@ public static class InvoiceMappingExtensions
 
         return new InvoiceDto(
             entity.Id,
+            entity.InvoiceNumber,
             entity.PatientId,
             patientName ?? string.Empty,
             entity.AppointmentId,
@@ -19,6 +20,7 @@ public static class InvoiceMappingExtensions
             entity.RemainingAmount,
             entity.Status,
             entity.LifecycleStatus,
+            entity.IssuedAtUtc,
             [.. entity.Lines.Select(line => line.ToDto())],
             [.. entity.Payments.Select(payment => payment.ToDto())]);
     }

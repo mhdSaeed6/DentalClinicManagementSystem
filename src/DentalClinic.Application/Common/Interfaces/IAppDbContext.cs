@@ -24,9 +24,17 @@ public interface IAppDbContext
     public DbSet<Invoice> Invoices { get; }
     public DbSet<InvoiceLine> InvoiceLines { get; }
     public DbSet<Payment> Payments { get; }
+    public DbSet<InvoiceNumberCounter> InvoiceNumberCounters { get; }
     public DbSet<TreatmentRecord> TreatmentRecords { get; }
     public DbSet<TreatmentPlan> TreatmentPlans { get; }
     public DbSet<PatientTooth> PatientTeeth { get; }
     Task<int> SaveChangesAsync(CancellationToken cancellationToken);
     Task<IAppTransaction> BeginTransactionAsync(IsolationLevel isolationLevel, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// True while an explicit transaction is open. Numbering allocation uses
+    /// this to refuse to run without one: outside a transaction the row lock is
+    /// released immediately and two concurrent issues would read the same value.
+    /// </summary>
+    bool HasActiveTransaction { get; }
 }

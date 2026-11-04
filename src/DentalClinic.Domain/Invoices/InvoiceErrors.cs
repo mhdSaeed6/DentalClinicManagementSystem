@@ -71,4 +71,17 @@ public static class InvoiceErrors
     public static readonly Error ConcurrentModification = Error.Conflict(
         "Invoice.ConcurrentModification",
         "The invoice was modified by another request. Reload it and try again.");
+
+    public static readonly Error InvalidInvoiceNumber = Error.Validation(
+        "Invoice.InvalidInvoiceNumber",
+        "Invoice number must be non-empty and at most 32 characters.");
+
+    /// <summary>
+    /// Another invoice already owns the number that was about to be assigned.
+    /// Should be unreachable while numbering is serialised, but the unique index
+    /// makes the invariant true even if that guard ever regresses.
+    /// </summary>
+    public static readonly Error DuplicateInvoiceNumber = Error.Conflict(
+        "Invoice.DuplicateInvoiceNumber",
+        "That invoice number is already in use. Reload and try again.");
 }

@@ -44,6 +44,10 @@ public class AppDbContext(DbContextOptions<AppDbContext> contextOptions) : Ident
 
     public DbSet<PatientTooth> PatientTeeth => Set<PatientTooth>();
 
+    public DbSet<InvoiceNumberCounter> InvoiceNumberCounters => Set<InvoiceNumberCounter>();
+
+    public bool HasActiveTransaction => Database.CurrentTransaction is not null;
+
     public override async Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
     {
         try
