@@ -45,4 +45,18 @@ public sealed class MsSqlMigrationFixture : IAsyncLifetime
     {
         await _dbContainer.StopAsync();
     }
+
+    /// <summary>
+    /// Connection string for an additional database on the same container, used
+    /// by tests that need a schema at a specific point in the migration chain.
+    /// </summary>
+    public string GetConnectionString(string databaseName)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(databaseName);
+
+        return new SqlConnectionStringBuilder(_dbContainer.GetConnectionString())
+        {
+            InitialCatalog = databaseName,
+        }.ConnectionString;
+    }
 }

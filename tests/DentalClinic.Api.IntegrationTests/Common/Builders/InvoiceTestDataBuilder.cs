@@ -38,7 +38,18 @@ public class InvoiceTestDataBuilder : ITestDataBuilder<Invoice>
 
     public Invoice Build()
     {
-        var invoice = Invoice.Create(_patientId, _totalAmount, _appointmentId).Value;
+        // Every builder instance gets its own number: the unique index on
+        // InvoiceNumber is real, and a fixed literal would collide as soon as a
+        // test seeds more than one invoice.
+        var invoiceNumber = $"INV-TEST-{Guid.NewGuid():N}"[..21];
+
+        var invoice = Invoice.Create(
+            _patientId,
+            _totalAmount,
+            _appointmentId,
+            InvoiceLifecycleStatus.Issued,
+            invoiceNumber,
+            DateTimeOffset.UtcNow).Value;
 
         if (_status == PaymentStatus.Paid)
         {
