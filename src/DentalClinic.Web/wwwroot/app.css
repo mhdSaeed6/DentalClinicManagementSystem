@@ -1653,6 +1653,31 @@ table.table tbody tr:last-child td { border-bottom: none; }
     margin-top: 64px;
 }
 
+.print-sheet-contact {
+    margin: 2px 0 0;
+    font-size: .8rem;
+    color: var(--text-soft);
+}
+
+.print-draft-banner {
+    margin-bottom: 16px;
+    padding: 10px 14px;
+    border: 1px dashed var(--warning);
+    border-radius: 10px;
+    color: var(--warning);
+    font-size: .85rem;
+}
+
+.print-sheet-payments {
+    margin-top: 24px;
+    page-break-inside: avoid;
+}
+
+.print-sheet-payments h2 {
+    font-size: 1rem;
+    margin: 0 0 8px;
+}
+
 @media print {
     .no-print,
     .sidebar,

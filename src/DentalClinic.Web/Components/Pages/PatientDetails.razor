@@ -233,16 +233,25 @@ else if (_patient is not null)
                             <th>@Session.T("Paid", "المدفوع")</th>
                             <th>@Session.T("Balance", "المتبقي")</th>
                             <th>@Session.T("Status", "الحالة")</th>
+                            <th></th>
                         </tr></thead>
                         <tbody>
                             @foreach (var invoice in _invoices)
                             {
                                 <tr>
-                                    <td class="cell-main">#@invoice.Id.ToString()[..8]</td>
+                                    <td class="cell-main mono">@InvoiceFormatting.NumberLabel(invoice)</td>
                                     <td class="mono">@ClinicFormatting.Money(invoice.TotalAmount)</td>
                                     <td class="mono">@ClinicFormatting.Money(invoice.PaidAmount)</td>
                                     <td class="mono fw-600">@ClinicFormatting.Money(invoice.RemainingAmount)</td>
                                     <td><PaymentStatusBadge Value="invoice.Status" /></td>
+                                    <td>
+                                        @if (InvoiceFormatting.IsPrintable(invoice))
+                                        {
+                                            <a class="btn btn-ghost btn-sm" href="@($"/invoices/{invoice.Id}/print")">
+                                                <ClinicIcon Name="printer" Class="sm" /> @Session.T("Print", "طباعة")
+                                            </a>
+                                        }
+                                    </td>
                                 </tr>
                             }
                         </tbody>

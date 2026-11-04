@@ -9,6 +9,7 @@ builder.Services.AddRazorComponents()
 
 builder.Services.AddScoped<ClinicSessionState>();
 builder.Services.AddScoped<NotificationService>();
+builder.Services.AddSingleton<ClinicBranding>();
 
 builder.Services.AddHttpClient<ApiClient>(client =>
 {

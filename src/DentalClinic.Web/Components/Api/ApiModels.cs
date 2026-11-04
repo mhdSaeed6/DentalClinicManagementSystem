@@ -232,6 +232,12 @@ public sealed class InvoiceDto
 {
     public Guid Id { get; set; }
 
+    /// <summary>
+    /// Human-readable bill identity (<c>INV-2026-0042</c>). Null while the
+    /// invoice is still a draft.
+    /// </summary>
+    public string? InvoiceNumber { get; set; }
+
     public Guid PatientId { get; set; }
 
     public string PatientName { get; set; } = string.Empty;
@@ -247,6 +253,9 @@ public sealed class InvoiceDto
     public PaymentStatus Status { get; set; }
 
     public InvoiceLifecycleStatus LifecycleStatus { get; set; }
+
+    /// <summary>When the invoice became a bill; null for drafts.</summary>
+    public DateTimeOffset? IssuedAtUtc { get; set; }
 
     public List<InvoiceLineDto> Lines { get; set; } = [];
 
