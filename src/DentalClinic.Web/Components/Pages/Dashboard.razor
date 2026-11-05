@@ -1,10 +1,11 @@
 @page "/"
 @inject ApiClient Api
 @inject ClinicSessionState Session
+@inject ClinicBranding Branding
 @inject NotificationService Notifier
 @inject NavigationManager Nav
 
-<PageTitle>@Session.T("Dashboard", "لوحة التحكم") · @Session.T("Al Noor Dental", "عيادة النور")</PageTitle>
+<PageTitle>@Session.T("Dashboard", "لوحة التحكم") · @Branding.DisplayName(Session.IsRtl)</PageTitle>
 
 @if (_loading)
 {
@@ -83,12 +84,12 @@ else
         </div>
         <div class="stat green">
             <div class="stat-icon"><ClinicIcon Name="wallet" /></div>
-            <div class="stat-value">@ClinicFormatting.Money(_summary?.TotalPaid ?? 0)</div>
+            <div class="stat-value">@Money(_summary?.TotalPaid ?? 0)</div>
             <div class="stat-label">@Session.T("Collected revenue", "الإيرادات المحصّلة")</div>
         </div>
         <div class="stat amber">
             <div class="stat-icon"><ClinicIcon Name="invoice" /></div>
-            <div class="stat-value">@ClinicFormatting.Money(_summary?.TotalOutstanding ?? 0)</div>
+            <div class="stat-value">@Money(_summary?.TotalOutstanding ?? 0)</div>
             <div class="stat-label">@Session.T("Outstanding balance", "الأرصدة المستحقة")</div>
             <div class="stat-trend @((_summary?.TotalOutstanding ?? 0) > 0 ? "down" : "up")"><ClinicIcon Name="alert" Class="sm" /> @(_summary?.OpenInvoiceCount ?? 0) @Session.T("open invoices", "فواتير مفتوحة")</div>
         </div>
@@ -208,8 +209,8 @@ else
                                             <span class="cell-main">@PatientName(invoice.PatientId)</span>
                                         </div>
                                     </td>
-                                    <td class="mono">@ClinicFormatting.Money(invoice.TotalAmount)</td>
-                                    <td class="mono fw-600">@ClinicFormatting.Money(invoice.RemainingAmount)</td>
+                                    <td class="mono">@Money(invoice.TotalAmount)</td>
+                                    <td class="mono fw-600">@Money(invoice.RemainingAmount)</td>
                                     <td><PaymentStatusBadge Value="invoice.Status" /></td>
                                 </tr>
                             }
@@ -248,6 +249,8 @@ else
 }
 
 @code {
+    private string Money(decimal amount) => ClinicFormatting.Money(amount, Branding.BaseCurrency);
+
     private bool _loading = true;
     private string? _error;
 

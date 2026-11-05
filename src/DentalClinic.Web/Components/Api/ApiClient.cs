@@ -395,6 +395,36 @@ public sealed class ApiClient : IClinicSettingsSource
     public Task<ClinicSettingsDto> UpdateClinicSettingsAsync(ClinicSettingsFormRequest request, CancellationToken ct = default) =>
         PutAsync<ClinicSettingsDto>("clinic/settings", request, ct);
 
+    /// <summary>
+    /// The rate in force at <paramref name="asOfUtc"/> (or now). Returns
+    /// <see langword="null"/> when no rate is configured — the caller then hides
+    /// the secondary amount instead of showing an invented one.
+    /// </summary>
+    public async Task<ExchangeRateDto?> GetExchangeRateAsync(
+        DateTimeOffset? asOfUtc = null,
+        CancellationToken ct = default)
+    {
+        try
+        {
+            var url = asOfUtc is null
+                ? "clinic/exchange-rate"
+                : "clinic/exchange-rate?" + Query(("asOf", asOfUtc.Value.ToString("O", CultureInfo.InvariantCulture)));
+
+            return await GetAsync<ExchangeRateDto>(url, ct);
+        }
+        catch (ApiException ex) when (ex.StatusCode == 404)
+        {
+            return null;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        {
+            return null;
+        }
+    }
+
+    public Task<ExchangeRateDto> AddExchangeRateAsync(ExchangeRateFormRequest request, CancellationToken ct = default) =>
+        PostAsync<ExchangeRateDto>("clinic/exchange-rates", request, ct);
+
     // -----------------------------------------------------------------------
     // Core request pipeline
     // -----------------------------------------------------------------------

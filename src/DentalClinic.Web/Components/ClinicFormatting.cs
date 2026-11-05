@@ -6,12 +6,29 @@ namespace DentalClinic.Web.Components;
 
 public static class ClinicFormatting
 {
-    public const string Currency = "USD";
-
-    public static string Money(decimal amount)
+    /// <summary>
+    /// ISO-4217 codes with no minor unit. Formatting these with two decimals
+    /// ("1,200.00 IQD") implies a precision the currency does not have.
+    /// </summary>
+    private static readonly HashSet<string> ZeroDecimalCurrencies = new(StringComparer.OrdinalIgnoreCase)
     {
-        var decimals = Currency.Equals("USD", StringComparison.OrdinalIgnoreCase) ? 2 : 0;
-        return amount.ToString($"N{decimals}", CultureInfo.InvariantCulture) + " " + Currency;
+        "BIF", "CLP", "DJF", "GNF", "IQD", "ISK", "JPY", "KMF", "KRW", "PYG",
+        "RWF", "UGX", "UYI", "VND", "VUV", "XAF", "XOF", "XPF",
+    };
+
+    /// <summary>
+    /// Renders an amount with the clinic's configured currency. The currency is
+    /// always supplied by the caller (from <see cref="ClinicBranding"/>) — there
+    /// is no default, because a default is exactly how the old hardcoded
+    /// currency code leaked into every screen.
+    /// </summary>
+    public static string Money(decimal amount, string currency)
+    {
+        var code = currency?.Trim().ToUpperInvariant() ?? string.Empty;
+        var decimals = ZeroDecimalCurrencies.Contains(code) ? 0 : 2;
+        var number = amount.ToString($"N{decimals}", CultureInfo.InvariantCulture);
+
+        return code.Length == 0 ? number : number + " " + code;
     }
 
     public static string ShortDate(DateTime date) =>

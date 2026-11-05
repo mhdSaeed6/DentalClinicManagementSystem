@@ -1,11 +1,12 @@
 @page "/patients"
 @inject ApiClient Api
 @inject ClinicSessionState Session
+@inject ClinicBranding Branding
 @inject NotificationService Notifier
 @inject NavigationManager Nav
 @implements IDisposable
 
-<PageTitle>@Session.T("Patients", "المرضى") · @Session.T("Al Noor Dental", "عيادة النور")</PageTitle>
+<PageTitle>@Session.T("Patients", "المرضى") · @Branding.DisplayName(Session.IsRtl)</PageTitle>
 
 <PageHeader Title="@Session.T("Patients", "المرضى")"
             Subtitle="@Session.T("Manage your patient registry and medical notes.", "إدارة سجل المرضى والملاحظات الطبية.")">

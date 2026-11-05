@@ -1,10 +1,11 @@
 @page "/appointments"
 @inject ApiClient Api
 @inject ClinicSessionState Session
+@inject ClinicBranding Branding
 @inject NotificationService Notifier
 @inject NavigationManager Nav
 
-<PageTitle>@Session.T("Appointments", "المواعيد") · @Session.T("Al Noor Dental", "عيادة النور")</PageTitle>
+<PageTitle>@Session.T("Appointments", "المواعيد") · @Branding.DisplayName(Session.IsRtl)</PageTitle>
 
 <PageHeader Title="@Session.T("Appointments", "المواعيد")"
             Subtitle="@Session.T("Schedule, reschedule and track every visit.", "جدولة وتعديل ومتابعة كل زيارة.")">
@@ -277,7 +278,7 @@
                         <div class="complete-treatment mb-1">
                             <span class="badge brand no-dot">@ClinicFormatting.ToothLabel(treatment.ToothNumber)</span>
                             <span class="treat-proc">@treatment.ProcedureDetails</span>
-                            <span class="treat-cost">@ClinicFormatting.Money(treatment.Cost)</span>
+                            <span class="treat-cost">@Money(treatment.Cost)</span>
                         </div>
                     }
                 </div>
@@ -320,7 +321,7 @@
                     <div class="list-title">@Session.T("Treatments", "العلاجات")</div>
                     <div class="list-sub">@_detailsTreatments.Count @Session.T("item(s)", "عنصر")</div>
                 </div>
-                <div class="treat-cost">@ClinicFormatting.Money(TreatmentSubtotal)</div>
+                <div class="treat-cost">@Money(TreatmentSubtotal)</div>
             </div>
 
             <div class="list-row">
@@ -328,7 +329,7 @@
                     <div class="list-title fw-700">@Session.T("Estimated total", "الإجمالي التقديري")</div>
                     <div class="list-sub">@Session.T("Not yet invoiced", "لم تُفوتر بعد")</div>
                 </div>
-                <div class="treat-cost fw-700">@ClinicFormatting.Money(EstimatedTotal)</div>
+                <div class="treat-cost fw-700">@Money(EstimatedTotal)</div>
             </div>
 
             @* The action shown depends on the linked invoice's state. The backend is the
@@ -394,7 +395,7 @@
                         <div class="list-row">
                             <div class="list-body">
                                 <div class="list-title mono">#@invoice.Id.ToString()[..8]</div>
-                                <div class="list-sub">@ClinicFormatting.Money(invoice.TotalAmount) · @Session.T("Balance", "المتبقي") @ClinicFormatting.Money(invoice.RemainingAmount)</div>
+                                <div class="list-sub">@Money(invoice.TotalAmount) · @Session.T("Balance", "المتبقي") @Money(invoice.RemainingAmount)</div>
                                 <div class="list-sub">
                                     <LifecycleStatusBadge Value="invoice.LifecycleStatus" />
                                     <span style="margin-inline-start:6px"><PaymentStatusBadge Value="invoice.Status" /></span>
@@ -449,7 +450,7 @@
                 <option value="">@Session.T("— No service —", "— بدون خدمة —")</option>
                 @foreach (var service in _services)
                 {
-                    <option value="@service.Id">@service.Name (@ClinicFormatting.Money(service.Price))</option>
+                    <option value="@service.Id">@service.Name (@Money(service.Price))</option>
                 }
             </select>
         </div>
@@ -554,7 +555,7 @@
                     }
                     @foreach (var service in _services)
                     {
-                        <option value="@service.Id">@service.Name (@ClinicFormatting.Money(service.Price))</option>
+                        <option value="@service.Id">@service.Name (@Money(service.Price))</option>
                     }
                 </select>
             </div>
@@ -594,7 +595,7 @@
                         <div class="complete-treatment mb-1">
                             <span class="badge brand no-dot">@ClinicFormatting.ToothLabel(_completeTreatments[index].ToothNumber)</span>
                             <span class="treat-proc">@_completeTreatments[index].ProcedureDetails</span>
-                            <span class="treat-cost">@ClinicFormatting.Money(_completeTreatments[index].Cost)</span>
+                            <span class="treat-cost">@Money(_completeTreatments[index].Cost)</span>
                             <button type="button" class="btn btn-ghost btn-icon" title="@Session.T("Remove", "إزالة")" @onclick="() => RemoveCompleteTreatment(index)">
                                 <ClinicIcon Name="x" Class="sm" />
                             </button>
@@ -621,7 +622,7 @@
                     <textarea class="textarea" rows="2" @bind="_completeProcedure" placeholder="@Session.T("Describe what was performed…", "صف ما تم إجراؤه…")"></textarea>
                 </div>
                 <div class="field">
-                    <label class="label">@Session.T("Cost (USD)", "التكلفة (دولار)")</label>
+                    <label class="label">@Session.T($"Cost ({Branding.BaseCurrency})", $"التكلفة ({Branding.BaseCurrency})")</label>
                     <input type="number" step="0.01" min="0" class="input" @bind="_completeCost" />
                 </div>
             </div>
@@ -662,6 +663,8 @@
 </Modal>
 
 @code {
+    private string Money(decimal amount) => ClinicFormatting.Money(amount, Branding.BaseCurrency);
+
     private List<AppointmentDto> _appointments = [];
     private List<PatientDto> _patients = [];
     private List<DoctorDto> _doctors = [];
@@ -1404,7 +1407,7 @@
     private string ServiceChargeLabel(Guid? id) =>
         id is { } serviceId
             ? _services.FirstOrDefault(s => s.Id == serviceId) is { } service
-                ? ClinicFormatting.Money(service.Price)
+                ? Money(service.Price)
                 : "—"
             : "—";
 }

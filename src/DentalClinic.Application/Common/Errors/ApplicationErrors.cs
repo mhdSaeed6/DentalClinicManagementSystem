@@ -127,6 +127,10 @@ public static class ApplicationErrors
         code: "ClinicSettings.NotConfigured",
         description: "The clinic profile has not been configured yet.");
 
+    public static readonly Error ExchangeRateNotConfigured = Error.NotFound(
+        code: "ExchangeRate.NotConfigured",
+        description: "No exchange rate has been recorded for the clinic's currency pair.");
+
     public static readonly Error TokenGenerationFailed = Error.Failure(
         code: "Auth.TokenGeneration.Failed",
         description: "Failed to generate new JWT token.");

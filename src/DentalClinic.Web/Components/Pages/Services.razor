@@ -1,9 +1,10 @@
 @page "/services"
 @inject ApiClient Api
 @inject ClinicSessionState Session
+@inject ClinicBranding Branding
 @inject NotificationService Notifier
 
-<PageTitle>@Session.T("Services", "الخدمات") · @Session.T("Al Noor Dental", "عيادة النور")</PageTitle>
+<PageTitle>@Session.T("Services", "الخدمات") · @Branding.DisplayName(Session.IsRtl)</PageTitle>
 
 <PageHeader Title="@Session.T("Dental services", "خدمات الأسنان")"
             Subtitle="@Session.T("Treatments and procedures offered by the clinic.", "العلاجات والإجراءات التي تقدمها العيادة.")">
@@ -56,7 +57,7 @@ else
                     <div class="flex-between">
                         <div>
                             <div class="fs-xs text-soft">@Session.T("Price", "السعر")</div>
-                            <div class="fw-700" style="font-size:1.15rem">@ClinicFormatting.Money(service.Price)</div>
+                            <div class="fw-700" style="font-size:1.15rem">@Money(service.Price)</div>
                         </div>
                         <div class="row-actions">
                             <button type="button" class="btn btn-ghost btn-icon" title="@Session.T("Edit", "تعديل")" @onclick="() => OpenEdit(service)">
@@ -91,7 +92,7 @@ else
         <textarea class="textarea" @bind="_form.Description"></textarea>
     </div>
     <div class="field">
-        <label class="label">@Session.T("Price (USD)", "السعر (دولار)") <span class="req">*</span></label>
+        <label class="label">@Session.T($"Price ({Branding.BaseCurrency})", $"السعر ({Branding.BaseCurrency})") <span class="req">*</span></label>
         <input type="number" step="0.01" min="0" class="input" @bind="_form.Price" />
     </div>
     </ChildContent>
@@ -119,6 +120,8 @@ else
                OnConfirm="DeleteAsync" OnCancel="() => _confirmOpen = false" />
 
 @code {
+    private string Money(decimal amount) => ClinicFormatting.Money(amount, Branding.BaseCurrency);
+
     private List<DentalServiceDto> _services = [];
     private bool _loading = true;
 

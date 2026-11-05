@@ -94,7 +94,20 @@ public sealed class ClinicBrandingTests
         await branding.EnsureLoadedAsync();
 
         Assert.Equal("Configured Clinic", branding.DisplayName(arabic: false));
-        Assert.Equal("USD", branding.BaseCurrency);
+
+        // No profile and no configuration: the currency stays empty rather than
+        // inventing one, so money renders as a bare number.
+        Assert.Equal(string.Empty, branding.BaseCurrency);
+    }
+
+    [Fact]
+    public async Task BaseCurrency_WithoutAProfile_FallsBackToConfiguration()
+    {
+        var branding = Branding(new FakeSource(null), ("Clinic:BaseCurrency", " egp "));
+
+        await branding.EnsureLoadedAsync();
+
+        Assert.Equal("egp", branding.BaseCurrency);
     }
 
     private static ClinicBranding Branding(params (string Key, string Value)[] settings)

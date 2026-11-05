@@ -1,10 +1,11 @@
 @page "/treatments"
 @inject ApiClient Api
 @inject ClinicSessionState Session
+@inject ClinicBranding Branding
 @inject NotificationService Notifier
 @inject NavigationManager Nav
 
-<PageTitle>@Session.T("Treatments", "العلاجات") · @Session.T("Al Noor Dental", "عيادة النور")</PageTitle>
+<PageTitle>@Session.T("Treatments", "العلاجات") · @Branding.DisplayName(Session.IsRtl)</PageTitle>
 
 <PageHeader Title="@Session.T("Treatment records", "سجلات العلاجات")"
             Subtitle="@Session.T("FDI tooth-chart based clinical procedures.", "إجراءات سريرية وفق مخطط الأسنان FDI.")">
@@ -96,7 +97,7 @@
                                 </div>
                             </td>
                             <td>@Session.T("Dr.", "د.") @DoctorName(record.DoctorId)</td>
-                            <td class="text-end mono fw-600">@ClinicFormatting.Money(record.Cost)</td>
+                            <td class="text-end mono fw-600">@Money(record.Cost)</td>
                             <td>
                                 <div class="row-actions">
                                     <button type="button" class="btn btn-ghost btn-icon" title="@Session.T("Edit", "تعديل")" @onclick="() => OpenEdit(record)">
@@ -156,7 +157,7 @@
             </select>
         </div>
         <div class="field">
-            <label class="label">@Session.T("Cost (USD)", "التكلفة (دولار)")</label>
+            <label class="label">@Session.T($"Cost ({Branding.BaseCurrency})", $"التكلفة ({Branding.BaseCurrency})")</label>
             <input type="number" step="0.01" min="0" class="input" @bind="_form.Cost" />
         </div>
         <div class="field">
@@ -193,6 +194,8 @@
 </Modal>
 
 @code {
+    private string Money(decimal amount) => ClinicFormatting.Money(amount, Branding.BaseCurrency);
+
     private List<TreatmentRecordDto> _records = [];
     private List<PatientDto> _patients = [];
     private List<DoctorDto> _doctors = [];

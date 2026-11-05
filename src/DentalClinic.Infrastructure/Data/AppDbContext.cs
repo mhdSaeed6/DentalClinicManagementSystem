@@ -47,6 +47,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> contextOptions) : Ident
 
     public DbSet<ClinicSetting> ClinicSettings => Set<ClinicSetting>();
 
+    public DbSet<ExchangeRate> ExchangeRates => Set<ExchangeRate>();
+
     public DbSet<InvoiceNumberCounter> InvoiceNumberCounters => Set<InvoiceNumberCounter>();
 
     public bool HasActiveTransaction => Database.CurrentTransaction is not null;
