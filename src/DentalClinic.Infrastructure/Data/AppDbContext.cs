@@ -3,12 +3,14 @@ using System.Data;
 using DentalClinic.Application.Common.Exceptions;
 using DentalClinic.Application.Common.Interfaces;
 using DentalClinic.Domain.Appointments;
+using DentalClinic.Domain.Clinics;
 using DentalClinic.Domain.Doctors;
 using DentalClinic.Domain.Identity;
 using DentalClinic.Domain.Invoices;
 using DentalClinic.Domain.Odontograms;
 using DentalClinic.Domain.Patients;
 using DentalClinic.Domain.Services;
+using DentalClinic.Domain.TreatmentPlans;
 using DentalClinic.Domain.TreatmentRecords;
 using DentalClinic.Infrastructure.Identity;
 
@@ -39,7 +41,15 @@ public class AppDbContext(DbContextOptions<AppDbContext> contextOptions) : Ident
 
     public DbSet<TreatmentRecord> TreatmentRecords => Set<TreatmentRecord>();
 
+    public DbSet<TreatmentPlan> TreatmentPlans => Set<TreatmentPlan>();
+
     public DbSet<PatientTooth> PatientTeeth => Set<PatientTooth>();
+
+    public DbSet<ClinicSetting> ClinicSettings => Set<ClinicSetting>();
+
+    public DbSet<InvoiceNumberCounter> InvoiceNumberCounters => Set<InvoiceNumberCounter>();
+
+    public bool HasActiveTransaction => Database.CurrentTransaction is not null;
 
     public override async Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
     {

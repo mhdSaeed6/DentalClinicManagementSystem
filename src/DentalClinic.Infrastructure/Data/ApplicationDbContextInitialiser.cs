@@ -1,5 +1,6 @@
 using DentalClinic.Domain.Appointments;
 using DentalClinic.Domain.Appointments.Enums;
+using DentalClinic.Domain.Clinics;
 using DentalClinic.Domain.Common.Enums;
 using DentalClinic.Domain.Common.ValueObjects;
 using DentalClinic.Domain.Doctors;
@@ -76,6 +77,36 @@ public class ApplicationDbContextInitialiser(
 
     public async Task TrySeedAsync()
     {
+        // 0. Clinic profile (singleton). The host timezone is a safe default:
+        // it always resolves, and the admin is expected to set the real clinic
+        // timezone from Settings once the app is running.
+        if (!await _context.ClinicSettings.AnyAsync())
+        {
+            var clinicResult = ClinicSetting.Create(
+                name: "Al Noor Dental Clinic",
+                nameArabic: "عيادة النور لطب الأسنان",
+                logoUrl: null,
+                phone: null,
+                address: null,
+                email: null,
+                timeZoneId: TimeZoneInfo.Local.Id,
+                baseCurrency: "USD",
+                secondaryCurrency: null,
+                defaultCountryCode: null);
+
+            if (clinicResult.IsError)
+            {
+                _logger.LogWarning(
+                    "Clinic profile seed was rejected: {@Errors}",
+                    clinicResult.Errors);
+            }
+            else
+            {
+                _context.ClinicSettings.Add(clinicResult.Value);
+                await _context.SaveChangesAsync(default);
+            }
+        }
+
         // 1. Roles Definition
         string[] roles = ["Admin", "Doctor", "Receptionist"];
         foreach (var roleName in roles)

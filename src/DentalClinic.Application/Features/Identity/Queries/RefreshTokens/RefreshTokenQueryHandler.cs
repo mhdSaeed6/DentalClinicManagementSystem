@@ -44,6 +44,17 @@ public class RefreshTokenQueryHandler(ILogger<RefreshTokenQueryHandler> logger, 
 
         if (getUserResult.IsError)
         {
+            // A token whose subject no longer exists is just an invalid token, not
+            // a missing resource: reporting 404 here would let a caller probe for
+            // deleted accounts. Collapse it into the same uniform error as an
+            // unknown or expired refresh token.
+            if (getUserResult.TopError.Code == ApplicationErrors.UserNotFound.Code)
+            {
+                _logger.LogWarning("Refresh attempted for unknown user {UserId}.", userId);
+
+                return ApplicationErrors.RefreshTokenExpired;
+            }
+
             _logger.LogError("Get user by id error occurred: {ErrorDescription}", getUserResult.TopError.Description);
             return getUserResult.Errors;
         }

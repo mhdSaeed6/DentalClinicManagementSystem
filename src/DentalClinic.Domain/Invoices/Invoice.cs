@@ -5,11 +5,28 @@ namespace DentalClinic.Domain.Invoices;
 
 public class Invoice : AuditableEntity
 {
+    /// <summary>Upper bound for <see cref="InvoiceNumber"/>, mirrored by the EF configuration.</summary>
+    public const int MaxInvoiceNumberLength = 32;
+
     private readonly List<Payment> _payments = [];
     private readonly List<InvoiceLine> _lines = [];
 
     public Guid PatientId { get; private set; }
     public Guid? AppointmentId { get; private set; }
+
+    /// <summary>
+    /// Human-readable identity of the bill, e.g. <c>INV-2026-0042</c>. Assigned
+    /// exactly once, on the Draft → Issued transition, and never mutated
+    /// afterwards. Drafts are internal working documents and stay unnumbered
+    /// until they become a real bill.
+    /// </summary>
+    public string? InvoiceNumber { get; private set; }
+
+    /// <summary>
+    /// When the invoice became a bill. Null while it is still a draft.
+    /// </summary>
+    public DateTimeOffset? IssuedAtUtc { get; private set; }
+
     public decimal TotalAmount { get; private set; }
     public decimal PaidAmount { get; private set; }
     public decimal RemainingAmount => TotalAmount - PaidAmount;
@@ -33,7 +50,9 @@ public class Invoice : AuditableEntity
         Guid patientId,
         Guid? appointmentId,
         decimal totalAmount,
-        InvoiceLifecycleStatus lifecycleStatus)
+        InvoiceLifecycleStatus lifecycleStatus,
+        string? invoiceNumber,
+        DateTimeOffset? issuedAtUtc)
         : base(id)
     {
         PatientId = patientId;
@@ -42,6 +61,8 @@ public class Invoice : AuditableEntity
         PaidAmount = 0;
         Status = PaymentStatus.Unpaid;
         LifecycleStatus = lifecycleStatus;
+        InvoiceNumber = invoiceNumber;
+        IssuedAtUtc = issuedAtUtc;
     }
 
     /// <summary>
@@ -50,15 +71,43 @@ public class Invoice : AuditableEntity
     /// payable exactly as before the lifecycle existed; only
     /// appointment-derived drafts pass <see cref="InvoiceLifecycleStatus.Draft"/>.
     /// </summary>
+    /// <param name="invoiceNumber">
+    /// The allocated number when the invoice is born issued. It must be supplied
+    /// by the caller (the numbering service), never derived here: the domain has
+    /// no clock, no counter and no knowledge of the clinic's year.
+    /// </param>
+    /// <param name="issuedAtUtc">The issuance instant, supplied by the caller.</param>
     public static Result<Invoice> Create(
         Guid patientId,
         decimal totalAmount,
         Guid? appointmentId = null,
-        InvoiceLifecycleStatus lifecycleStatus = InvoiceLifecycleStatus.Issued)
+        InvoiceLifecycleStatus lifecycleStatus = InvoiceLifecycleStatus.Issued,
+        string? invoiceNumber = null,
+        DateTimeOffset? issuedAtUtc = null)
     {
         if (totalAmount <= 0)
         {
             return InvoiceErrors.InvalidTotalAmount;
+        }
+
+        // A draft is not a bill yet, so it must never carry a number: doing so
+        // would let two drafts hold the same number or leak a number that was
+        // later abandoned.
+        if (lifecycleStatus == InvoiceLifecycleStatus.Draft && invoiceNumber is not null)
+        {
+            return InvoiceErrors.InvalidState;
+        }
+
+        var normalizedNumber = invoiceNumber;
+        if (invoiceNumber is not null)
+        {
+            var normalization = NormalizeInvoiceNumber(invoiceNumber);
+            if (normalization.IsError)
+            {
+                return normalization.Errors;
+            }
+
+            normalizedNumber = normalization.Value;
         }
 
         return new Invoice(
@@ -66,7 +115,9 @@ public class Invoice : AuditableEntity
             patientId,
             appointmentId,
             totalAmount,
-            lifecycleStatus);
+            lifecycleStatus,
+            normalizedNumber,
+            issuedAtUtc);
     }
 
     public Result<Updated> AddLine(string description, decimal amount)
@@ -244,13 +295,23 @@ public class Invoice : AuditableEntity
         return Result.Updated;
     }
 
-    public Result<Updated> Issue()
+    /// <summary>
+    /// Turns a draft into a bill. The number is allocated by the caller (see
+    /// <c>IInvoiceNumberGenerator</c>) and written here exactly once: re-issuing
+    /// an already-issued invoice succeeds without touching it, so a repeated
+    /// request is safe and keeps the original number.
+    /// </summary>
+    public Result<Updated> Issue(string invoiceNumber, DateTimeOffset issuedAtUtc)
     {
-        // Issuance is idempotent: re-issuing an already-issued invoice succeeds
-        // without mutating it, so a repeated request is safe.
         if (LifecycleStatus == InvoiceLifecycleStatus.Issued)
         {
             return Result.Updated;
+        }
+
+        var normalization = NormalizeInvoiceNumber(invoiceNumber);
+        if (normalization.IsError)
+        {
+            return normalization.Errors;
         }
 
         if (PaidAmount > 0)
@@ -274,6 +335,8 @@ public class Invoice : AuditableEntity
 
         // Issuance never registers a payment; PaymentStatus stays Unpaid.
         LifecycleStatus = InvoiceLifecycleStatus.Issued;
+        InvoiceNumber = normalization.Value;
+        IssuedAtUtc = issuedAtUtc;
         return Result.Updated;
     }
 
@@ -308,5 +371,22 @@ public class Invoice : AuditableEntity
     private bool IsIssuedOrLocked()
     {
         return LifecycleStatus == InvoiceLifecycleStatus.Issued || Status != PaymentStatus.Unpaid;
+    }
+
+    /// <summary>
+    /// Trims and length-checks a number. Uniqueness is enforced by the database
+    /// (a filtered unique index), not here: the domain cannot see other invoices.
+    /// </summary>
+    private static Result<string> NormalizeInvoiceNumber(string invoiceNumber)
+    {
+        if (string.IsNullOrWhiteSpace(invoiceNumber))
+        {
+            return InvoiceErrors.InvalidInvoiceNumber;
+        }
+
+        var trimmed = invoiceNumber.Trim();
+        return trimmed.Length > MaxInvoiceNumberLength
+            ? InvoiceErrors.InvalidInvoiceNumber
+            : trimmed;
     }
 }

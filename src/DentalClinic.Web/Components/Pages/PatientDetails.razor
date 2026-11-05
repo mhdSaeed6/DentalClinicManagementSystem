@@ -69,6 +69,7 @@ else if (_patient is not null)
         <button type="button" class="tab @(_tab == "appointments" ? "active" : "")" @onclick='() => _tab = "appointments"'>@Session.T("Appointments", "المواعيد") (@_appointments.Count)</button>
         <button type="button" class="tab @(_tab == "treatments" ? "active" : "")" @onclick='() => _tab = "treatments"'>@Session.T("Treatments", "العلاجات") (@_treatments.Count)</button>
         <button type="button" class="tab @(_tab == "invoices" ? "active" : "")" @onclick='() => _tab = "invoices"'>@Session.T("Invoices", "الفواتير") (@_invoices.Count)</button>
+        <button type="button" class="tab @(_tab == "plans" ? "active" : "")" @onclick='() => _tab = "plans"'>@Session.T("Treatment plans", "خطط العلاج") (@_plans.Count)</button>
         <button type="button" class="tab @(_tab == "odontogram" ? "active" : "")" @onclick='() => _tab = "odontogram"'>@Session.T("Odontogram", "مخطط الأسنان")</button>
     </div>
 
@@ -232,16 +233,67 @@ else if (_patient is not null)
                             <th>@Session.T("Paid", "المدفوع")</th>
                             <th>@Session.T("Balance", "المتبقي")</th>
                             <th>@Session.T("Status", "الحالة")</th>
+                            <th></th>
                         </tr></thead>
                         <tbody>
                             @foreach (var invoice in _invoices)
                             {
                                 <tr>
-                                    <td class="cell-main">#@invoice.Id.ToString()[..8]</td>
+                                    <td class="cell-main mono">@InvoiceFormatting.NumberLabel(invoice)</td>
                                     <td class="mono">@ClinicFormatting.Money(invoice.TotalAmount)</td>
                                     <td class="mono">@ClinicFormatting.Money(invoice.PaidAmount)</td>
                                     <td class="mono fw-600">@ClinicFormatting.Money(invoice.RemainingAmount)</td>
                                     <td><PaymentStatusBadge Value="invoice.Status" /></td>
+                                    <td>
+                                        @if (InvoiceFormatting.IsPrintable(invoice))
+                                        {
+                                            <a class="btn btn-ghost btn-sm" href="@($"/invoices/{invoice.Id}/print")">
+                                                <ClinicIcon Name="printer" Class="sm" /> @Session.T("Print", "طباعة")
+                                            </a>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    }
+    else if (_tab == "plans")
+    {
+        <div class="card">
+            @if (_plans.Count == 0)
+            {
+                <EmptyState Icon="clipboard" Title="@Session.T("No treatment plans", "لا توجد خطط علاج")"
+                            Message="@Session.T("Plans created for this patient will appear here.", "ستظهر هنا خطط العلاج المنشأة لهذا المريض.")" />
+            }
+            else
+            {
+                <div class="table-wrap">
+                    <table class="table">
+                        <thead><tr>
+                            <th>@Session.T("Plan", "الخطة")</th>
+                            <th>@Session.T("Doctor", "الطبيب")</th>
+                            <th>@Session.T("Status", "الحالة")</th>
+                            <th>@Session.T("Estimated", "التقديري")</th>
+                            <th>@Session.T("Performed", "المنجز")</th>
+                            <th></th>
+                        </tr></thead>
+                        <tbody>
+                            @foreach (var plan in _plans)
+                            {
+                                <tr @key="plan.Id">
+                                    <td class="cell-main">@plan.Title</td>
+                                    <td>@plan.DoctorName</td>
+                                    <td><span class="badge @PlanStatusClass(plan.Status) no-dot">@PlanStatusLabel(plan.Status)</span></td>
+                                    <td class="mono">@ClinicFormatting.Money(plan.EstimatedTotal)</td>
+                                    <td class="mono text-success">@ClinicFormatting.Money(plan.PerformedTotal)</td>
+                                    <td>
+                                        <a class="btn btn-outline btn-sm" href="@($"/treatment-plans/{plan.Id}/print")">
+                                            @Session.T("Print", "طباعة")
+                                        </a>
+                                    </td>
                                 </tr>
                             }
                         </tbody>
@@ -267,6 +319,7 @@ else if (_patient is not null)
     private List<DentalServiceDto> _services = [];
     private List<AppointmentDto> _appointments = [];
     private List<TreatmentRecordDto> _treatments = [];
+    private List<TreatmentPlanDto> _plans = [];
     private List<InvoiceDto> _invoices = [];
     private InvoiceSummaryDto? _invoiceSummary;
 
@@ -279,16 +332,18 @@ else if (_patient is not null)
             var servicesTask = Api.GetServicesAsync(1, 100, null);
             var appointmentsTask = Api.GetAppointmentsAsync(1, 100, patientId: Id);
             var treatmentsTask = Api.GetTreatmentRecordsAsync(1, 100, patientId: Id);
+            var plansTask = Api.GetTreatmentPlansAsync(1, 100, patientId: Id);
             var invoicesTask = Api.GetInvoicesAsync(1, 100, patientId: Id);
             var summaryTask = Api.GetInvoiceSummaryAsync(Id);
 
-            await Task.WhenAll(patientTask, doctorsTask, servicesTask, appointmentsTask, treatmentsTask, invoicesTask, summaryTask);
+            await Task.WhenAll(patientTask, doctorsTask, servicesTask, appointmentsTask, treatmentsTask, plansTask, invoicesTask, summaryTask);
 
             _patient = await patientTask;
             _doctors = (await doctorsTask).Items ?? [];
             _services = (await servicesTask).Items ?? [];
             _appointments = (await appointmentsTask).Items ?? [];
             _treatments = (await treatmentsTask).Items ?? [];
+            _plans = (await plansTask).Items ?? [];
             _invoices = (await invoicesTask).Items ?? [];
             _invoiceSummary = await summaryTask;
         }
@@ -320,6 +375,23 @@ else if (_patient is not null)
         id is { } serviceId
             ? _services.FirstOrDefault(s => s.Id == serviceId)?.Name ?? Session.T("Service", "خدمة")
             : Session.T("No service", "بدون خدمة");
+
+    private string PlanStatusLabel(TreatmentPlanStatus status) => status switch
+    {
+        TreatmentPlanStatus.Draft => Session.T("Draft", "مسودة"),
+        TreatmentPlanStatus.Active => Session.T("Active", "نشطة"),
+        TreatmentPlanStatus.Completed => Session.T("Completed", "مكتملة"),
+        TreatmentPlanStatus.Cancelled => Session.T("Cancelled", "ملغاة"),
+        _ => status.ToString()
+    };
+
+    private string PlanStatusClass(TreatmentPlanStatus status) => status switch
+    {
+        TreatmentPlanStatus.Active => "success",
+        TreatmentPlanStatus.Completed => "brand",
+        TreatmentPlanStatus.Cancelled => "danger",
+        _ => "muted"
+    };
 
     private bool Med(string key) => key switch
     {

@@ -3,7 +3,7 @@
 [![.NET 10](https://img.shields.io/badge/.NET-10.0-512BD4?style=for-the-badge&logo=dotnet)](https://dotnet.microsoft.com/)
 [![Clean Architecture](https://img.shields.io/badge/Architecture-Clean%20Architecture-blue?style=for-the-badge)](https://blog.cleancoder.com/uncle-bob/2012/08/13/the-clean-architecture.html)
 [![CQRS](https://img.shields.io/badge/Pattern-CQRS%20%2B%20MediatR-brightgreen?style=for-the-badge)](https://github.com/jbogard/MediatR)
-[![Tests Passing](https://img.shields.io/badge/Tests-380%2F380%20Passed-success?style=for-the-badge&logo=xunit)](https://github.com/mhdSaeed6/DentalClinicManagementSystem)
+[![Tests Passing](https://img.shields.io/badge/Tests-passing-success?style=for-the-badge&logo=xunit)](https://github.com/mhdSaeed6/DentalClinicManagementSystem)
 
 A production-ready, highly scalable, and fully tested RESTful API built for managing **Dental Clinics**. Designed using **Clean Architecture** principles and **CQRS pattern** with modern **.NET 10** technologies to ensure high maintainability, testability, and performance.
 
@@ -55,7 +55,7 @@ DentalClinicManagementSystem/
 
 Quality is at the heart of this project. The system includes an extensive suite of automated tests covering all domain rules, application logic, and full HTTP API execution paths.
 
-* **Total Tests Executed:** `380` / `380` **Passed** 🟢
+* **Test Suites:** Domain (entities/value objects), Application (handlers, behaviours, mappers), Web (components), Subcutaneous (in-process HTTP pipeline), and full-stack Integration (Testcontainers SQL Server). Run them all with `dotnet test DentalClinic.slnx`; the last two need Docker.
 * **Unit Testing:** Comprehensive test coverage for Domain entities, Value Objects, Mappers, and Application Handlers.
 * **Subcutaneous & Integration Testing:** Full end-to-end HTTP pipeline tests using `WebApplicationFactory` and real SQL Database side-effect assertions for all Controllers.
 

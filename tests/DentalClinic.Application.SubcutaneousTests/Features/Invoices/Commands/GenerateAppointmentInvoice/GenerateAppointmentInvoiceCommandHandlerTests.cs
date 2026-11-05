@@ -9,6 +9,7 @@ using DentalClinic.Domain.Invoices;
 using DentalClinic.Domain.Invoices.Enums;
 using DentalClinic.Domain.Patients;
 using DentalClinic.Domain.Services;
+using DentalClinic.Domain.TreatmentPlans;
 using DentalClinic.Domain.TreatmentRecords;
 
 using MediatR;
@@ -287,6 +288,49 @@ public class GenerateAppointmentInvoiceCommandHandlerTests(WebAppFactory factory
             .AsNoTracking()
             .CountAsync(i => i.AppointmentId == appointment.Id);
         Assert.Equal(1, count);
+    }
+
+    // P1.2 billing rule: of the plan items linked to the visit, only performed
+    // work is billable — cancelled items stay history and planned items stay
+    // silent until performed, no matter which amounts they carry.
+    [Fact]
+    public async Task Handle_WithPlanItemsInMixedStatuses_ShouldBillOnlyPerformedCost()
+    {
+        // Arrange — performed item (150) is billed; a cancelled-performed item
+        // (200) and a reopened-planned item (estimate 300) are skipped.
+        var (patient, _, _, appointment) = await SeedCompletedAppointmentAsync(servicePrice: 30m);
+
+        var plan = TreatmentPlan.Create(patient.Id, appointment.DoctorId, "Visit plan").Value;
+
+        var performed = TreatmentRecord.CreatePlanItem(plan.Id, patient.Id, appointment.DoctorId, 26, "Root canal treatment", 300m).Value;
+        Assert.True(performed.MarkPerformed(150m, appointment.Id).IsSuccess);
+
+        var cancelled = TreatmentRecord.CreatePlanItem(plan.Id, patient.Id, appointment.DoctorId, 25, "Bridge", 200m).Value;
+        Assert.True(cancelled.MarkPerformed(200m, appointment.Id).IsSuccess);
+        Assert.True(cancelled.Cancel().IsSuccess);
+
+        var reopenedPlanned = TreatmentRecord.CreatePlanItem(plan.Id, patient.Id, appointment.DoctorId, 36, "Implant", 250m).Value;
+        Assert.True(reopenedPlanned.MarkPerformed(300m, appointment.Id).IsSuccess);
+        Assert.True(reopenedPlanned.Reopen().IsSuccess); // still linked to the visit, back to Planned
+
+        await _context.TreatmentPlans.AddAsync(plan);
+        await _context.TreatmentRecords.AddAsync(performed);
+        await _context.TreatmentRecords.AddAsync(cancelled);
+        await _context.TreatmentRecords.AddAsync(reopenedPlanned);
+        await _context.SaveChangesAsync(default);
+
+        // Act
+        var result = await _mediator.Send(new GenerateAppointmentInvoiceCommand(appointment.Id));
+
+        // Assert
+        Assert.True(result.IsSuccess);
+        var created = result.Value;
+
+        Assert.Equal(30m, created.ServiceSubtotal);
+        Assert.Equal(150m, created.TreatmentSubtotal); // only the performed item's actual cost
+        Assert.Equal(180m, created.TotalAmount);
+        Assert.Equal(2, created.Lines.Count);
+        Assert.Equal("Root canal treatment (Tooth 26)", created.Lines.Single(l => l.Amount == 150m).Description);
     }
 
     // ---------------------------------------------------------------------

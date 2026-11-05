@@ -1,0 +1,194 @@
+@page "/invoices/{InvoiceId:guid}/print"
+@inject ApiClient Api
+@inject ClinicSessionState Session
+@inject ClinicBranding Branding
+
+<PageTitle>@Session.T("Invoice", "فاتورة") · @Branding.DisplayName(Session.IsRtl)</PageTitle>
+
+<div class="print-sheet">
+    @if (_loading)
+    {
+        <div class="skeleton row"></div>
+    }
+    else if (_invoice is null)
+    {
+        <EmptyState Icon="invoice"
+                    Title="@Session.T("Invoice not found", "الفاتورة غير موجودة")"
+                    Message="@(_error ?? Session.T("The requested invoice could not be loaded.", "تعذر تحميل الفاتورة المطلوبة."))" />
+    }
+    else
+    {
+        <div class="print-sheet-actions no-print">
+            <a class="btn btn-outline" href="/invoices">@Session.T("Back", "رجوع")</a>
+            <button type="button" class="btn btn-primary" onclick="window.print()">@Session.T("Print", "طباعة")</button>
+        </div>
+
+        <header class="print-sheet-header">
+            <div>
+                <h1>@Branding.DisplayName(Session.IsRtl)</h1>
+                <p>@Session.T("Invoice", "فاتورة")</p>
+                @if (Branding.Address is not null || Branding.Phone is not null)
+                {
+                    <p class="print-sheet-contact">
+                        @Branding.Address
+                        @if (Branding.Address is not null && Branding.Phone is not null)
+                        {
+                            <text> · </text>
+                        }
+                        @Branding.Phone
+                    </p>
+                }
+            </div>
+            <div class="print-sheet-meta">
+                <strong class="mono">@InvoiceNumberLabel</strong>
+                <span>@InvoiceStatusLabel</span>
+                @if (_invoice.IssuedAtUtc is { } issued)
+                {
+                    <span>@Session.T("Issued", "صادرة بتاريخ") @ClinicFormatting.ShortDate(issued.LocalDateTime)</span>
+                }
+            </div>
+        </header>
+
+        @if (_invoice.LifecycleStatus is InvoiceLifecycleStatus.Draft)
+        {
+            <div class="print-draft-banner">
+                @Session.T("Draft — not a valid bill. Issue the invoice before handing it to the patient.",
+                           "مسودة — غير صالحة للمطالبة. يجب إصدار الفاتورة قبل تسليمها للمريض.")
+            </div>
+        }
+
+        <section class="print-sheet-patient">
+            <div><strong>@Session.T("Patient", "المريض")</strong><span>@_invoice.PatientName</span></div>
+            <div><strong>@Session.T("Invoice number", "رقم الفاتورة")</strong><span class="mono">@InvoiceNumberLabel</span></div>
+            <div><strong>@Session.T("Payment status", "حالة السداد")</strong><span>@Session.T(PaymentLabel, PaymentLabelArabic)</span></div>
+        </section>
+
+        <table class="table print-sheet-table">
+            <thead>
+                <tr>
+                    <th style="width:48px">#</th>
+                    <th>@Session.T("Description", "البيان")</th>
+                    <th style="width:140px">@Session.T("Amount", "المبلغ")</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (_invoice.Lines.Count == 0)
+                {
+                    <tr>
+                        <td colspan="3">@Session.T("No itemised lines on this invoice.", "لا توجد بنود مفصلة على هذه الفاتورة.")</td>
+                    </tr>
+                }
+                else
+                {
+                    @for (var i = 0; i < _invoice.Lines.Count; i++)
+                    {
+                        var line = _invoice.Lines[i];
+                        <tr @key="line.Id">
+                            <td>@(i + 1)</td>
+                            <td>@line.Description</td>
+                            <td class="mono">@ClinicFormatting.Money(line.Amount)</td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+
+        <section class="print-sheet-totals">
+            <div><span>@Session.T("Total", "الإجمالي")</span><strong class="mono">@ClinicFormatting.Money(_invoice.TotalAmount)</strong></div>
+            <div><span>@Session.T("Paid", "المدفوع")</span><strong class="mono">@ClinicFormatting.Money(_invoice.PaidAmount)</strong></div>
+            <div><span>@Session.T("Remaining", "المتبقي")</span><strong class="mono">@ClinicFormatting.Money(_invoice.RemainingAmount)</strong></div>
+        </section>
+
+        @if (_invoice.Payments.Count > 0)
+        {
+            <section class="print-sheet-payments">
+                <h2>@Session.T("Payments received", "الدفعات المستلمة")</h2>
+                <table class="table print-sheet-table">
+                    <thead>
+                        <tr>
+                            <th>@Session.T("Date", "التاريخ")</th>
+                            <th>@Session.T("Notes", "ملاحظات")</th>
+                            <th style="width:140px">@Session.T("Amount", "المبلغ")</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var payment in _invoice.Payments)
+                        {
+                            <tr @key="payment.Id">
+                                <td>@ClinicFormatting.DateTimeLabel(payment.PaidAtUtc.ToLocalTime())</td>
+                                <td>@(string.IsNullOrWhiteSpace(payment.TransactionNotes) ? "—" : payment.TransactionNotes)</td>
+                                <td class="mono">@ClinicFormatting.Money(payment.Amount)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </section>
+        }
+
+        <footer class="print-sheet-footer">
+            <span>@Session.T("Issued by", "أصدرها") ____________________</span>
+            <span>@Session.T("Received by", "استلمها") ____________________</span>
+        </footer>
+    }
+</div>
+
+@code {
+    [Parameter]
+    public Guid InvoiceId { get; set; }
+
+    private InvoiceDto? _invoice;
+    private string? _error;
+    private bool _loading = true;
+
+    private string InvoiceNumberLabel =>
+        string.IsNullOrWhiteSpace(_invoice?.InvoiceNumber)
+            ? Session.T("Unnumbered draft", "مسودة بدون رقم")
+            : InvoiceFormatting.NumberLabel(_invoice!);
+
+    private string InvoiceStatusLabel => _invoice!.LifecycleStatus switch
+    {
+        InvoiceLifecycleStatus.Draft => Session.T("Draft", "مسودة"),
+        InvoiceLifecycleStatus.Issued => Session.T("Issued", "صادرة"),
+        _ => _invoice.LifecycleStatus.ToString(),
+    };
+
+    private string PaymentLabel => _invoice!.Status switch
+    {
+        PaymentStatus.Unpaid => "Unpaid",
+        PaymentStatus.PartiallyPaid => "Partially paid",
+        PaymentStatus.Paid => "Paid",
+        _ => "Unknown",
+    };
+
+    private string PaymentLabelArabic => _invoice!.Status switch
+    {
+        PaymentStatus.Unpaid => "غير مدفوعة",
+        PaymentStatus.PartiallyPaid => "مدفوعة جزئياً",
+        PaymentStatus.Paid => "مدفوعة",
+        _ => "غير معروف",
+    };
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _loading = true;
+        _error = null;
+        try
+        {
+            _invoice = await Api.GetInvoiceAsync(InvoiceId);
+        }
+        catch (ApiException ex)
+        {
+            _invoice = null;
+            _error = ex.Message;
+        }
+        catch (Exception)
+        {
+            _invoice = null;
+            _error = Session.T("Unexpected error while loading the invoice.", "حدث خطأ غير متوقع أثناء تحميل الفاتورة.");
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+}

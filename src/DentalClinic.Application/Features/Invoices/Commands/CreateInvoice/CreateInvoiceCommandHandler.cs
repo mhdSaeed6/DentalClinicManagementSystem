@@ -1,4 +1,7 @@
+using System.Data;
+
 using DentalClinic.Application.Common.Errors;
+using DentalClinic.Application.Common.Exceptions;
 using DentalClinic.Application.Common.Interfaces;
 using DentalClinic.Application.Common.Security;
 using DentalClinic.Application.Features.Invoices.Commands.GenerateAppointmentInvoice;
@@ -6,6 +9,7 @@ using DentalClinic.Application.Features.Invoices.Dtos;
 using DentalClinic.Application.Features.Invoices.Mappers;
 using DentalClinic.Domain.Common.Results;
 using DentalClinic.Domain.Invoices;
+using DentalClinic.Domain.Invoices.Enums;
 
 using MediatR;
 
@@ -19,7 +23,9 @@ public class CreateInvoiceCommandHandler(
     ILogger<CreateInvoiceCommandHandler> logger,
     IAppDbContext context,
     HybridCache cache,
-    IUser user)
+    IUser user,
+    IInvoiceNumberGenerator invoiceNumbers,
+    TimeProvider timeProvider)
     : IRequestHandler<CreateInvoiceCommand, Result<InvoiceDto>>
 {
     public async Task<Result<InvoiceDto>> Handle(CreateInvoiceCommand request, CancellationToken cancellationToken)
@@ -35,6 +41,21 @@ public class CreateInvoiceCommandHandler(
             logger.LogWarning("Invoice creation failed. Patient {PatientId} not found.", request.PatientId);
             return ApplicationErrors.PatientNotFound;
         }
+
+        // The "does this visit already have an invoice?" check and the insert
+        // must be one unit. Without the serialisable transaction two concurrent
+        // requests both read "no invoice" and both insert; the unique index then
+        // turns that into a 500 instead of a clean 409.
+        await using var transaction = await context.BeginTransactionAsync(
+            IsolationLevel.Serializable,
+            cancellationToken);
+
+        // Reserve the number before any other read inside the transaction. It is
+        // the only contended lock here, so every creator queues on one resource
+        // instead of holding row locks while waiting for it (which would deadlock
+        // on the winner's INSERT). A reservation for a request that ends early is
+        // released when the transaction rolls back.
+        var invoiceNumber = await invoiceNumbers.NextAsync(cancellationToken);
 
         // 1. An appointment-linked manual invoice must belong to the patient being
         //    billed. This is validated server-side; the form's selector is only
@@ -95,10 +116,20 @@ public class CreateInvoiceCommandHandler(
             return ApplicationErrors.InvoiceAccessForbidden;
         }
 
-        // 2. Standalone invoices stay a flat, immediately payable invoice. An
+        // 2. Every invoice created here is a bill from the start, so it takes the
+        //    number reserved above. Appointment-derived drafts (a different
+        //    endpoint) stay unnumbered until they are issued.
+        // 3. Standalone invoices stay a flat, immediately payable invoice. An
         //    appointment-derived invoice is built from its persisted charges
         //    instead, so the client's total is never trusted.
-        var invoiceResult = Invoice.Create(request.PatientId, request.TotalAmount, request.AppointmentId);
+        var invoiceResult = Invoice.Create(
+            request.PatientId,
+            request.TotalAmount,
+            request.AppointmentId,
+            InvoiceLifecycleStatus.Issued,
+            invoiceNumber,
+            timeProvider.GetUtcNow());
+
         if (invoiceResult.IsError)
         {
             logger.LogWarning("Failed to create invoice for patient {PatientId}. Errors: {@Errors}", request.PatientId, invoiceResult.Errors);
@@ -144,11 +175,31 @@ public class CreateInvoiceCommandHandler(
         }
 
         context.Invoices.Add(invoice);
-        await context.SaveChangesAsync(cancellationToken);
+
+        try
+        {
+            await context.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            logger.LogWarning("Invoice creation for patient {PatientId} lost a concurrency race.", request.PatientId);
+            return InvoiceErrors.ConcurrentModification;
+        }
+        catch (UniqueIndexViolationException)
+        {
+            // The appointment uniqueness is already guarded by the serialisable
+            // check above, so a violation here means the number itself collided.
+            logger.LogWarning("Invoice creation for patient {PatientId} produced a duplicate invoice number.", request.PatientId);
+            return InvoiceErrors.DuplicateInvoiceNumber;
+        }
 
         await cache.RemoveByTagAsync("invoice", cancellationToken);
 
-        logger.LogInformation("Invoice created successfully with ID: {InvoiceId}", invoice.Id);
+        logger.LogInformation(
+            "Invoice {InvoiceNumber} created successfully with ID: {InvoiceId}",
+            invoice.InvoiceNumber,
+            invoice.Id);
 
         return invoice.ToDto($"{patient.FirstName} {patient.LastName}");
     }

@@ -1,0 +1,139 @@
+@page "/treatment-plans/{PlanId:guid}/print"
+@inject ApiClient Api
+@inject ClinicSessionState Session
+@inject ClinicBranding Branding
+
+<PageTitle>@Session.T("Treatment plan", "خطة العلاج")</PageTitle>
+
+<div class="print-sheet">
+    @if (_loading)
+    {
+        <div class="skeleton row"></div>
+    }
+    else if (_plan is null)
+    {
+        <EmptyState Icon="clipboard"
+                    Title="@Session.T("Plan not found", "الخطة غير موجودة")"
+                    Message="@(_error ?? Session.T("The requested treatment plan could not be loaded.", "تعذر تحميل خطة العلاج المطلوبة."))" />
+    }
+    else
+    {
+        <div class="print-sheet-actions no-print">
+            <a class="btn btn-outline" href="/treatment-plans">@Session.T("Back", "رجوع")</a>
+            <button type="button" class="btn btn-primary" onclick="window.print()">@Session.T("Print", "طباعة")</button>
+        </div>
+
+        <header class="print-sheet-header">
+            <div>
+                <h1>@Branding.DisplayName(Session.IsRtl)</h1>
+                <p>@Session.T("Treatment plan", "خطة العلاج")</p>
+            </div>
+            <div class="print-sheet-meta">
+                <strong>@_plan.Title</strong>
+                <span>@PlanStatusLabel(_plan.Status)</span>
+                <span>@ClinicFormatting.ShortDate(_plan.CreatedOnUtc.LocalDateTime)</span>
+            </div>
+        </header>
+
+        <section class="print-sheet-patient">
+            <div><strong>@Session.T("Patient", "المريض")</strong><span>@_plan.PatientName</span></div>
+            <div><strong>@Session.T("Doctor", "الطبيب")</strong><span>@_plan.DoctorName</span></div>
+            <div><strong>@Session.T("Notes", "ملاحظات")</strong><span>@(_plan.Notes ?? "—")</span></div>
+        </section>
+
+        @foreach (var group in TreatmentPlanFormatting.GroupBySession(_plan.Items))
+        {
+            <section class="print-session">
+                <h2>@Session.T("Session", "الجلسة") @group.SessionNumber</h2>
+                <table class="table print-sheet-table">
+                    <thead>
+                        <tr>
+                            <th>@Session.T("Tooth", "السن")</th>
+                            <th>@Session.T("Procedure", "الإجراء")</th>
+                            <th>@Session.T("Status", "الحالة")</th>
+                            <th>@Session.T("Estimated", "التقديري")</th>
+                            <th>@Session.T("Actual", "الفعلي")</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var item in group.Items)
+                        {
+                            <tr @key="item.Id">
+                                <td>@(item.ToothNumber?.ToString() ?? "—")</td>
+                                <td>@item.ProcedureDetails</td>
+                                <td>@ItemStatusLabel(item.Status)</td>
+                                <td class="mono">@ClinicFormatting.Money(item.EstimatedCost ?? 0)</td>
+                                <td class="mono">@ClinicFormatting.Money(item.Status is TreatmentRecordStatus.Performed ? item.Cost : 0)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+                <div class="print-session-total">
+                    <span>@Session.T("Estimated", "التقديري"): <strong>@ClinicFormatting.Money(group.EstimatedTotal)</strong></span>
+                    <span>@Session.T("Performed", "المنجز"): <strong>@ClinicFormatting.Money(group.PerformedTotal)</strong></span>
+                    <span>@Session.T("Session total", "إجمالي الجلسة"): <strong>@ClinicFormatting.Money(group.GrandTotal)</strong></span>
+                </div>
+            </section>
+        }
+
+        <section class="print-sheet-totals">
+            <div><span>@Session.T("Estimated total", "الإجمالي التقديري")</span><strong>@ClinicFormatting.Money(_plan.EstimatedTotal)</strong></div>
+            <div><span>@Session.T("Performed total", "إجمالي المنجز")</span><strong>@ClinicFormatting.Money(_plan.PerformedTotal)</strong></div>
+        </section>
+
+        <footer class="print-sheet-footer">
+            <span>@Session.T("Patient signature", "توقيع المريض") ____________________</span>
+            <span>@Session.T("Doctor signature", "توقيع الطبيب") ____________________</span>
+        </footer>
+    }
+</div>
+
+@code {
+    [Parameter]
+    public Guid PlanId { get; set; }
+
+    private TreatmentPlanDetailDto? _plan;
+    private string? _error;
+    private bool _loading = true;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _loading = true;
+        _error = null;
+        try
+        {
+            _plan = await Api.GetTreatmentPlanAsync(PlanId);
+        }
+        catch (ApiException ex)
+        {
+            _plan = null;
+            _error = ex.Message;
+        }
+        catch (Exception)
+        {
+            _plan = null;
+            _error = Session.T("Unexpected error while loading the plan.", "حدث خطأ غير متوقع أثناء تحميل الخطة.");
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private string PlanStatusLabel(TreatmentPlanStatus status) => status switch
+    {
+        TreatmentPlanStatus.Draft => Session.T("Draft", "مسودة"),
+        TreatmentPlanStatus.Active => Session.T("Active", "نشطة"),
+        TreatmentPlanStatus.Completed => Session.T("Completed", "مكتملة"),
+        TreatmentPlanStatus.Cancelled => Session.T("Cancelled", "ملغاة"),
+        _ => status.ToString()
+    };
+
+    private string ItemStatusLabel(TreatmentRecordStatus status) => status switch
+    {
+        TreatmentRecordStatus.Planned => Session.T("Planned", "مخطط"),
+        TreatmentRecordStatus.Performed => Session.T("Performed", "منجز"),
+        TreatmentRecordStatus.Cancelled => Session.T("Cancelled", "ملغى"),
+        _ => status.ToString()
+    };
+}

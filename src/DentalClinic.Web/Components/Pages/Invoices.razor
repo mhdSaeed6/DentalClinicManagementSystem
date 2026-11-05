@@ -102,7 +102,7 @@
                     @foreach (var invoice in Filtered)
                     {
                         <tr>
-                            <td class="cell-main mono">#@invoice.Id.ToString()[..8]</td>
+                            <td class="cell-main mono">@InvoiceFormatting.NumberLabel(invoice)</td>
                             <td>
                                 <div class="cell-person">
                                     <Avatar Name="@PatientName(invoice)" Size="sm" />
@@ -118,6 +118,12 @@
                                     <button type="button" class="btn btn-outline btn-sm" @onclick="() => OpenDetails(invoice)">
                                         <ClinicIcon Name="eye" Class="sm" /> @Session.T("Manage", "إدارة")
                                     </button>
+                                    @if (InvoiceFormatting.IsPrintable(invoice))
+                                    {
+                                        <a class="btn btn-ghost btn-sm" href="@($"/invoices/{invoice.Id}/print")">
+                                            <ClinicIcon Name="printer" Class="sm" /> @Session.T("Print", "طباعة")
+                                        </a>
+                                    }
                                 </div>
                             </td>
                         </tr>
@@ -224,7 +230,7 @@
     </Footer>
 </Modal>
 
-<Drawer IsOpen="_drawerOpen" Title="@($"#{_selected?.Id.ToString()[..8]}")"
+<Drawer IsOpen="_drawerOpen" Title="@(_selected is null ? null : InvoiceFormatting.NumberLabel(_selected))"
         Subtitle="@(_selected is null ? null : PatientName(_selected))" Icon="invoice"
         OnClose="() => _drawerOpen = false">
     @if (_selected is not null)
@@ -243,6 +249,14 @@
                 <div class="fw-700 mono">@ClinicFormatting.Money(_selected.RemainingAmount)</div>
             </div></div>
         </div>
+
+        @* Only an issued invoice is a real bill, so only it can be printed. *@
+        @if (InvoiceFormatting.IsPrintable(_selected))
+        {
+            <a class="btn btn-outline btn-block mb-3" href="@($"/invoices/{_selected.Id}/print")">
+                <ClinicIcon Name="printer" Class="sm" /> @Session.T("Print invoice", "طباعة الفاتورة")
+            </a>
+        }
 
         <div class="flex-between mb-2">
             <h3>@Session.T("Payment history", "سجل المدفوعات")</h3>

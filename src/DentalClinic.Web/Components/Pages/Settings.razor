@@ -3,8 +3,10 @@
 @inject NotificationService Notifier
 @inject NavigationManager Nav
 @inject IConfiguration Config
+@inject ApiClient Api
+@inject ClinicBranding Branding
 
-<PageTitle>@Session.T("Settings", "الإعدادات") · @Session.T("Al Noor Dental", "عيادة النور")</PageTitle>
+<PageTitle>@Session.T("Settings", "الإعدادات") · @Branding.DisplayName(Session.IsRtl)</PageTitle>
 
 <PageHeader Title="@Session.T("Settings", "الإعدادات")"
             Subtitle="@Session.T("Manage your profile, appearance and session.", "إدارة ملفك الشخصي والمظهر والجلسة.")" />
@@ -73,6 +75,86 @@
             </div>
         </div>
 
+        @if (Session.IsAdmin)
+        {
+            <div class="card mb-3">
+                <div class="card-header">
+                    <div class="card-title">@Session.T("Clinic profile", "بيانات العيادة")</div>
+                </div>
+                <div class="card-body">
+                    @if (!_clinicLoaded)
+                    {
+                        <div class="flex-center gap-2 text-muted">
+                            <span class="spinner"></span>
+                            <span>@Session.T("Loading…", "جارٍ التحميل…")</span>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="field">
+                            <label class="label">@Session.T("Clinic name", "اسم العيادة")</label>
+                            <input class="input" @bind="_clinic.Name" />
+                        </div>
+
+                        <div class="field">
+                            <label class="label">@Session.T("Clinic name (Arabic)", "اسم العيادة (بالعربية)")</label>
+                            <input class="input" @bind="_clinic.NameArabic" dir="rtl" />
+                        </div>
+
+                        <div class="field">
+                            <label class="label">@Session.T("Logo path", "مسار الشعار")</label>
+                            <input class="input" @bind="_clinic.LogoUrl" placeholder="/branding/logo.svg" />
+                        </div>
+
+                        <div class="field">
+                            <label class="label">@Session.T("Phone", "الهاتف")</label>
+                            <input class="input" @bind="_clinic.Phone" />
+                        </div>
+
+                        <div class="field">
+                            <label class="label">@Session.T("Address", "العنوان")</label>
+                            <input class="input" @bind="_clinic.Address" />
+                        </div>
+
+                        <div class="field">
+                            <label class="label">@Session.T("Email", "البريد الإلكتروني")</label>
+                            <input class="input" type="email" @bind="_clinic.Email" />
+                        </div>
+
+                        <div class="field">
+                            <label class="label">@Session.T("Timezone", "المنطقة الزمنية")</label>
+                            <input class="input" @bind="_clinic.TimeZoneId" placeholder="Africa/Cairo" />
+                            <div class="text-muted fs-sm mt-1">
+                                @Session.T(
+                                    "Used for invoice years and daily reporting. An unrecognised id falls back to the server's timezone.",
+                                    "تُستخدم لسنوات الفواتير والتقارير اليومية. عند تعذّر التعرّف على المعرّف يتم الرجوع إلى المنطقة الزمنية للخادم.")
+                            </div>
+                        </div>
+
+                        <div class="field">
+                            <label class="label">@Session.T("Base currency", "العملة الأساسية")</label>
+                            <input class="input mono" maxlength="3" @bind="_clinic.BaseCurrency" placeholder="USD" />
+                        </div>
+
+                        <div class="field">
+                            <label class="label">@Session.T("Secondary currency (optional)", "العملة الثانوية (اختياري)")</label>
+                            <input class="input mono" maxlength="3" @bind="_clinic.SecondaryCurrency" placeholder="EGP" />
+                        </div>
+
+                        <div class="field">
+                            <label class="label">@Session.T("Default country code (optional)", "رمز الدولة الافتراضي (اختياري)")</label>
+                            <input class="input mono" @bind="_clinic.DefaultCountryCode" placeholder="20" />
+                        </div>
+
+                        <button type="button" class="btn btn-primary" @onclick="SaveClinicAsync" disabled="@_savingClinic">
+                            <ClinicIcon Name="check" Class="sm" />
+                            <span>@Session.T("Save clinic profile", "حفظ بيانات العيادة")</span>
+                        </button>
+                    }
+                </div>
+            </div>
+        }
+
         <div class="card">
             <div class="card-header">
                 <div class="card-title">@Session.T("About", "حول")</div>
@@ -134,6 +216,69 @@
 </div>
 
 @code {
+    private ClinicSettingsFormRequest _clinic = new();
+    private bool _clinicLoaded;
+    private bool _savingClinic;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // MainLayout loads branding for the shell; this page also needs the full
+        // profile to populate the administrator-only form.
+        await Branding.EnsureLoadedAsync();
+
+        if (!Session.IsAdmin)
+        {
+            return;
+        }
+
+        var settings = await Api.GetClinicSettingsAsync();
+
+        if (settings is not null)
+        {
+            _clinic = new ClinicSettingsFormRequest
+            {
+                Name = settings.Name,
+                NameArabic = settings.NameArabic,
+                LogoUrl = settings.LogoUrl,
+                Phone = settings.Phone,
+                Address = settings.Address,
+                Email = settings.Email,
+                TimeZoneId = settings.TimeZoneId,
+                BaseCurrency = settings.BaseCurrency,
+                SecondaryCurrency = settings.SecondaryCurrency,
+                DefaultCountryCode = settings.DefaultCountryCode,
+            };
+        }
+
+        _clinicLoaded = true;
+    }
+
+    private async Task SaveClinicAsync()
+    {
+        _savingClinic = true;
+
+        try
+        {
+            await Api.UpdateClinicSettingsAsync(_clinic);
+
+            // Refresh the shell's copy so the sidebar and print sheets pick up
+            // the new name without a reload.
+            await Branding.ReloadAsync();
+
+            Notifier.Success(Session.T("Clinic profile saved.", "تم حفظ بيانات العيادة."));
+        }
+        catch (ApiException ex)
+        {
+            Notifier.Error(
+                Session.T("Could not save the clinic profile.", "تعذّر حفظ بيانات العيادة."),
+                ex.Message);
+        }
+        finally
+        {
+            _savingClinic = false;
+        }
+    }
+
     private void UseLight()
     {
         if (Session.ThemeName != "light")

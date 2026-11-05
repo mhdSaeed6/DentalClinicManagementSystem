@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -185,6 +186,11 @@ public class InvoiceControllerTests(WebAppFactory webAppFactory)
         Assert.NotNull(createdDto);
         Assert.Equal(request.PatientId, createdDto!.PatientId);
         Assert.Equal(request.TotalAmount, createdDto.TotalAmount);
+
+        // A standalone invoice is a bill immediately, so it is born numbered.
+        Assert.Equal(InvoiceLifecycleStatus.Issued, createdDto.LifecycleStatus);
+        AssertLooksLikeInvoiceNumber(createdDto.InvoiceNumber, expectedSequence: 1);
+        Assert.NotNull(createdDto.IssuedAtUtc);
     }
 
     [Fact]
@@ -502,6 +508,11 @@ public class InvoiceControllerTests(WebAppFactory webAppFactory)
         Assert.Equal(2, invoice.Lines.Count);
         Assert.Equal(100m, invoice.Lines.Sum(l => l.Amount));
         Assert.Equal(100m, invoice.TotalAmount);
+
+        // A draft is an internal working document: it must not hold a number yet,
+        // otherwise an abandoned draft would leave a hole in the ledger.
+        Assert.Null(invoice.InvoiceNumber);
+        Assert.Null(invoice.IssuedAtUtc);
     }
 
     [Fact]
@@ -556,6 +567,10 @@ public class InvoiceControllerTests(WebAppFactory webAppFactory)
         // Issuance must never register a payment.
         Assert.Equal(0m, issued.PaidAmount);
         Assert.Equal(PaymentStatus.Unpaid, issued.Status);
+
+        // ... and it is the moment the invoice becomes a numbered bill.
+        AssertLooksLikeInvoiceNumber(issued.InvoiceNumber, expectedSequence: 1);
+        Assert.NotNull(issued.IssuedAtUtc);
     }
 
     [Fact]
@@ -578,9 +593,15 @@ public class InvoiceControllerTests(WebAppFactory webAppFactory)
         Assert.Equal(HttpStatusCode.OK, first.StatusCode);
         Assert.Equal(HttpStatusCode.OK, second.StatusCode);
 
+        var firstIssued = await first.Content.ReadFromJsonAsync<InvoiceDto>();
         var issued = await second.Content.ReadFromJsonAsync<InvoiceDto>();
         Assert.Equal(InvoiceLifecycleStatus.Issued, issued!.LifecycleStatus);
         Assert.Equal(issued.TotalAmount, issued.PaidAmount + issued.RemainingAmount);
+
+        // The repeat must return the number the invoice already owns, not
+        // reserve a fresh one (which would leave a gap in the ledger).
+        Assert.NotNull(firstIssued!.InvoiceNumber);
+        Assert.Equal(firstIssued.InvoiceNumber, issued.InvoiceNumber);
     }
 
     [Fact]
@@ -848,8 +869,132 @@ public class InvoiceControllerTests(WebAppFactory webAppFactory)
     }
 
     // -------------------------------------------------------------------------
+    // Numbering integrity (P2.1)
+    // -------------------------------------------------------------------------
+
+    [Fact]
+    public async Task Issue_ConcurrentRequests_ShouldAssignExactlyOneNumberAndBurnNone()
+    {
+        // Arrange
+        await webAppFactory.ResetDatabaseAsync();
+        await EnsureUserExistsAsync();
+        await AuthenticateAdminAsync();
+
+        var (_, _, appointment) = await SeedCompletedAppointmentAsync(servicePrice: 40m);
+        var generated = await (await PostGenerateAsync(appointment.Id))
+            .Content.ReadFromJsonAsync<GenerateAppointmentInvoiceResult>();
+
+        // Act - two issuers race for the same draft.
+        var first = PostIssueAsync(generated!.InvoiceId);
+        var second = PostIssueAsync(generated.InvoiceId);
+        var responses = await Task.WhenAll(first, second);
+
+        // Assert - the loser either sees the winner's number or a clean 409,
+        // never a second number.
+        Assert.Contains(responses, r => r.StatusCode == HttpStatusCode.OK);
+        Assert.All(
+            responses,
+            r => Assert.True(
+                r.StatusCode is HttpStatusCode.OK or HttpStatusCode.Conflict,
+                $"Unexpected status {r.StatusCode}"));
+
+        var persisted = await (await GetInvoiceAsync(generated.InvoiceId))
+            .Content.ReadFromJsonAsync<InvoiceDto>();
+        Assert.Equal(InvoiceLifecycleStatus.Issued, persisted!.LifecycleStatus);
+        AssertLooksLikeInvoiceNumber(persisted.InvoiceNumber, expectedSequence: 1);
+
+        var winner = responses.First(r => r.StatusCode == HttpStatusCode.OK);
+        var winnerBody = await winner.Content.ReadFromJsonAsync<InvoiceDto>();
+        Assert.Equal(winnerBody!.InvoiceNumber, persisted.InvoiceNumber);
+
+        // The number the loser reserved must have been released: the next bill
+        // has to be 0002, not 0003.
+        var (_, _, otherAppointment) = await SeedCompletedAppointmentAsync(servicePrice: 15m);
+        var otherGenerated = await (await PostGenerateAsync(otherAppointment.Id))
+            .Content.ReadFromJsonAsync<GenerateAppointmentInvoiceResult>();
+        var otherIssued = await (await PostIssueAsync(otherGenerated!.InvoiceId))
+            .Content.ReadFromJsonAsync<InvoiceDto>();
+
+        AssertLooksLikeInvoiceNumber(otherIssued!.InvoiceNumber, expectedSequence: 2);
+    }
+
+    [Fact]
+    public async Task CreateInvoice_ConcurrentForSameAppointment_ShouldCreateExactlyOne()
+    {
+        // Arrange
+        await webAppFactory.ResetDatabaseAsync();
+        await EnsureUserExistsAsync();
+        await AuthenticateAdminAsync();
+
+        var (patient, _, appointment) = await SeedCompletedAppointmentAsync(servicePrice: 40m);
+
+        var request = new CreateInvoiceRequest
+        {
+            PatientId = patient.Id,
+            AppointmentId = appointment.Id,
+            TotalAmount = 40m,
+        };
+
+        // Act - two receptionists bill the same visit at the same moment.
+        var first = _client.PostAsJsonAsync("/api/v1.0/invoices", request);
+        var second = _client.PostAsJsonAsync("/api/v1.0/invoices", request);
+        var responses = await Task.WhenAll(first, second);
+
+        // Assert - the unique index is the real guard, so the loser must get a
+        // conflict rather than a second payable bill for the same visit.
+        Assert.Single(responses, r => r.StatusCode == HttpStatusCode.Created);
+        Assert.Contains(responses, r => r.StatusCode == HttpStatusCode.Conflict);
+
+        var list = await (await _client.GetAsync(
+                $"/api/v1.0/invoices?appointmentId={appointment.Id}&pageNumber=1&pageSize=10"))
+            .Content.ReadFromJsonAsync<PaginatedList<InvoiceDto>>();
+
+        var invoice = Assert.Single(list!.Items!);
+        AssertLooksLikeInvoiceNumber(invoice.InvoiceNumber, expectedSequence: 1);
+    }
+
+    [Fact]
+    public async Task GetInvoices_ShouldExposeTheInvoiceNumberForIssuedRows()
+    {
+        // Arrange
+        await webAppFactory.ResetDatabaseAsync();
+        await EnsureUserExistsAsync();
+        await AuthenticateAdminAsync();
+
+        var (patient, _, appointment) = await SeedCompletedAppointmentAsync(servicePrice: 25m);
+        var generated = await (await PostGenerateAsync(appointment.Id))
+            .Content.ReadFromJsonAsync<GenerateAppointmentInvoiceResult>();
+        await PostIssueAsync(generated!.InvoiceId);
+
+        // Act
+        var list = await (await _client.GetAsync(
+                $"/api/v1.0/invoices?patientId={patient.Id}&pageNumber=1&pageSize=10"))
+            .Content.ReadFromJsonAsync<PaginatedList<InvoiceDto>>();
+
+        // Assert
+        var invoice = Assert.Single(list!.Items!);
+        AssertLooksLikeInvoiceNumber(invoice.InvoiceNumber, expectedSequence: 1);
+    }
+
+    // -------------------------------------------------------------------------
     // Private Helpers
     // -------------------------------------------------------------------------
+
+    /// <summary>
+    /// Asserts the canonical <c>INV-{year}-{sequence}</c> shape without pinning
+    /// the year, so the test does not break on 1 January.
+    /// </summary>
+    private static void AssertLooksLikeInvoiceNumber(string? invoiceNumber, int expectedSequence)
+    {
+        Assert.False(string.IsNullOrWhiteSpace(invoiceNumber));
+
+        var parts = invoiceNumber!.Split('-');
+        Assert.Equal(3, parts.Length);
+        Assert.Equal("INV", parts[0]);
+        Assert.Equal(4, parts[1].Length);
+        Assert.True(int.TryParse(parts[1], out _), $"'{parts[1]}' is not a year.");
+        Assert.Equal(expectedSequence.ToString("D4", CultureInfo.InvariantCulture), parts[2]);
+    }
 
     private Task AuthenticateAdminAsync()
     {

@@ -9,6 +9,7 @@ builder.Services.AddRazorComponents()
 
 builder.Services.AddScoped<ClinicSessionState>();
 builder.Services.AddScoped<NotificationService>();
+builder.Services.AddScoped<ClinicBranding>();
 
 builder.Services.AddHttpClient<ApiClient>(client =>
 {
@@ -28,6 +29,11 @@ builder.Services.AddHttpClient<ApiClient>(client =>
 
     return handler;
 });
+
+// Branding reads the profile through the same HTTP client (the endpoint is
+// anonymous), so there is exactly one place that knows the API base address
+// and the development certificate policy.
+builder.Services.AddScoped<IClinicSettingsSource>(sp => sp.GetRequiredService<ApiClient>());
 
 var app = builder.Build();
 
