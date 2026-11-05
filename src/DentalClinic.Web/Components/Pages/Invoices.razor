@@ -1,10 +1,11 @@
 @page "/invoices"
 @inject ApiClient Api
 @inject ClinicSessionState Session
+@inject ClinicBranding Branding
 @inject NotificationService Notifier
 @inject NavigationManager Nav
 
-<PageTitle>@Session.T("Billing", "الفوترة") · @Session.T("Al Noor Dental", "عيادة النور")</PageTitle>
+<PageTitle>@Session.T("Billing", "الفوترة") · @Branding.DisplayName(Session.IsRtl)</PageTitle>
 
 <PageHeader Title="@Session.T("Billing & invoices", "الفوترة والفواتير")"
             Subtitle="@Session.T("Track charges, payments and outstanding balances.", "تابع الرسوم والمدفوعات والأرصدة المستحقة.")">
@@ -29,12 +30,20 @@
     </div>
     <div class="stat green">
         <div class="stat-icon"><ClinicIcon Name="wallet" /></div>
-        <div class="stat-value">@ClinicFormatting.Money(_summary?.TotalPaid ?? 0)</div>
+        <div class="stat-value">@Money(_summary?.TotalPaid ?? 0)</div>
+        @if (Secondary(_summary?.TotalPaid ?? 0) is { } paidSecondary)
+        {
+            <div class="stat-label">@paidSecondary</div>
+        }
         <div class="stat-label">@Session.T("Collected (issued)", "المحصّل (صادرة)")</div>
     </div>
     <div class="stat amber">
         <div class="stat-icon"><ClinicIcon Name="alert" /></div>
-        <div class="stat-value">@ClinicFormatting.Money(_summary?.TotalOutstanding ?? 0)</div>
+        <div class="stat-value">@Money(_summary?.TotalOutstanding ?? 0)</div>
+        @if (Secondary(_summary?.TotalOutstanding ?? 0) is { } outstandingSecondary)
+        {
+            <div class="stat-label">@outstandingSecondary</div>
+        }
         <div class="stat-label">@Session.T("Outstanding (issued)", "المستحق (صادرة)")</div>
     </div>
     <div class="stat rose">
@@ -109,9 +118,9 @@
                                     <span class="cell-main">@PatientName(invoice)</span>
                                 </div>
                             </td>
-                            <td class="mono">@ClinicFormatting.Money(invoice.TotalAmount)</td>
-                            <td class="mono text-success">@ClinicFormatting.Money(invoice.PaidAmount)</td>
-                            <td class="mono fw-700">@ClinicFormatting.Money(invoice.RemainingAmount)</td>
+                            <td class="mono">@Money(invoice.TotalAmount)</td>
+                            <td class="mono text-success">@Money(invoice.PaidAmount)</td>
+                            <td class="mono fw-700">@Money(invoice.RemainingAmount)</td>
                             <td><PaymentStatusBadge Value="invoice.Status" /></td>
                             <td>
                                 <div class="row-actions">
@@ -181,23 +190,23 @@
                 {
                     <div class="flex-between fs-sm">
                         <span>@(_formBreakdown.ServiceName ?? Session.T("Service", "الخدمة"))</span>
-                        <span class="mono">@ClinicFormatting.Money(_formBreakdown.ServiceSubtotal)</span>
+                        <span class="mono">@Money(_formBreakdown.ServiceSubtotal)</span>
                     </div>
                 }
                 <div class="flex-between fs-sm">
                     <span>@Session.T("Treatments", "العلاجات") (@_formBreakdown.TreatmentCount)</span>
-                    <span class="mono">@ClinicFormatting.Money(_formBreakdown.TreatmentSubtotal)</span>
+                    <span class="mono">@Money(_formBreakdown.TreatmentSubtotal)</span>
                 </div>
                 <div class="flex-between fw-700" style="border-top:1px solid var(--border);padding-top:6px;margin-top:6px">
                     <span>@Session.T("Server-calculated total", "الإجمالي المحسوب")</span>
-                    <span class="mono">@ClinicFormatting.Money(_formBreakdown.EstimatedTotal)</span>
+                    <span class="mono">@Money(_formBreakdown.EstimatedTotal)</span>
                 </div>
             </div>
         </div>
     }
 
     <div class="field">
-        <label class="label">@Session.T("Total amount (USD)", "المبلغ الإجمالي (دولار)") <span class="req">*</span></label>
+        <label class="label">@Session.T($"Total amount ({Branding.BaseCurrency})", $"المبلغ الإجمالي ({Branding.BaseCurrency})") <span class="req">*</span></label>
         <input type="number" step="0.01" min="0.01" class="input" @bind="_form.TotalAmount" disabled="@(_form.AppointmentId is not null)" />
     </div>
     @if (_form.AppointmentId is not null)
@@ -238,15 +247,15 @@
         <div class="grid" style="grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px">
             <div class="card"><div class="card-body" style="padding:14px">
                 <div class="fs-xs text-soft">@Session.T("Total", "الإجمالي")</div>
-                <div class="fw-700 mono">@ClinicFormatting.Money(_selected.TotalAmount)</div>
+                <div class="fw-700 mono">@Money(_selected.TotalAmount)</div>
             </div></div>
             <div class="card"><div class="card-body" style="padding:14px">
                 <div class="fs-xs text-soft">@Session.T("Paid", "المدفوع")</div>
-                <div class="fw-700 mono text-success">@ClinicFormatting.Money(_selected.PaidAmount)</div>
+                <div class="fw-700 mono text-success">@Money(_selected.PaidAmount)</div>
             </div></div>
             <div class="card"><div class="card-body" style="padding:14px">
                 <div class="fs-xs text-soft">@Session.T("Balance", "المتبقي")</div>
-                <div class="fw-700 mono">@ClinicFormatting.Money(_selected.RemainingAmount)</div>
+                <div class="fw-700 mono">@Money(_selected.RemainingAmount)</div>
             </div></div>
         </div>
 
@@ -275,7 +284,7 @@
                     <div class="list-row">
                         <div class="stat-icon green" style="margin:0;width:38px;height:38px"><ClinicIcon Name="check" Class="sm" /></div>
                         <div class="list-body">
-                            <div class="list-title">@ClinicFormatting.Money(payment.Amount)</div>
+                            <div class="list-title">@Money(payment.Amount)</div>
                             <div class="list-sub">@ClinicFormatting.DateTimeLabel(payment.PaidAtUtc) @(string.IsNullOrWhiteSpace(payment.TransactionNotes) ? "" : "· " + payment.TransactionNotes)</div>
                         </div>
                     </div>
@@ -300,7 +309,7 @@
                     <div class="list-row">
                         <div class="list-body">
                             <div class="list-title">@line.Description</div>
-                            <div class="list-sub mono">@ClinicFormatting.Money(line.Amount)</div>
+                            <div class="list-sub mono">@Money(line.Amount)</div>
                         </div>
                     </div>
                 }
@@ -361,7 +370,7 @@
             }
             <div class="form-grid">
                 <div class="field">
-                    <label class="label">@Session.T("Amount (USD)", "المبلغ (دولار)")</label>
+                    <label class="label">@Session.T($"Amount ({Branding.BaseCurrency})", $"المبلغ ({Branding.BaseCurrency})")</label>
                     <input type="number" step="0.01" min="0.01" class="input" @bind="_payment.Amount" />
                 </div>
                 <div class="field">
@@ -385,6 +394,18 @@
 </Drawer>
 
 @code {
+    private string Money(decimal amount) => ClinicFormatting.Money(amount, Branding.BaseCurrency);
+
+    /// <summary>
+    /// The same amount in the secondary currency, or null when the clinic has
+    /// no secondary currency or no rate covers it. Null hides the line — a
+    /// converted zero would read as a real amount.
+    /// </summary>
+    private string? Secondary(decimal amount) =>
+        _rate is null ? null : ClinicFormatting.Money(amount * _rate.Rate, _rate.ToCurrency);
+
+    private ExchangeRateDto? _rate;
+
     private List<InvoiceDto> _invoices = [];
     private List<PatientDto> _patients = [];
     private List<DentalServiceDto> _services = [];
@@ -417,6 +438,10 @@
 
     protected override async Task OnInitializedAsync()
     {
+        // The layout loads branding too, but this page formats money itself and
+        // must not depend on the layout's ordering to know the base currency.
+        await Branding.EnsureLoadedAsync();
+
         try
         {
             var patients = await Api.GetPatientsAsync(1, 100, null);
@@ -467,19 +492,25 @@
             // set, so they stay correct past one page of invoices.
             var listTask = Api.GetInvoicesAsync(_page, _pageSize, _patientFilter);
             var summaryTask = Api.GetInvoiceSummaryAsync(_patientFilter);
-            await Task.WhenAll(listTask, summaryTask);
+            var rateTask = Branding.SecondaryCurrency is null
+                ? Task.FromResult<ExchangeRateDto?>(null)
+                : Api.GetExchangeRateAsync();
+
+            await Task.WhenAll(listTask, summaryTask, rateTask);
 
             var result = await listTask;
             _invoices = result.Items ?? [];
             _total = result.TotalCount;
             _totalPages = result.TotalPages;
             _summary = await summaryTask;
+            _rate = await rateTask;
         }
         catch (ApiException ex)
         {
             Notifier.Error(Session.T("Could not load invoices", "تعذّر تحميل الفواتير"), ex.Message);
             _invoices = [];
             _summary = null;
+            _rate = null;
         }
         finally
         {

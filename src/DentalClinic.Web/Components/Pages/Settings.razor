@@ -133,7 +133,7 @@
 
                         <div class="field">
                             <label class="label">@Session.T("Base currency", "العملة الأساسية")</label>
-                            <input class="input mono" maxlength="3" @bind="_clinic.BaseCurrency" placeholder="USD" />
+                            <input class="input mono" maxlength="3" @bind="_clinic.BaseCurrency" />
                         </div>
 
                         <div class="field">
@@ -149,6 +149,74 @@
                         <button type="button" class="btn btn-primary" @onclick="SaveClinicAsync" disabled="@_savingClinic">
                             <ClinicIcon Name="check" Class="sm" />
                             <span>@Session.T("Save clinic profile", "حفظ بيانات العيادة")</span>
+                        </button>
+                    }
+                </div>
+            </div>
+
+            <div class="card mb-3">
+                <div class="card-header">
+                    <div class="card-title">@Session.T("Exchange rate", "سعر الصرف")</div>
+                </div>
+                <div class="card-body">
+                    @if (!_clinicLoaded)
+                    {
+                        <div class="flex-center gap-2 text-muted">
+                            <span class="spinner"></span>
+                            <span>@Session.T("Loading…", "جارٍ التحميل…")</span>
+                        </div>
+                    }
+                    else if (string.IsNullOrWhiteSpace(_clinic.SecondaryCurrency))
+                    {
+                        <p class="text-muted fs-sm">
+                            @Session.T(
+                                "Set a secondary currency in the clinic profile to record exchange rates.",
+                                "حدّد عملة ثانوية في بيانات العيادة لتسجيل أسعار الصرف.")
+                        </p>
+                    }
+                    else
+                    {
+                        <p class="text-muted fs-sm">
+                            @if (_rate is null)
+                            {
+                                <span>
+                                    @Session.T(
+                                        $"No rate recorded for {_clinic.BaseCurrency} to {_clinic.SecondaryCurrency} yet.",
+                                        $"لم يُسجَّل سعر صرف من {_clinic.BaseCurrency} إلى {_clinic.SecondaryCurrency} بعد.")
+                                </span>
+                            }
+                            else
+                            {
+                                <span>
+                                    @Session.T("In force", "الساري"):
+                                    <strong class="mono">1 @_rate.FromCurrency = @_rate.Rate @_rate.ToCurrency</strong>
+                                    · @_rate.EffectiveFromUtc.ToLocalTime().ToString("dd MMM yyyy · HH:mm")
+                                </span>
+                            }
+                        </p>
+
+                        <div class="field">
+                            <label class="label">
+                                @Session.T(
+                                    $"New rate (1 {_clinic.BaseCurrency} = … {_clinic.SecondaryCurrency})",
+                                    $"سعر جديد (1 {_clinic.BaseCurrency} = … {_clinic.SecondaryCurrency})")
+                            </label>
+                            <input class="input mono" type="number" step="0.000001" min="0" @bind="_rateForm.Rate" />
+                        </div>
+
+                        <div class="field">
+                            <label class="label">@Session.T("Effective from (optional)", "ساري من (اختياري)")</label>
+                            <input class="input" type="datetime-local" @bind="_effectiveFromLocal" />
+                            <div class="text-muted fs-sm mt-1">
+                                @Session.T(
+                                    "Leave empty to apply from now. Rates are append-only, so a correction is a new row with a later date.",
+                                    "اتركه فارغًا ليطبَّق من الآن. الأسعار تُضاف فقط، لذا التصحيح سطر جديد بتاريخ لاحق.")
+                            </div>
+                        </div>
+
+                        <button type="button" class="btn btn-primary" @onclick="AppendRateAsync" disabled="@_savingRate">
+                            <ClinicIcon Name="plus" Class="sm" />
+                            <span>@Session.T("Record rate", "تسجيل السعر")</span>
                         </button>
                     }
                 </div>
@@ -220,6 +288,11 @@
     private bool _clinicLoaded;
     private bool _savingClinic;
 
+    private ExchangeRateDto? _rate;
+    private ExchangeRateFormRequest _rateForm = new();
+    private DateTime? _effectiveFromLocal;
+    private bool _savingRate;
+
     protected override async Task OnInitializedAsync()
     {
         // MainLayout loads branding for the shell; this page also needs the full
@@ -250,6 +323,8 @@
             };
         }
 
+        await RefreshRateAsync();
+
         _clinicLoaded = true;
     }
 
@@ -265,6 +340,10 @@
             // the new name without a reload.
             await Branding.ReloadAsync();
 
+            // The currency pair may have changed, so the rate on screen may
+            // describe a pair the clinic no longer uses.
+            await RefreshRateAsync();
+
             Notifier.Success(Session.T("Clinic profile saved.", "تم حفظ بيانات العيادة."));
         }
         catch (ApiException ex)
@@ -276,6 +355,59 @@
         finally
         {
             _savingClinic = false;
+        }
+    }
+
+    /// <summary>
+    /// Loads the rate in force for the configured pair. Null when there is no
+    /// secondary currency or no rate yet — the card then invites the admin to
+    /// record the first one instead of showing a fake conversion.
+    /// </summary>
+    private async Task RefreshRateAsync()
+    {
+        _rate = string.IsNullOrWhiteSpace(_clinic.SecondaryCurrency)
+            ? null
+            : await Api.GetExchangeRateAsync();
+    }
+
+    private async Task AppendRateAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_clinic.SecondaryCurrency))
+        {
+            return;
+        }
+
+        _savingRate = true;
+
+        try
+        {
+            var request = new ExchangeRateFormRequest
+            {
+                FromCurrency = _clinic.BaseCurrency,
+                ToCurrency = _clinic.SecondaryCurrency,
+                Rate = _rateForm.Rate,
+                // The picker is local time; the server stores instants.
+                EffectiveFromUtc = _effectiveFromLocal is { } local
+                    ? new DateTimeOffset(DateTime.SpecifyKind(local, DateTimeKind.Local))
+                    : null,
+            };
+
+            _rate = await Api.AddExchangeRateAsync(request);
+
+            _rateForm.Rate = 0;
+            _effectiveFromLocal = null;
+
+            Notifier.Success(Session.T("Exchange rate recorded.", "تم تسجيل سعر الصرف."));
+        }
+        catch (ApiException ex)
+        {
+            Notifier.Error(
+                Session.T("Could not record the exchange rate.", "تعذّر تسجيل سعر الصرف."),
+                ex.Message);
+        }
+        finally
+        {
+            _savingRate = false;
         }
     }
 

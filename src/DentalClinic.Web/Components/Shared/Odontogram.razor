@@ -1,5 +1,6 @@
 @inject ApiClient Api
 @inject ClinicSessionState Session
+@inject ClinicBranding Branding
 @inject NotificationService Notifier
 
 <div class="card odontogram">
@@ -163,7 +164,7 @@
                         <div class="odontogram-history-item">
                             <div class="flex justify-between gap-2">
                                 <strong>@history.ProcedureDetails</strong>
-                                <span class="mono">@ClinicFormatting.Money(history.Cost)</span>
+                                <span class="mono">@Money(history.Cost)</span>
                             </div>
                             <div class="text-muted fs-sm">@ClinicFormatting.DateTimeLabel(history.RecordedAtUtc.LocalDateTime)</div>
                         </div>
@@ -205,6 +206,8 @@
                OnCancel="() => _confirmOpen = false" />
 
 @code {
+    private string Money(decimal amount) => ClinicFormatting.Money(amount, Branding.BaseCurrency);
+
     [Parameter] public Guid PatientId { get; set; }
 
     private static readonly int[] UpperTeeth = [18, 17, 16, 15, 14, 13, 12, 11, 21, 22, 23, 24, 25, 26, 27, 28];

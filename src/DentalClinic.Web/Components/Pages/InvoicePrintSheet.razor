@@ -86,7 +86,7 @@
                         <tr @key="line.Id">
                             <td>@(i + 1)</td>
                             <td>@line.Description</td>
-                            <td class="mono">@ClinicFormatting.Money(line.Amount)</td>
+                            <td class="mono">@Money(line.Amount)</td>
                         </tr>
                     }
                 }
@@ -94,10 +94,26 @@
         </table>
 
         <section class="print-sheet-totals">
-            <div><span>@Session.T("Total", "الإجمالي")</span><strong class="mono">@ClinicFormatting.Money(_invoice.TotalAmount)</strong></div>
-            <div><span>@Session.T("Paid", "المدفوع")</span><strong class="mono">@ClinicFormatting.Money(_invoice.PaidAmount)</strong></div>
-            <div><span>@Session.T("Remaining", "المتبقي")</span><strong class="mono">@ClinicFormatting.Money(_invoice.RemainingAmount)</strong></div>
+            <div><span>@Session.T("Total", "الإجمالي")</span><strong class="mono">@Money(_invoice.TotalAmount)</strong></div>
+            <div><span>@Session.T("Paid", "المدفوع")</span><strong class="mono">@Money(_invoice.PaidAmount)</strong></div>
+            <div><span>@Session.T("Remaining", "المتبقي")</span><strong class="mono">@Money(_invoice.RemainingAmount)</strong></div>
         </section>
+
+        @* Display-time conversion only: the invoice itself stays in the base
+           currency, and the rate that applied when it was issued is shown so
+           the figure is reproducible. *@
+        @if (SecondaryTotal is { } secondaryTotal && _rate is not null)
+        {
+            <section class="print-sheet-secondary">
+                <span>@Session.T($"Equivalent in {_rate.ToCurrency}", $"المكافئ بـ {_rate.ToCurrency}")</span>
+                <strong class="mono">@secondaryTotal</strong>
+                <span class="print-sheet-rate">
+                    @Session.T(
+                        $"Rate: 1 {_rate.FromCurrency} = {_rate.Rate} {_rate.ToCurrency}",
+                        $"سعر الصرف: 1 {_rate.FromCurrency} = {_rate.Rate} {_rate.ToCurrency}")
+                </span>
+            </section>
+        }
 
         @if (_invoice.Payments.Count > 0)
         {
@@ -117,7 +133,7 @@
                             <tr @key="payment.Id">
                                 <td>@ClinicFormatting.DateTimeLabel(payment.PaidAtUtc.ToLocalTime())</td>
                                 <td>@(string.IsNullOrWhiteSpace(payment.TransactionNotes) ? "—" : payment.TransactionNotes)</td>
-                                <td class="mono">@ClinicFormatting.Money(payment.Amount)</td>
+                                <td class="mono">@Money(payment.Amount)</td>
                             </tr>
                         }
                     </tbody>
@@ -133,12 +149,24 @@
 </div>
 
 @code {
+    private string Money(decimal amount) => ClinicFormatting.Money(amount, Branding.BaseCurrency);
+
     [Parameter]
     public Guid InvoiceId { get; set; }
 
     private InvoiceDto? _invoice;
+    private ExchangeRateDto? _rate;
     private string? _error;
     private bool _loading = true;
+
+    /// <summary>
+    /// The invoice total in the secondary currency, or null when the clinic has
+    /// no secondary currency or no rate covers the issue date. Null means the
+    /// block is hidden — never a zero that looks like a real conversion.
+    /// </summary>
+    private string? SecondaryTotal => _rate is null || _invoice is null
+        ? null
+        : ClinicFormatting.Money(_invoice.TotalAmount * _rate.Rate, _rate.ToCurrency);
 
     private string InvoiceNumberLabel =>
         string.IsNullOrWhiteSpace(_invoice?.InvoiceNumber)
@@ -172,9 +200,22 @@
     {
         _loading = true;
         _error = null;
+        _rate = null;
+
+        // The layout loads branding too, but a page must not depend on the
+        // layout's ordering to know whether a secondary currency exists.
+        await Branding.EnsureLoadedAsync();
+
         try
         {
             _invoice = await Api.GetInvoiceAsync(InvoiceId);
+
+            if (Branding.SecondaryCurrency is not null)
+            {
+                // The rate that applied when the invoice was issued, so a
+                // reprint years later shows the same conversion.
+                _rate = await Api.GetExchangeRateAsync(_invoice.IssuedAtUtc);
+            }
         }
         catch (ApiException ex)
         {

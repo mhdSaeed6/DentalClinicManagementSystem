@@ -30,6 +30,7 @@ public interface IAppDbContext
     public DbSet<TreatmentPlan> TreatmentPlans { get; }
     public DbSet<PatientTooth> PatientTeeth { get; }
     public DbSet<ClinicSetting> ClinicSettings { get; }
+    public DbSet<ExchangeRate> ExchangeRates { get; }
     Task<int> SaveChangesAsync(CancellationToken cancellationToken);
     Task<IAppTransaction> BeginTransactionAsync(IsolationLevel isolationLevel, CancellationToken cancellationToken);
 

@@ -62,23 +62,23 @@
                                 <td>@(item.ToothNumber?.ToString() ?? "—")</td>
                                 <td>@item.ProcedureDetails</td>
                                 <td>@ItemStatusLabel(item.Status)</td>
-                                <td class="mono">@ClinicFormatting.Money(item.EstimatedCost ?? 0)</td>
-                                <td class="mono">@ClinicFormatting.Money(item.Status is TreatmentRecordStatus.Performed ? item.Cost : 0)</td>
+                                <td class="mono">@Money(item.EstimatedCost ?? 0)</td>
+                                <td class="mono">@Money(item.Status is TreatmentRecordStatus.Performed ? item.Cost : 0)</td>
                             </tr>
                         }
                     </tbody>
                 </table>
                 <div class="print-session-total">
-                    <span>@Session.T("Estimated", "التقديري"): <strong>@ClinicFormatting.Money(group.EstimatedTotal)</strong></span>
-                    <span>@Session.T("Performed", "المنجز"): <strong>@ClinicFormatting.Money(group.PerformedTotal)</strong></span>
-                    <span>@Session.T("Session total", "إجمالي الجلسة"): <strong>@ClinicFormatting.Money(group.GrandTotal)</strong></span>
+                    <span>@Session.T("Estimated", "التقديري"): <strong>@Money(group.EstimatedTotal)</strong></span>
+                    <span>@Session.T("Performed", "المنجز"): <strong>@Money(group.PerformedTotal)</strong></span>
+                    <span>@Session.T("Session total", "إجمالي الجلسة"): <strong>@Money(group.GrandTotal)</strong></span>
                 </div>
             </section>
         }
 
         <section class="print-sheet-totals">
-            <div><span>@Session.T("Estimated total", "الإجمالي التقديري")</span><strong>@ClinicFormatting.Money(_plan.EstimatedTotal)</strong></div>
-            <div><span>@Session.T("Performed total", "إجمالي المنجز")</span><strong>@ClinicFormatting.Money(_plan.PerformedTotal)</strong></div>
+            <div><span>@Session.T("Estimated total", "الإجمالي التقديري")</span><strong>@Money(_plan.EstimatedTotal)</strong></div>
+            <div><span>@Session.T("Performed total", "إجمالي المنجز")</span><strong>@Money(_plan.PerformedTotal)</strong></div>
         </section>
 
         <footer class="print-sheet-footer">
@@ -89,6 +89,8 @@
 </div>
 
 @code {
+    private string Money(decimal amount) => ClinicFormatting.Money(amount, Branding.BaseCurrency);
+
     [Parameter]
     public Guid PlanId { get; set; }
 

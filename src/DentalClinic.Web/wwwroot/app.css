@@ -1646,6 +1646,21 @@ table.table tbody tr:last-child td { border-bottom: none; }
     padding-top: 16px;
 }
 
+.print-sheet-secondary {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px dashed var(--border);
+    color: var(--text-soft);
+    font-size: .85rem;
+}
+
+.print-sheet-secondary strong { color: var(--text); }
+
+.print-sheet-rate { margin-inline-start: auto; font-size: .78rem; }
+
 .print-sheet-footer {
     display: flex;
     justify-content: space-between;

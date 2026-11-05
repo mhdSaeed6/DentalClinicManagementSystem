@@ -50,7 +50,14 @@ public sealed class ClinicBranding(IConfiguration configuration, IClinicSettings
 
     public string TimeZoneId => _settings?.TimeZoneId ?? "UTC";
 
-    public string BaseCurrency => _settings?.BaseCurrency ?? "USD";
+    /// <summary>
+    /// The clinic's currency code. Empty until the profile loads: money then
+    /// renders as a bare number rather than inventing a currency the clinic
+    /// never configured.
+    /// </summary>
+    public string BaseCurrency => _settings is not null
+        ? _settings.BaseCurrency
+        : Value("Clinic:BaseCurrency") ?? string.Empty;
 
     public string? SecondaryCurrency => _settings?.SecondaryCurrency;
 

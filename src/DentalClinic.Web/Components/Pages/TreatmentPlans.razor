@@ -1,9 +1,10 @@
 @page "/treatment-plans"
 @inject ApiClient Api
 @inject ClinicSessionState Session
+@inject ClinicBranding Branding
 @inject NotificationService Notifier
 
-<PageTitle>@Session.T("Treatment plans", "خطط العلاج") · @Session.T("Al Noor Dental", "عيادة النور")</PageTitle>
+<PageTitle>@Session.T("Treatment plans", "خطط العلاج") · @Branding.DisplayName(Session.IsRtl)</PageTitle>
 
 <PageHeader Title="@Session.T("Treatment plans", "خطط العلاج")"
             Subtitle="@Session.T("Plan sessions, estimates and performed work.", "خطط الجلسات والتقديرات والأعمال المنجزة.")">
@@ -64,8 +65,8 @@
                             <td>@plan.DoctorName</td>
                             <td><span class="badge @PlanStatusClass(plan.Status) no-dot">@PlanStatusLabel(plan.Status)</span></td>
                             <td>@plan.ItemCount</td>
-                            <td class="mono">@ClinicFormatting.Money(plan.EstimatedTotal)</td>
-                            <td class="mono text-success">@ClinicFormatting.Money(plan.PerformedTotal)</td>
+                            <td class="mono">@Money(plan.EstimatedTotal)</td>
+                            <td class="mono text-success">@Money(plan.PerformedTotal)</td>
                             <td>
                                 <button type="button" class="btn btn-outline btn-sm" @onclick="() => OpenDetailsAsync(plan.Id)">
                                     @Session.T("Manage", "إدارة")
@@ -170,11 +171,11 @@
         </div>
         <div class="flex-between mb-2">
             <span>@Session.T("Estimated", "التقديري")</span><strong
-            class="mono">@ClinicFormatting.Money(_selected.EstimatedTotal)</strong>
+            class="mono">@Money(_selected.EstimatedTotal)</strong>
         </div>
         <div class="flex-between mb-3">
             <span>@Session.T("Performed", "المنجز")</span><strong
-            class="mono text-success">@ClinicFormatting.Money(_selected.PerformedTotal)</strong>
+            class="mono text-success">@Money(_selected.PerformedTotal)</strong>
         </div>
         <div class="flex-between mb-2">
             <strong>@Session.T("Sessions", "الجلسات")</strong>
@@ -187,7 +188,7 @@
             <div class="flex-between fs-sm mb-1">
                 <span>@Session.T("Session", "الجلسة") @session.SessionNumber · @session.ItemCount @Session.T("items",
                      "عناصر")</span>
-                <span class="mono">@ClinicFormatting.Money(session.GrandTotal)</span>
+                <span class="mono">@Money(session.GrandTotal)</span>
             </div>
         }
 
@@ -195,7 +196,7 @@
         {
             <div class="flex-between mt-3 mb-2">
                 <strong>@Session.T("Session", "الجلسة") @group.SessionNumber</strong>
-                <span class="mono fs-sm">@ClinicFormatting.Money(group.GrandTotal)</span>
+                <span class="mono fs-sm">@Money(group.GrandTotal)</span>
             </div>
             @foreach (var item in group.Items)
             {
@@ -210,7 +211,7 @@
                             {
                                 <span>@Session.T("Tooth", "السن") @tooth · </span>
                             }
-                            @ClinicFormatting.Money(ItemAmount(item))
+                            @Money(ItemAmount(item))
                             @if (item.AppointmentId.HasValue)
                             {
                                 <span> · @Session.T("Linked to an appointment", "مرتبط بموعد")</span>
@@ -320,6 +321,8 @@
                    OnCancel="CloseConfirm" />
 
 @code {
+    private string Money(decimal amount) => ClinicFormatting.Money(amount, Branding.BaseCurrency);
+
     private List<TreatmentPlanDto> _plans = [];
     private List<PatientDto> _patients = [];
     private List<DoctorDto> _doctors = [];

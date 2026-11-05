@@ -739,6 +739,7 @@ public sealed class UpsertToothConditionRequest
 
     public string? Notes { get; set; }
 }
+
 public sealed class ClinicSettingsDto
 {
     public string Name { get; set; } = string.Empty;
@@ -783,4 +784,32 @@ public sealed class ClinicSettingsFormRequest
     public string? SecondaryCurrency { get; set; }
 
     public string? DefaultCountryCode { get; set; }
+}
+
+/// <summary>
+/// The conversion rate in force. <see cref="Rate"/> reads as "one unit of
+/// <see cref="FromCurrency"/> = Rate units of <see cref="ToCurrency"/>".
+/// </summary>
+public sealed class ExchangeRateDto
+{
+    public Guid Id { get; set; }
+
+    public string FromCurrency { get; set; } = string.Empty;
+
+    public string ToCurrency { get; set; } = string.Empty;
+
+    public decimal Rate { get; set; }
+
+    public DateTimeOffset EffectiveFromUtc { get; set; }
+}
+
+public sealed class ExchangeRateFormRequest
+{
+    public string FromCurrency { get; set; } = string.Empty;
+
+    public string ToCurrency { get; set; } = string.Empty;
+
+    public decimal Rate { get; set; }
+
+    public DateTimeOffset? EffectiveFromUtc { get; set; }
 }

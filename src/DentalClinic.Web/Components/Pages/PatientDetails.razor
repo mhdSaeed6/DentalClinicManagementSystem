@@ -1,9 +1,10 @@
 @page "/patients/{Id:guid}"
 @inject ApiClient Api
 @inject ClinicSessionState Session
+@inject ClinicBranding Branding
 @inject NavigationManager Nav
 
-<PageTitle>@(_patient is null ? Session.T("Patient", "مريض") : FullName(_patient)) · @Session.T("Al Noor Dental", "عيادة النور")</PageTitle>
+<PageTitle>@(_patient is null ? Session.T("Patient", "مريض") : FullName(_patient)) · @Branding.DisplayName(Session.IsRtl)</PageTitle>
 
 @if (_loading)
 {
@@ -99,12 +100,12 @@ else if (_patient is not null)
                     </div>
                     <div class="stat blue">
                         <div class="stat-icon"><ClinicIcon Name="invoice" /></div>
-                        <div class="stat-value">@ClinicFormatting.Money(_invoiceSummary?.TotalBilled ?? 0)</div>
+                        <div class="stat-value">@Money(_invoiceSummary?.TotalBilled ?? 0)</div>
                         <div class="stat-label">@Session.T("Total billed (issued)", "إجمالي الفواتير (صادرة)")</div>
                     </div>
                     <div class="stat amber">
                         <div class="stat-icon"><ClinicIcon Name="wallet" /></div>
-                        <div class="stat-value">@ClinicFormatting.Money(_invoiceSummary?.TotalOutstanding ?? 0)</div>
+                        <div class="stat-value">@Money(_invoiceSummary?.TotalOutstanding ?? 0)</div>
                         <div class="stat-label">@Session.T("Balance due (issued)", "الرصيد المستحق (صادرة)")</div>
                     </div>
                 </div>
@@ -207,7 +208,7 @@ else if (_patient is not null)
                                     <td><span class="badge brand no-dot">@ClinicFormatting.ToothLabel(treatment.ToothNumber)</span></td>
                                     <td class="cell-main">@treatment.ProcedureDetails</td>
                                     <td>@DoctorName(treatment.DoctorId)</td>
-                                    <td class="text-end mono fw-600">@ClinicFormatting.Money(treatment.Cost)</td>
+                                    <td class="text-end mono fw-600">@Money(treatment.Cost)</td>
                                 </tr>
                             }
                         </tbody>
@@ -240,9 +241,9 @@ else if (_patient is not null)
                             {
                                 <tr>
                                     <td class="cell-main mono">@InvoiceFormatting.NumberLabel(invoice)</td>
-                                    <td class="mono">@ClinicFormatting.Money(invoice.TotalAmount)</td>
-                                    <td class="mono">@ClinicFormatting.Money(invoice.PaidAmount)</td>
-                                    <td class="mono fw-600">@ClinicFormatting.Money(invoice.RemainingAmount)</td>
+                                    <td class="mono">@Money(invoice.TotalAmount)</td>
+                                    <td class="mono">@Money(invoice.PaidAmount)</td>
+                                    <td class="mono fw-600">@Money(invoice.RemainingAmount)</td>
                                     <td><PaymentStatusBadge Value="invoice.Status" /></td>
                                     <td>
                                         @if (InvoiceFormatting.IsPrintable(invoice))
@@ -287,8 +288,8 @@ else if (_patient is not null)
                                     <td class="cell-main">@plan.Title</td>
                                     <td>@plan.DoctorName</td>
                                     <td><span class="badge @PlanStatusClass(plan.Status) no-dot">@PlanStatusLabel(plan.Status)</span></td>
-                                    <td class="mono">@ClinicFormatting.Money(plan.EstimatedTotal)</td>
-                                    <td class="mono text-success">@ClinicFormatting.Money(plan.PerformedTotal)</td>
+                                    <td class="mono">@Money(plan.EstimatedTotal)</td>
+                                    <td class="mono text-success">@Money(plan.PerformedTotal)</td>
                                     <td>
                                         <a class="btn btn-outline btn-sm" href="@($"/treatment-plans/{plan.Id}/print")">
                                             @Session.T("Print", "طباعة")
@@ -309,6 +310,8 @@ else if (_patient is not null)
 }
 
 @code {
+    private string Money(decimal amount) => ClinicFormatting.Money(amount, Branding.BaseCurrency);
+
     [Parameter] public Guid Id { get; set; }
 
     private bool _loading = true;
