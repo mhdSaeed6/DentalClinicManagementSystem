@@ -1,3 +1,4 @@
+using DentalClinic.Web.Api;
 using DentalClinic.Web.Components;
 
 using Microsoft.Extensions.Configuration;
@@ -60,12 +61,57 @@ public sealed class ClinicBrandingTests
         Assert.Equal("front@clinic.test", branding.Email);
     }
 
+    [Fact]
+    public async Task EnsureLoadedAsync_UsesTheServerProfileOverConfiguration()
+    {
+        var source = new FakeSource(new ClinicSettingsDto
+        {
+            Name = "Server Clinic",
+            NameArabic = "عيادة الخادم",
+            Address = "Cairo",
+            TimeZoneId = "Africa/Cairo",
+            BaseCurrency = "EGP",
+        });
+
+        var branding = Branding(
+            source,
+            ("Clinic:Name", "Configured Clinic"),
+            ("Clinic:Address", "Configured Address"));
+
+        await branding.EnsureLoadedAsync();
+
+        Assert.Equal("Server Clinic", branding.DisplayName(arabic: false));
+        Assert.Equal("Cairo", branding.Address);
+        Assert.Equal("EGP", branding.BaseCurrency);
+        Assert.Equal("Africa/Cairo", branding.TimeZoneId);
+    }
+
+    [Fact]
+    public async Task EnsureLoadedAsync_WhenTheApiIsUnavailable_KeepsTheConfigurationFallback()
+    {
+        var branding = Branding(new FakeSource(null), ("Clinic:Name", "Configured Clinic"));
+
+        await branding.EnsureLoadedAsync();
+
+        Assert.Equal("Configured Clinic", branding.DisplayName(arabic: false));
+        Assert.Equal("USD", branding.BaseCurrency);
+    }
+
     private static ClinicBranding Branding(params (string Key, string Value)[] settings)
+        => Branding(new FakeSource(null), settings);
+
+    private static ClinicBranding Branding(IClinicSettingsSource source, params (string Key, string Value)[] settings)
     {
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(settings.ToDictionary(s => s.Key, s => (string?)s.Value))
             .Build();
 
-        return new ClinicBranding(configuration);
+        return new ClinicBranding(configuration, source);
+    }
+
+    private sealed class FakeSource(ClinicSettingsDto? settings) : IClinicSettingsSource
+    {
+        public Task<ClinicSettingsDto?> GetClinicSettingsAsync(CancellationToken ct = default)
+            => Task.FromResult(settings);
     }
 }

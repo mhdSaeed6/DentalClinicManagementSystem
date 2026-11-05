@@ -739,3 +739,48 @@ public sealed class UpsertToothConditionRequest
 
     public string? Notes { get; set; }
 }
+public sealed class ClinicSettingsDto
+{
+    public string Name { get; set; } = string.Empty;
+
+    public string NameArabic { get; set; } = string.Empty;
+
+    public string? LogoUrl { get; set; }
+
+    public string? Phone { get; set; }
+
+    public string? Address { get; set; }
+
+    public string? Email { get; set; }
+
+    public string TimeZoneId { get; set; } = string.Empty;
+
+    public string BaseCurrency { get; set; } = string.Empty;
+
+    public string? SecondaryCurrency { get; set; }
+
+    public string? DefaultCountryCode { get; set; }
+}
+
+public sealed class ClinicSettingsFormRequest
+{
+    public string Name { get; set; } = string.Empty;
+
+    public string NameArabic { get; set; } = string.Empty;
+
+    public string? LogoUrl { get; set; }
+
+    public string? Phone { get; set; }
+
+    public string? Address { get; set; }
+
+    public string? Email { get; set; }
+
+    public string TimeZoneId { get; set; } = string.Empty;
+
+    public string BaseCurrency { get; set; } = string.Empty;
+
+    public string? SecondaryCurrency { get; set; }
+
+    public string? DefaultCountryCode { get; set; }
+}

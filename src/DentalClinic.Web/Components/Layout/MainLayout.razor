@@ -2,6 +2,7 @@
 @implements IDisposable
 @inject ClinicSessionState Session
 @inject NavigationManager Nav
+@inject ClinicBranding Branding
 
 <div class="app-root" dir="@Session.Dir" data-theme="@Session.ThemeName"
      data-collapsed="@Session.SidebarCollapsed.ToString().ToLowerInvariant()"
@@ -27,7 +28,7 @@
                 <div class="sidebar-brand">
                     <div class="brand-logo"><ClinicIcon Name="tooth" /></div>
                     <div class="brand-text">
-                        <strong>@Session.T("Al Noor Dental", "عيادة النور")</strong>
+                        <strong>@Branding.DisplayName(Session.IsRtl)</strong>
                         <span>@Session.T("Clinic Suite", "نظام العيادة")</span>
                     </div>
                 </div>
@@ -170,7 +171,14 @@
         _ => Session.T("Staff", "طاقم"),
     };
 
-    protected override void OnInitialized() => Session.Changed += HandleChanged;
+    protected override async Task OnInitializedAsync()
+    {
+        Session.Changed += HandleChanged;
+
+        // Loaded once per circuit; the properties stay synchronous for the
+        // markup, and a failure leaves the configuration fallback in place.
+        await Branding.EnsureLoadedAsync();
+    }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {

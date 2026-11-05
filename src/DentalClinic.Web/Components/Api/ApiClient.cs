@@ -12,7 +12,7 @@ namespace DentalClinic.Web.Api;
 /// Thin, strongly typed HTTP client over the DentalClinic REST API (v1).
 /// Handles bearer token injection and transparent refresh-token rotation.
 /// </summary>
-public sealed class ApiClient
+public sealed class ApiClient : IClinicSettingsSource
 {
     private const string Prefix = "api/v1/";
 
@@ -371,6 +371,29 @@ public sealed class ApiClient
 
     public Task ClearToothAsync(Guid patientId, int toothNumber, CancellationToken ct = default) =>
         DeleteAsync($"patients/{patientId}/odontogram/teeth/{toothNumber}", ct);
+
+    // -----------------------------------------------------------------------
+    // Clinic profile
+    // -----------------------------------------------------------------------
+
+    /// <summary>
+    /// Reads the clinic profile. Returns <see langword="null"/> instead of
+    /// throwing: branding is cosmetic and must never fail a page render.
+    /// </summary>
+    public async Task<ClinicSettingsDto?> GetClinicSettingsAsync(CancellationToken ct = default)
+    {
+        try
+        {
+            return await GetAsync<ClinicSettingsDto>("clinic/settings", ct);
+        }
+        catch (Exception ex) when (ex is ApiException or HttpRequestException or TaskCanceledException)
+        {
+            return null;
+        }
+    }
+
+    public Task<ClinicSettingsDto> UpdateClinicSettingsAsync(ClinicSettingsFormRequest request, CancellationToken ct = default) =>
+        PutAsync<ClinicSettingsDto>("clinic/settings", request, ct);
 
     // -----------------------------------------------------------------------
     // Core request pipeline

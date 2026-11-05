@@ -47,7 +47,7 @@ public sealed class InvoiceNumberGenerator(
         }
 
         var settings = _options.CurrentValue;
-        var year = CurrentClinicYear(settings);
+        var year = await CurrentClinicYearAsync(settings, cancellationToken);
 
         // Raw SQL is the only way to express the lock hint through EF. The row
         // is materialised directly (no LINQ composition) so the hint stays on
@@ -80,9 +80,26 @@ public sealed class InvoiceNumberGenerator(
     /// an invoice issued at 23:30 on 31 December in Cairo belongs to that year,
     /// even though UTC has already rolled over.
     /// </summary>
-    private int CurrentClinicYear(InvoiceNumberingSettings settings)
+    /// <remarks>
+    /// The clinic profile is the source of truth for the timezone; the
+    /// <c>InvoiceNumbering</c> section survives only as a deployment-level
+    /// fallback for the window before the settings row exists.
+    /// </remarks>
+    private async Task<int> CurrentClinicYearAsync(
+        InvoiceNumberingSettings settings,
+        CancellationToken cancellationToken)
     {
-        var timeZone = ResolveTimeZone(settings.TimeZoneId);
+        var clinicTimeZoneId = await _context.ClinicSettings
+            .AsNoTracking()
+            .Select(c => c.TimeZoneId)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        var timeZoneId = string.IsNullOrWhiteSpace(clinicTimeZoneId)
+            ? settings.TimeZoneId
+            : clinicTimeZoneId;
+
+        var timeZone = ResolveTimeZone(timeZoneId);
+
         return TimeZoneInfo.ConvertTime(_timeProvider.GetUtcNow(), timeZone).Year;
     }
 
@@ -110,7 +127,7 @@ public sealed class InvoiceNumberGenerator(
                 // (set by TZ in the container) and say so loudly.
                 _logger.LogWarning(
                     ex,
-                    "InvoiceNumbering:TimeZoneId '{TimeZoneId}' is not a known timezone. Falling back to the host timezone {HostTimeZone}.",
+                    "Clinic timezone '{TimeZoneId}' is not a known timezone. Falling back to the host timezone {HostTimeZone}.",
                     configuredId,
                     TimeZoneInfo.Local.Id);
 

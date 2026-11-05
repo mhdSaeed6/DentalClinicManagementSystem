@@ -166,7 +166,7 @@ Status legend: **Complete** = backend + UI both usable · **Partial** = present 
 - Frontend: `Pages/Treatments.razor` + `Shared/ToothChart.razor` (32 permanent teeth, two rows, selectable).
 - **No odontogram semantics** — `ToothNumber` is a scalar on an event log, not per-tooth state. No diagnosis, no surface (M/D/B/F), no per-tooth history view, no status.
 
-### 3.6 Billing / invoicing — **Partial** (strong core, no patient-level view)
+### 3.6 Billing / invoicing — **Complete** (core + numbering + patient-level views)
 
 | Capability | Status | Evidence |
 |---|---|---|
@@ -177,9 +177,9 @@ Status legend: **Complete** = backend + UI both usable · **Partial** = present 
 | Draft refresh | Complete | `POST /invoices/{id}/draft/refresh` |
 | Issue | Complete | `POST /invoices/{id}/issue` (idempotent) |
 | **Partial payments** | **Complete** | `POST /invoices/{id}/payments`; `PaymentStatus.PartiallyPaid`; serializable + `RowVersion` → 409 on conflict (`AddInvoicePaymentCommandHandler.cs:29,63-78`) |
-| **Patient balance / debt view** | **Missing** | No aggregation query anywhere. `GetInvoicesQueryHandler` has no `Sum`/`GroupBy`. Balances shown in UI are computed **client-side over one page** (`Invoices.razor:32,37` with `_pageSize = 10`; `PatientDetails.razor:98,103` with `pageSize: 100`; `Dashboard.razor:309-311` with `pageSize: 100`). |
-| Invoice numbering | **Missing** | UI displays `#@invoice.Id.ToString()[..8]` (`Invoices.razor:105`, `PatientDetails.razor:226`, `Appointments.razor:366`) — defect D-11. |
-| Printable invoice / logo | **Missing** | No print stylesheet, no logo asset, no PDF path (`wwwroot/` contains only `app.css` + `favicon.svg`). |
+| **Patient balance / debt view** | **Complete** | Server-side aggregates over the full matching set: `GET /invoices/summary` (`InvoiceSummaryDto` — billed/paid/outstanding/open count/oldest unpaid) and `GET /invoices/outstanding-debts` (paginated, patient name resolved). Drafts excluded from money totals. Consumed by `Invoices.razor`, `PatientDetails.razor`, `Dashboard.razor`. |
+| Invoice numbering | **Complete** | `InvoiceNumberGenerator` allocates `INV-YYYY-NNNN` from a per-year `InvoiceNumberCounters` row under `UPDLOCK, HOLDLOCK` inside the issuing transaction (`b75c74c`, `0c60aa1`). D-11 closed. |
+| Printable invoice / logo | **Complete** | `Pages/InvoicePrintSheet.razor` + print stylesheet; clinic branding via `ClinicBranding` (config-backed today, defect D-15) (`3d91d15`). No PDF export. |
 | Discounts / tax / refunds / credit notes | **Missing** | `BuildLines` only emits service price + treatment costs (`GenerateAppointmentInvoiceCommandHandler.cs:162-202`). |
 
 ### 3.7 Dashboard — **Partial**
@@ -243,6 +243,22 @@ Status legend: **Complete** = backend + UI both usable · **Partial** = present 
 
 **Summary: 0 Exists · 5 Partial · 6 Missing.**
 
+**Status refresh — 2026-11-04, baseline `3d91d15`.** The table above is the
+original snapshot (baseline `33ce043`). Since then:
+
+| # | Feature | Now | Commit(s) |
+|---|---|---|---|
+| 1 | Interactive odontogram | **Complete** — `PatientTooth` aggregate (condition, surface, notes, unique `(PatientId, ToothNumber)`), `OdontogramController` (`StaffOnly`, writes behind `ClinicalWrite`), interactive chart in `PatientDetails.razor`. `TreatmentRecord` stays the append-only procedure log. | `df8caa5`, `538a3f9`, `0873eaf` |
+| 2 | Treatment plans + printable sheet | **Complete** — `TreatmentPlan` + items, `TreatmentPlanController`, plan status on records, `PlanPrintSheet.razor`. | `58e4228`…`c56f19e` |
+| 3 | Patient balance & debt | **Complete** — `GET /invoices/summary` + `/outstanding-debts`, `InvoiceSummaryDto`. No aging buckets. | invoice-numbering slice |
+| 4 | WhatsApp reminders | **Complete** — `WhatsAppMessageBuilder` + `WhatsAppButton` (wa.me, prefilled message) in `Appointments.razor`. | invoice-numbering slice |
+| 8 | Medical alerts | **Complete** — `MedicalAlertEvaluator` derives severity server-side (incl. pregnancy + BP reading); badge shown on `Patients.razor`, `PatientDetails.razor`, the appointments drawer, and a dashboard count. Allergies remain free text. | prior slices |
+| 9 | Role-based permissions | (a) fixed — `InvoiceController` is `StaffOnly` with handler-level ownership. (b)/(c)/(d) still open. | prior slices |
+
+**Current summary: 5 Complete · 1 Partial · 5 Missing** — remaining: 5 financial
+dashboard, 6 dual currency, 7 image upload, 9 permission management UX, 10 lab
+tracking, 11 backups/import. Items 5 and 6 are the subject of the next-phase plan.
+
 ---
 
 ## 6. Gap closure plan (per Partial/Missing item)
@@ -274,7 +290,7 @@ Effort scale: **S** ≤ 3 days · **M** ≈ 1 week · **L** > 1 week.
 
 ---
 
-### 6.2 Treatment plans + printable sheet with logo — **Missing (M–L)**
+### 6.2 Treatment plans + printable sheet with logo — **Complete** (`58e4228`…`c56f19e`)
 
 **Extend/reuse**
 - `TreatmentRecord` — add `Status` (`Planned` / `Performed` / `Cancelled`), `SessionNumber`, `EstimatedCost` vs `ActualCost`. Only `Performed` becomes billable (already the effective rule in `GenerateAppointmentInvoiceCommandHandler.BuildLines`, which currently bills *every* record with `Cost > 0`).
@@ -294,7 +310,7 @@ Effort scale: **S** ≤ 3 days · **M** ≈ 1 week · **L** > 1 week.
 
 ---
 
-### 6.3 Patient balance & debt tracking — **Partial → complete (S–M)**
+### 6.3 Patient balance & debt tracking — **Complete** (aggregates shipped as `invoices/summary` + `invoices/outstanding-debts`)
 
 **Extend/reuse**
 - `Invoice` / `Payment` / `InvoiceController` — nothing to change on the write side; payment capture is already correct and concurrency-safe.
@@ -314,7 +330,7 @@ Effort scale: **S** ≤ 3 days · **M** ≈ 1 week · **L** > 1 week.
 
 ---
 
-### 6.4 WhatsApp reminders (wa.me link) — **Missing (S)**
+### 6.4 WhatsApp reminders (wa.me link) — **Complete**
 
 **Extend/reuse**
 - `ContactInfo.HasWhatsAppOnPrimary` + `PrimaryPhone` — already there; `PhoneRegex` guarantees a digit-only number suitable for `wa.me`.
@@ -563,7 +579,7 @@ Everything else floats.
 
 24. **Notifications bell is a dead button** (`MainLayout.razor:109-111`), and `DispatchDomainEventsInterceptor` has **zero subscribers** despite 5 appointment domain events being raised. The whole domain-event pipeline is currently dead weight (defect D-16).
 
-25. **No invoice number.** UI shows `#@invoice.Id.ToString()[..8]` in three places (defect D-11).
+25. ~~**No invoice number.**~~ **Resolved** — `InvoiceNumberGenerator` allocates `INV-YYYY-NNNN` at issuance and the UI/print sheet render `Invoice.InvoiceNumber` (D-11 closed).
 
 26. **Theme/language/sidebar preferences are not persisted.** `ClinicSessionState` is scoped and in-memory; refresh resets everything (related to D-14).
 
@@ -577,9 +593,9 @@ Everything else floats.
 
 31. **`Directory.Packages.props` comment headers are scrambled** — `Asp.Versioning.*` sits under `<!-- FluentValidation -->`, `StyleCop`/`NSubstitute` under `<!-- EF Core -->`, and `<!-- UnitTests -->` is duplicated.
 
-32. **README is materially wrong**: claims "380/380 tests" (actual: 408 `[Fact]` + 48 `[Theory]`), ports `7198` (actual `5004`/`5048`), "Repository & Unit of Work" (there are no repositories), and omits `DentalClinic.Web` from the solution tree entirely. `AGENTS.md` claims CI "asserts `docker info` first" — **`.github/workflows/build-and-test.yml` has no such step**, so the Testcontainers suites' passing in CI is unverified (this is exactly what `docs/product/OPEN-QUESTIONS.md` Q10 flags as BLOCKING).
+32. **README/AGENTS drift** (partly fixed 2026-11-04): `README.md` no longer hardcodes a test count and its ports (`5004`/`7204`) are correct; `AGENTS.md` no longer claims CI runs `docker info`. Still open: `README.md` describes a "Repository & Unit of Work" layer that does not exist, and omits `DentalClinic.Web` from the solution tree.
 
-33. **`docs/product/PRD.md` §B.4 defect list is stale.** D-01/D-03/D-04/D-05/D-07/D-08/D-14 have been remediated in code. Conversely `AGENTS.md`'s claim that soft-delete filters are *missing* on `TreatmentRecord` and `Payment` is stale — both now have filters; the actual gap is `InvoiceLine`.
+33. **`docs/product/PRD.md` §B.4 defect list is stale.** D-01/D-03/D-04/D-05/D-07/D-08/D-11/D-14 have been remediated in code. `AGENTS.md`'s soft-delete claim was corrected on 2026-11-04 — filters exist on every `AuditableEntity` except `InvoiceLine`, which is the actual remaining gap.
 
 ### Demo-data observations
 

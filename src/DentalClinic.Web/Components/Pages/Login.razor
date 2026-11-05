@@ -4,15 +4,16 @@
 @inject ClinicSessionState Session
 @inject NotificationService Notifier
 @inject NavigationManager Nav
+@inject ClinicBranding Branding
 
-<PageTitle>@Session.T("Sign in", "تسجيل الدخول") · @Session.T("Al Noor Dental Clinic", "عيادة النور")</PageTitle>
+<PageTitle>@Session.T("Sign in", "تسجيل الدخول") · @Branding.DisplayName(Session.IsRtl)</PageTitle>
 
 <div class="auth-shell">
     <aside class="auth-aside">
         <div class="flex-center gap-2">
             <div class="brand-logo"><ClinicIcon Name="tooth" /></div>
             <div class="brand-text">
-                <strong style="font-size:1.1rem">@Session.T("Al Noor Dental", "عيادة النور")</strong>
+                <strong style="font-size:1.1rem">@Branding.DisplayName(Session.IsRtl)</strong>
                 <span>@Session.T("Clinic Suite", "نظام إدارة العيادة")</span>
             </div>
         </div>
@@ -133,8 +134,12 @@
     private bool _showPassword;
     private string? _error;
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
+        // The login page uses AuthLayout, so it does not go through MainLayout's
+        // loader; fetch the branding here so the sign-in screen is branded.
+        await Branding.EnsureLoadedAsync();
+
         if (Session.IsAuthenticated)
         {
             Nav.NavigateTo("/");

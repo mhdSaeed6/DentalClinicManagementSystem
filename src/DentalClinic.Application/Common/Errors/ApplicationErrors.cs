@@ -123,6 +123,10 @@ public static class ApplicationErrors
         code: "Auth.User.NotFound",
         description: "User not found.");
 
+    public static readonly Error ClinicSettingsNotConfigured = Error.NotFound(
+        code: "ClinicSettings.NotConfigured",
+        description: "The clinic profile has not been configured yet.");
+
     public static readonly Error TokenGenerationFailed = Error.Failure(
         code: "Auth.TokenGeneration.Failed",
         description: "Failed to generate new JWT token.");

@@ -1,6 +1,7 @@
 using System.Data;
 
 using DentalClinic.Domain.Appointments;
+using DentalClinic.Domain.Clinics;
 using DentalClinic.Domain.Doctors;
 using DentalClinic.Domain.Identity;
 using DentalClinic.Domain.Invoices;
@@ -28,6 +29,7 @@ public interface IAppDbContext
     public DbSet<TreatmentRecord> TreatmentRecords { get; }
     public DbSet<TreatmentPlan> TreatmentPlans { get; }
     public DbSet<PatientTooth> PatientTeeth { get; }
+    public DbSet<ClinicSetting> ClinicSettings { get; }
     Task<int> SaveChangesAsync(CancellationToken cancellationToken);
     Task<IAppTransaction> BeginTransactionAsync(IsolationLevel isolationLevel, CancellationToken cancellationToken);
 

@@ -1,3 +1,4 @@
+using DentalClinic.Application.Common.Errors;
 using DentalClinic.Application.Common.Interfaces;
 using DentalClinic.Application.Features.Identity.Dtos;
 using DentalClinic.Domain.Common.Results;
@@ -81,7 +82,15 @@ public class IdentityService(UserManager<AppUser> userManager,
 
     public async Task<Result<AppUserDto>> GetUserByIdAsync(string userId)
     {
-        var user = await _userManager.FindByIdAsync(userId) ?? throw new InvalidOperationException(nameof(userId));
+        // A missing user is an expected outcome (deleted account, stale token),
+        // not a programming error: surface it as a Result so callers decide how
+        // to present it instead of catching an exception.
+        var user = await _userManager.FindByIdAsync(userId);
+
+        if (user is null)
+        {
+            return ApplicationErrors.UserNotFound;
+        }
 
         var roles = await _userManager.GetRolesAsync(user);
 

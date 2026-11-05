@@ -194,7 +194,7 @@ Create/update/get/list; `ToothNumber` validated against FDI (permanent 11–48, 
 ### B.3.7 Invoices — `[P]` (minimal)
 
 Create (patient, optional appointment, **total amount from client**), get, list `[CODE]`. Payments registered separately `[CODE]`.
-**Missing:** line items `[M]`, invoice number `[M]`, draft/issued lifecycle `[M]`, issuance action `[M]`, edit draft `[M]`, cancel/void/credit `[M]`, discount/tax/currency `[M]`, price snapshots `[M]`, tenant `[M]`.
+**Missing:** line items `[M]`, ~~invoice number~~ `[M]` (**shipped** `b75c74c`), draft/issued lifecycle `[M]`, issuance action `[M]`, edit draft `[M]`, cancel/void/credit `[M]`, discount/tax/currency `[M]`, price snapshots `[M]`, tenant `[M]`.
 
 ### B.3.8 Payments — `[P]`
 
@@ -223,7 +223,7 @@ Arabic/English inline toggle (`Session.T`), RTL via `dir`, light/dark theme `[CO
 | D-08 | Medium | **Soft delete filters incomplete.** `HasQueryFilter` on Patient/Doctor/Service/Appointment/Invoice, but **not** on `TreatmentRecord` or `Payment`. Deleting a patient/doctor does not remove their treatment records/payments from queries (and cascade FKs exist in schema). | configs + migration |
 | D-09 | Medium | **Dashboard metrics unreliable at scale.** Sums/counts computed client-side from page 1 (100 rows). "Collected"/"Outstanding" are guesses beyond 100 invoices. | `Dashboard.razor` |
 | D-10 | Medium | **Invoice status filter not wired.** `GetInvoicesQuery.Status` exists; controller request DTO has no `Status`; UI filters only the current page. | `InvoiceController`/`GetInvoicesRequest` |
-| D-11 | Medium | **No invoice number.** UI shows `Id[..8]`, unbillable/ambiguous for real invoices. | `Invoice` |
+| D-11 | Medium | ~~**No invoice number.** UI shows `Id[..8]`, unbillable/ambiguous for real invoices.~~ **Resolved** — `InvoiceNumberGenerator` allocates `INV-YYYY-NNNN` per clinic-year at issuance (`b75c74c`). | `Invoice` |
 | D-12 | Low | **Config leftovers.** CORS policy named `MechanicShop` with stray origin `http://mechanicshop-app`; Serilog targets `http://ops.seq:5341` while compose service is `seq`; Dockerfile pins `TZ=America/Montreal`. | appsettings/compose/Dockerfile |
 | D-13 | Low | **Web container absent.** Dockerfile/compose build only the API; the Blazor front end has no container/deployment path. | Dockerfile |
 | D-14 | Low | **Session not persisted.** JWT held only in scoped `ClinicSessionState`; a browser refresh drops the session (logout). | `ClinicSessionState` |

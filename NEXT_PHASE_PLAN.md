@@ -1,5 +1,10 @@
 # DentalClinic — Next Phase Execution Plan
 
+> **SUPERSEDED (2026-11-04).** Every slice in this document has shipped — see
+> `AUDIT.md` §5 "Status refresh" and the commit range `58e4228..3d91d15`. The current
+> plan is `dentalclinic-next-phase.md` (N0–N3: docs truth-up, clinic settings,
+> currency, reporting). Kept for history only.
+
 | Field | Value |
 |---|---|
 | Date | 2026-10-28 |

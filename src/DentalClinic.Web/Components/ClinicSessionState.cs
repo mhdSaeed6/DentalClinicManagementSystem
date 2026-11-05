@@ -55,6 +55,8 @@ public sealed class ClinicSessionState
 
     public bool IsDoctor => Role == StaffRole.Doctor;
 
+    public bool IsAdmin => Role == StaffRole.Admin;
+
     // ------------------------------------------------------------ UI prefs
 
     public AppLanguage Language { get; private set; } = AppLanguage.English;

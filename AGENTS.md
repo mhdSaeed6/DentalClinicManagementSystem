@@ -10,7 +10,7 @@ dotnet test tests/DentalClinic.Domain.UnitTests     # no Docker needed
 dotnet test tests/DentalClinic.Application.UnitTests
 dotnet run --project src/DentalClinic.Api           # http://localhost:5004, Scalar at /scalar/v1 (Development only)
 dotnet run --project src/DentalClinic.Web           # http://localhost:7204, calls API on :5004
-docker compose up -d --build                        # API :5002, SQL :1434, Seq :8081, Prometheus :9090, Grafana :3000
+docker compose up -d --build                        # API :5004, Web :7204, SQL :1434, Seq :5342/:8081, Prometheus :9090, Grafana :3000
 ```
 
 EF migrations (the CLI needs both flags; there is no design-time factory):
@@ -30,7 +30,7 @@ dotnet ef migrations add <Name> --project src/DentalClinic.Infrastructure --star
 
 ## Build/CI facts
 
-- `.github/workflows/build-and-test.yml` runs `restore → build -c Release --no-restore → test -c Release --no-build` on `ubuntu-latest` and asserts `docker info` first, so the Testcontainers suites genuinely execute. If you add a Docker-dependent suite, no workflow change is needed.
+- `.github/workflows/build-and-test.yml` runs `restore → build -c Release --no-restore → test -c Release --no-build` on `ubuntu-latest`. It does **not** run `docker info` (an earlier claim here was wrong), so the Testcontainers suites only pass there because GitHub-hosted runners happen to ship Docker — verify that assumption if CI ever moves. If you add a Docker-dependent suite, no workflow change is needed.
 - Package versions are centralized in `Directory.Packages.props` (`ManagePackageVersionsCentrally`). **Never** add `Version=` to a `PackageReference`; add a `PackageVersion` entry instead.
 - `global.json` pins the SDK to `10.0.100` with `rollForward: latestFeature`. Bump it deliberately rather than letting the SDK float.
 - `Directory.Build.props` sets `net10.0` for every project and injects `StyleCop.Analyzers` everywhere. The build is not warning-clean (~28 SA/AV/CS warnings) — this is the baseline, not something you introduced. Don't chase them unless you touched the file.
@@ -50,13 +50,13 @@ dotnet ef migrations add <Name> --project src/DentalClinic.Infrastructure --star
 - **`AppDbContext` is `IdentityDbContext<AppUser>`** and is reached through the `IAppDbContext` interface in Application/Domain layers — never inject the concrete type into handlers.
 - EF `DbSet`s are exposed as expression-bodied properties, not `{ get; set; }`, and configurations are auto-applied via `ApplyConfigurationsFromAssembly`. Add schema changes in `Infrastructure/Data/Configurations/*.cs` **and** generate a migration.
 - `DbContext` is configured with `QuerySplittingBehavior.SplitQuery` deliberately (cartesian joins corrupt change tracking on invoices with Lines + Payments). Don't switch it to single-query.
-- Soft-delete query filters exist on Patient/Doctor/DentalService/Appointment/Invoice/RefreshToken but **not** on `TreatmentRecord` or `Payment` (known defect `D-08` in `docs/product/PRD.md`).
+- Soft-delete query filters exist on every `AuditableEntity` except `InvoiceLine` (the remaining gap — `AUDIT.md` §8 item 33). That includes `TreatmentRecord`, `Payment`, `PatientTooth` and `TreatmentPlan`, contrary to the older `D-08` note in `docs/product/PRD.md`.
 
 ## Environment quirks (deliberate or known-broken)
 
 - **JWT secret is not in git.** `appsettings.json` has no `Secret`. Non-Development environments must set `JwtSettings__Secret` (env var/user-secrets/vault) or the app throws at startup; Development auto-generates an ephemeral one so a fresh clone runs and no usable secret ever lives in git. It is resolved lazily by `JwtSecretProvider` — never read it during service registration, or `WebApplicationFactory` configuration sources (queued until host build) will be missed.
 - Serilog's Seq sink is set per environment: `appsettings.Development.json` → `localhost:5342` (compose maps `5342:5341`), `docker-compose.yml` → `seq:5341`. Keep the host matching the compose service name.
-- `Dockerfile` builds and ships **only the API**. `DentalClinic.Web` has no container and no compose service; the Web app reaches the API over HTTP using `ApiBaseUrl`.
+- `Dockerfile` has two targets: `final` (API) and `web` (Blazor app). `docker-compose.yml` runs both — `dentalclinic-api` on `5004:80` and `dentalclinic-web` on `7204:80` — and the Web container reaches the API over the compose network via `ApiBaseUrl=http://dentalclinic-api`. Running the Web app locally instead uses `ApiBaseUrl` from `appsettings.json` (`http://localhost:5004`).
 - `TZ` is applied at runtime via the `TZ` env var; the image no longer hard-links `/etc/localtime`, so the same image is deployable in any region.
 - Migrations + demo seeding (`ApplicationDbContextInitialiser`) run **only** under `ASPNETCORE_ENVIRONMENT=Development` (see `Api/Program.cs`). Production startup does not migrate — apply migrations as a separate deploy step.
 - `DentalClinic.Web` is a Blazor Server app that stores the session in `ClinicSessionState` (in-memory) — it does not survive a refresh (defect `D-14`).
@@ -67,10 +67,11 @@ dotnet ef migrations add <Name> --project src/DentalClinic.Infrastructure --star
 - **`Invoice` carries a `RowVersion` concurrency token** and `AddInvoicePaymentCommandHandler` wraps its read-modify-write in `IsolationLevel.Serializable`, translating `DbUpdateConcurrencyException` into `InvoiceErrors.ConcurrentModification` (409). Removing either reintroduces double-payment. `CreateAppointmentCommandHandler` uses the same serializable pattern to close the double-booking race.
 - **Refresh tokens are stored hashed** (`RefreshToken.TokenHash`, SHA-256 hex). Only the raw value is ever returned to the client, and `RefreshTokenQueryHandler` rotates on use. Look tokens up via `RefreshToken.HashToken(...)`, never by raw value.
 - **Login errors are deliberately uniform** (`Auth_Invalid_Credentials`) for unknown-user, unconfirmed, locked-out, and wrong-password — do not reintroduce distinct messages or it becomes an account-enumeration oracle. Failed attempts call `AccessFailedAsync` to drive the lockout.
+- **A missing identity user is a `Result`, not an exception.** `IdentityService.GetUserByIdAsync` returns `ApplicationErrors.UserNotFound`; `RefreshTokenQueryHandler` deliberately collapses that case into the same uniform invalid-token conflict, because a 404 on refresh would confirm that an account once existed.
 - **Identity password policy is 12+ chars with complexity and lockout.** Changing it requires updating `TestUsers` and the seeded credentials in `ApplicationDbContextInitialiser` together, or the suite breaks at `CreateAsync`.
 - **Rate limiter policies are named** in `Api/RateLimiterPolicyNames.cs` and applied per-endpoint with `[EnableRateLimiting]`. The token endpoints carry the `Auth` policy; a registered-but-unapplied policy is dead config. Do not move these constants onto `DependencyInjection` — that type name collides with the one in `DentalClinic.Application` and produces CS0436 in controllers.
-- `TreatmentRecord.Cost` is explicitly `.HasPrecision(18, 2)` (as are all money columns). Soft-delete query filters are on **every** `AuditableEntity`, including `TreatmentRecord` and `Payment`.
+- `TreatmentRecord.Cost` is explicitly `.HasPrecision(18, 2)`, as are all money columns — keep that on any new monetary field.
 
 ## Docs
 
-`docs/product/` holds a PRD, a phased roadmap, and an open-questions register. They are marked **draft / not approved for implementation**, and they describe an aspirational target (multi-tenant `ClinicId`, permissions, health checks) that does **not** exist in the code yet. Use them for intent; use the code for reality. `README.md` also overstates test counts and lists stale ports (`7198`); actual dev ports are `5004` (API) and `7204` (Web). The Web port deliberately avoids `5048`: Windows reserves `5041-5140` for Hyper-V/Docker/WSL2, and binding there fails with socket error `10013` ("access permissions") rather than the usual "port already in use". Check `netsh interface ipv4 show excludedportrange protocol=tcp` before picking any new port.
+`docs/product/` holds a PRD, a phased roadmap, and an open-questions register. They are marked **draft / not approved for implementation**, and they describe an aspirational target (multi-tenant `ClinicId`, permissions, health checks) that does **not** exist in the code yet. Use them for intent; use the code for reality. `README.md` still describes a repository/unit-of-work layer that does not exist and omits `DentalClinic.Web` from its tree; its ports and test counts were corrected on 2026-11-04. Actual dev ports are `5004` (API) and `7204` (Web). The Web port deliberately avoids `5048`: Windows reserves `5041-5140` for Hyper-V/Docker/WSL2, and binding there fails with socket error `10013` ("access permissions") rather than the usual "port already in use". Check `netsh interface ipv4 show excludedportrange protocol=tcp` before picking any new port.
