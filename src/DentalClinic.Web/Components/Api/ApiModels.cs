@@ -813,3 +813,130 @@ public sealed class ExchangeRateFormRequest
 
     public DateTimeOffset? EffectiveFromUtc { get; set; }
 }
+
+// ---------------------------------------------------------------------------
+// Reports
+// ---------------------------------------------------------------------------
+
+/// <summary>
+/// The dashboard and reports aggregate, computed server-side in the clinic's
+/// timezone. <see cref="Revenue"/> is the invoice cohort issued inside the
+/// window, <see cref="Outstanding"/> the point-in-time balance on the books and
+/// <see cref="CashCollected"/> the payments received inside the window.
+/// </summary>
+public sealed class DashboardSummaryDto
+{
+    public int TotalPatients { get; set; }
+
+    public int TotalDoctors { get; set; }
+
+    public int TotalServices { get; set; }
+
+    public int PatientsWithMedicalAlerts { get; set; }
+
+    public DateOnly Today { get; set; }
+
+    public int TodayAppointmentCount { get; set; }
+
+    public int TodayScheduledCount { get; set; }
+
+    public List<DashboardAppointmentDto> TodayAppointments { get; set; } = [];
+
+    public DateOnly From { get; set; }
+
+    public DateOnly To { get; set; }
+
+    public InvoiceSummaryDto Revenue { get; set; } = new();
+
+    public InvoiceSummaryDto Outstanding { get; set; } = new();
+
+    public decimal CashCollected { get; set; }
+
+    public List<AppointmentStatusCountDto> AppointmentStatusBreakdown { get; set; } = [];
+
+    public List<DashboardAppointmentDto> UpcomingAppointments { get; set; } = [];
+
+    public List<DashboardInvoiceDto> RecentInvoices { get; set; } = [];
+
+    public List<DashboardPatientDto> NewestPatients { get; set; } = [];
+
+    public List<DoctorProductivityDto> DoctorProductivity { get; set; } = [];
+}
+
+/// <summary>One appointment row with the patient, doctor and service names already resolved.</summary>
+public sealed class DashboardAppointmentDto
+{
+    public Guid Id { get; set; }
+
+    public Guid PatientId { get; set; }
+
+    public string PatientName { get; set; } = string.Empty;
+
+    public Guid DoctorId { get; set; }
+
+    public string DoctorName { get; set; } = string.Empty;
+
+    public string? ServiceName { get; set; }
+
+    public DateTime ScheduledDateTime { get; set; }
+
+    public int DurationInMinutes { get; set; }
+
+    public AppointmentStatus Status { get; set; }
+}
+
+/// <summary>One invoice row with the patient name resolved and the balance computed in SQL.</summary>
+public sealed class DashboardInvoiceDto
+{
+    public Guid Id { get; set; }
+
+    public string? InvoiceNumber { get; set; }
+
+    public Guid PatientId { get; set; }
+
+    public string PatientName { get; set; } = string.Empty;
+
+    public decimal TotalAmount { get; set; }
+
+    public decimal RemainingAmount { get; set; }
+
+    public PaymentStatus Status { get; set; }
+
+    public InvoiceLifecycleStatus LifecycleStatus { get; set; }
+}
+
+/// <summary>One patient row from the newest-registrations list.</summary>
+public sealed class DashboardPatientDto
+{
+    public Guid Id { get; set; }
+
+    public string FullName { get; set; } = string.Empty;
+
+    public DateTime DateOfBirth { get; set; }
+
+    public string? PrimaryPhone { get; set; }
+}
+
+/// <summary>How many appointments sat in one status inside the report window.</summary>
+public sealed class AppointmentStatusCountDto
+{
+    public AppointmentStatus Status { get; set; }
+
+    public int Count { get; set; }
+}
+
+/// <summary>What one doctor did inside the report window.</summary>
+public sealed class DoctorProductivityDto
+{
+    public Guid DoctorId { get; set; }
+
+    public string DoctorName { get; set; } = string.Empty;
+
+    public int AppointmentCount { get; set; }
+
+    public int IssuedInvoiceCount { get; set; }
+
+    public decimal BilledAmount { get; set; }
+
+    public decimal PaidAmount { get; set; }
+}

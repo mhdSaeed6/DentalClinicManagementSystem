@@ -193,6 +193,17 @@ public sealed class ApiClient : IClinicSettingsSource
     public Task<InvoiceSummaryDto> GetInvoiceSummaryAsync(Guid? patientId = null, CancellationToken ct = default) =>
         GetAsync<InvoiceSummaryDto>("invoices/summary?" + Query(("PatientId", patientId)), ct);
 
+    /// <summary>
+    /// Everything the dashboard and the reports page need in one round trip,
+    /// for the inclusive clinic-local date range. Omitting both dates uses the
+    /// server's default window.
+    /// </summary>
+    public Task<DashboardSummaryDto> GetDashboardSummaryAsync(
+        DateOnly? from = null,
+        DateOnly? to = null,
+        CancellationToken ct = default) =>
+        GetAsync<DashboardSummaryDto>("reports/dashboard?" + Query(("From", from), ("To", to)), ct);
+
     /// <summary>One row per patient with money owed on issued invoices, ordered from the largest debt.</summary>
     public Task<PaginatedList<OutstandingDebtDto>> GetOutstandingDebtsAsync(
         int page,
@@ -599,6 +610,7 @@ public sealed class ApiClient : IClinicSettingsSource
                 {
                     Guid guid => guid.ToString(),
                     DateTime date => date.ToString("O", CultureInfo.InvariantCulture),
+                    DateOnly dateOnly => dateOnly.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
                     bool boolean => boolean ? "true" : "false",
                     IFormattable formattable => formattable.ToString(null, CultureInfo.InvariantCulture),
                     _ => pair.Value?.ToString() ?? string.Empty,

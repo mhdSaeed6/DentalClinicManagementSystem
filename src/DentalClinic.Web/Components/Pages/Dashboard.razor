@@ -46,7 +46,7 @@ else if (_error is not null)
         </EmptyState>
     </div>
 }
-else
+else if (_summary is not null)
 {
     <div class="card mb-3" style="overflow:hidden">
         <div class="card-body" style="display:flex;align-items:center;gap:24px;flex-wrap:wrap;
@@ -62,6 +62,10 @@ else
                     <ClinicIcon Name="plus" Class="sm" />
                     <span>@Session.T("New patient", "مريض جديد")</span>
                 </button>
+                <button type="button" class="btn btn-outline" @onclick='() => Nav.NavigateTo("reports")'>
+                    <ClinicIcon Name="chart" Class="sm" />
+                    <span>@Session.T("Reports", "التقارير")</span>
+                </button>
                 <button type="button" class="btn btn-primary" @onclick='() => Nav.NavigateTo("appointments?new=1")'>
                     <ClinicIcon Name="plus" Class="sm" />
                     <span>@Session.T("New appointment", "موعد جديد")</span>
@@ -73,25 +77,27 @@ else
     <div class="stat-grid">
         <div class="stat teal">
             <div class="stat-icon"><ClinicIcon Name="users" /></div>
-            <div class="stat-value">@_patientCount</div>
+            <div class="stat-value">@_summary.TotalPatients</div>
             <div class="stat-label">@Session.T("Total patients", "إجمالي المرضى")</div>
+            <div class="stat-trend down"><ClinicIcon Name="alert" Class="sm" /> @_summary.PatientsWithMedicalAlerts @Session.T("with medical alerts", "بتنبيهات طبية")</div>
         </div>
         <div class="stat blue">
             <div class="stat-icon"><ClinicIcon Name="calendar" /></div>
-            <div class="stat-value">@_todayCount</div>
+            <div class="stat-value">@_summary.TodayAppointmentCount</div>
             <div class="stat-label">@Session.T("Appointments today", "مواعيد اليوم")</div>
-            <div class="stat-trend up"><ClinicIcon Name="activity" Class="sm" /> @_scheduledCount @Session.T("scheduled", "محجوز")</div>
+            <div class="stat-trend up"><ClinicIcon Name="activity" Class="sm" /> @_summary.TodayScheduledCount @Session.T("scheduled", "محجوز")</div>
         </div>
         <div class="stat green">
             <div class="stat-icon"><ClinicIcon Name="wallet" /></div>
-            <div class="stat-value">@Money(_summary?.TotalPaid ?? 0)</div>
+            <div class="stat-value">@Money(_summary.CashCollected)</div>
             <div class="stat-label">@Session.T("Collected revenue", "الإيرادات المحصّلة")</div>
+            <div class="stat-trend up"><ClinicIcon Name="chart" Class="sm" /> @WindowLabel</div>
         </div>
         <div class="stat amber">
             <div class="stat-icon"><ClinicIcon Name="invoice" /></div>
-            <div class="stat-value">@Money(_summary?.TotalOutstanding ?? 0)</div>
+            <div class="stat-value">@Money(_summary.Outstanding.TotalOutstanding)</div>
             <div class="stat-label">@Session.T("Outstanding balance", "الأرصدة المستحقة")</div>
-            <div class="stat-trend @((_summary?.TotalOutstanding ?? 0) > 0 ? "down" : "up")"><ClinicIcon Name="alert" Class="sm" /> @(_summary?.OpenInvoiceCount ?? 0) @Session.T("open invoices", "فواتير مفتوحة")</div>
+            <div class="stat-trend @(_summary.Outstanding.TotalOutstanding > 0 ? "down" : "up")"><ClinicIcon Name="alert" Class="sm" /> @_summary.Outstanding.OpenInvoiceCount @Session.T("open invoices", "فواتير مفتوحة")</div>
         </div>
     </div>
 
@@ -108,22 +114,22 @@ else
                 </button>
             </div>
             <div class="card-body">
-                @if (_upcoming.Count == 0)
+                @if (_summary.UpcomingAppointments.Count == 0)
                 {
                     <EmptyState Icon="calendar" Title="@Session.T("No upcoming appointments", "لا توجد مواعيد قادمة")"
                                 Message="@Session.T("Schedule a visit to see it here.", "احجز موعداً ليظهر هنا.")" />
                 }
                 else
                 {
-                    @foreach (var appt in _upcoming)
+                    @foreach (var appt in _summary.UpcomingAppointments)
                     {
                         <div class="list-row">
-                            <Avatar Name="@PatientName(appt.PatientId)" />
+                            <Avatar Name="@PatientName(appt.PatientName)" />
                             <div class="list-body">
-                                <div class="list-title">@PatientName(appt.PatientId)</div>
+                                <div class="list-title">@PatientName(appt.PatientName)</div>
                                 <div class="list-sub">
                                     @ClinicFormatting.DateTimeLabel(appt.ScheduledDateTime) ·
-                                    @ServiceName(appt.ServiceId) · @DoctorName(appt.DoctorId)
+                                    @ServiceName(appt.ServiceName) · @DoctorName(appt.DoctorName)
                                 </div>
                             </div>
                             <AppointmentStatusBadge Value="appt.Status" />
@@ -135,7 +141,10 @@ else
 
         <div class="card">
             <div class="card-header">
-                <div class="card-title">@Session.T("Appointment mix", "توزيع المواعيد")</div>
+                <div>
+                    <div class="card-title">@Session.T("Appointment mix", "توزيع المواعيد")</div>
+                    <div class="card-subtitle">@WindowLabel</div>
+                </div>
             </div>
             <div class="card-body">
                 @foreach (var item in StatusBreakdown())
@@ -155,20 +164,19 @@ else
 
                 <div class="flex-between mb-2">
                     <span class="text-muted fs-sm">@Session.T("Total appointments", "إجمالي المواعيد")</span>
-                    <span class="fw-700 mono">@_appointments.Count</span>
+                    <span class="fw-700 mono">@_summary.AppointmentStatusBreakdown.Sum(row => row.Count)</span>
                 </div>
                 <div class="flex-between mb-2">
                     <span class="text-muted fs-sm">@Session.T("Active doctors", "الأطباء النشطون")</span>
-                    <span class="fw-700 mono">@_doctors.Count</span>
+                    <span class="fw-700 mono">@_summary.TotalDoctors</span>
                 </div>
                 <div class="flex-between mb-2">
                     <span class="text-muted fs-sm">@Session.T("Services offered", "الخدمات المتاحة")</span>
-                    <span class="fw-700 mono">@_services.Count</span>
+                    <span class="fw-700 mono">@_summary.TotalServices</span>
                 </div>
-                @* Server-computed count (patients/alerts-count), never a sum over this page. *@
                 <div class="flex-between">
-                    <span class="text-muted fs-sm">@Session.T("Patients with medical alerts", "مرضى بالتنبيهات الطبية")</span>
-                    <span class="fw-700 mono">@_patientsWithAlerts</span>
+                    <span class="text-muted fs-sm">@Session.T("Billed in this window", "المفوتر في هذه الفترة")</span>
+                    <span class="fw-700 mono">@Money(_summary.Revenue.TotalBilled)</span>
                 </div>
             </div>
         </div>
@@ -183,7 +191,7 @@ else
                     @Session.T("Billing", "الفوترة") <ClinicIcon Name="chevron-right" Class="sm" />
                 </button>
             </div>
-            @if (_invoices.Count == 0)
+            @if (_summary.RecentInvoices.Count == 0)
             {
                 <EmptyState Icon="invoice" Title="@Session.T("No invoices yet", "لا توجد فواتير بعد")" />
             }
@@ -200,13 +208,13 @@ else
                             </tr>
                         </thead>
                         <tbody>
-                            @foreach (var invoice in _invoices.Take(5))
+                            @foreach (var invoice in _summary.RecentInvoices)
                             {
                                 <tr>
                                     <td>
                                         <div class="cell-person">
-                                            <Avatar Name="@PatientName(invoice.PatientId)" Size="sm" />
-                                            <span class="cell-main">@PatientName(invoice.PatientId)</span>
+                                            <Avatar Name="@PatientName(invoice.PatientName)" Size="sm" />
+                                            <span class="cell-main">@PatientName(invoice.PatientName)</span>
                                         </div>
                                     </td>
                                     <td class="mono">@Money(invoice.TotalAmount)</td>
@@ -225,18 +233,18 @@ else
                 <div class="card-title">@Session.T("Newest patients", "أحدث المرضى")</div>
             </div>
             <div class="card-body">
-                @if (_patients.Count == 0)
+                @if (_summary.NewestPatients.Count == 0)
                 {
                     <EmptyState Icon="users" Title="@Session.T("No patients yet", "لا يوجد مرضى بعد")" />
                 }
                 else
                 {
-                    @foreach (var patient in _patients.Take(5))
+                    @foreach (var patient in _summary.NewestPatients)
                     {
                         <div class="list-row" style="cursor:pointer" @onclick='() => Nav.NavigateTo($"patients/{patient.Id}")'>
-                            <Avatar Name="@FullName(patient.FirstName, patient.LastName)" />
+                            <Avatar Name="@patient.FullName" />
                             <div class="list-body">
-                                <div class="list-title">@FullName(patient.FirstName, patient.LastName)</div>
+                                <div class="list-title">@patient.FullName</div>
                                 <div class="list-sub">@ClinicFormatting.Age(patient.DateOfBirth) @Session.T("yrs", "سنة") · @patient.PrimaryPhone</div>
                             </div>
                             <ClinicIcon Name="chevron-right" Class="sm text-soft" />
@@ -253,18 +261,7 @@ else
 
     private bool _loading = true;
     private string? _error;
-
-    private List<PatientDto> _patients = [];
-    private List<DoctorDto> _doctors = [];
-    private List<DentalServiceDto> _services = [];
-    private List<AppointmentDto> _appointments = [];
-    private List<InvoiceDto> _invoices = [];
-    private InvoiceSummaryDto? _summary;
-    private int _patientCount;
-    private int _todayCount;
-    private int _scheduledCount;
-    private int _patientsWithAlerts;
-    private List<AppointmentDto> _upcoming = [];
+    private DashboardSummaryDto? _summary;
 
     private string DisplayName => string.IsNullOrWhiteSpace(Session.UserName) ? "there" : Session.UserName;
 
@@ -281,6 +278,11 @@ else
 
     private string TodayLong => DateTime.Today.ToString("dddd, dd MMMM yyyy", System.Globalization.CultureInfo.InvariantCulture);
 
+    /// <summary>The reporting window the server used, so no figure here is undated.</summary>
+    private string WindowLabel => _summary is null
+        ? string.Empty
+        : ClinicFormatting.ShortDate(_summary.From) + " – " + ClinicFormatting.ShortDate(_summary.To);
+
     protected override Task OnInitializedAsync() => LoadAsync();
 
     private async Task LoadAsync()
@@ -291,39 +293,9 @@ else
 
         try
         {
-            var patientsTask = Api.GetPatientsAsync(1, 100, null);
-            var doctorsTask = Api.GetDoctorsAsync(1, 100, null);
-            var servicesTask = Api.GetServicesAsync(1, 100, null);
-            var appointmentsTask = Api.GetAppointmentsAsync(1, 100);
-            var invoicesTask = Api.GetInvoicesAsync(1, 100);
-            var invoiceSummaryTask = Api.GetInvoiceSummaryAsync();
-            var alertsCountTask = Api.GetMedicalAlertsCountAsync();
-            await Task.WhenAll(patientsTask, doctorsTask, servicesTask, appointmentsTask, invoicesTask, invoiceSummaryTask, alertsCountTask);
-
-            var patients = await patientsTask;
-            var doctors = await doctorsTask;
-            var services = await servicesTask;
-            var appointments = await appointmentsTask;
-            var invoices = await invoicesTask;
-
-            _patients = patients.Items ?? [];
-            _doctors = doctors.Items ?? [];
-            _services = services.Items ?? [];
-            _appointments = appointments.Items ?? [];
-            _invoices = invoices.Items ?? [];
-            _summary = await invoiceSummaryTask;
-            _patientsWithAlerts = await alertsCountTask;
-
-            _patientCount = patients.TotalCount;
-            _todayCount = _appointments.Count(a => a.ScheduledDateTime.Date == DateTime.Today);
-            _scheduledCount = _appointments.Count(a => a.Status == AppointmentStatus.Scheduled);
-
-            var now = DateTime.Now;
-            _upcoming = _appointments
-                .Where(a => a.Status == AppointmentStatus.Scheduled && a.ScheduledDateTime >= now.AddHours(-1))
-                .OrderBy(a => a.ScheduledDateTime)
-                .Take(6)
-                .ToList();
+            // One server-computed payload: every figure below is a SQL aggregate
+            // over the whole dataset, never a sum over a page of results.
+            _summary = await Api.GetDashboardSummaryAsync();
         }
         catch (ApiException ex)
         {
@@ -339,34 +311,32 @@ else
         }
     }
 
-    private string FullName(string? first, string? last) => ClinicFormatting.FullName(first, last);
+    private string PatientName(string name) =>
+        string.IsNullOrWhiteSpace(name) ? Session.T("Unknown patient", "مريض غير معروف") : name;
 
-    private string PatientName(Guid id) =>
-        _patients.FirstOrDefault(p => p.Id == id) is { } patient
-            ? FullName(patient.FirstName, patient.LastName)
-            : Session.T("Unknown patient", "مريض غير معروف");
+    private string DoctorName(string name) =>
+        string.IsNullOrWhiteSpace(name) ? Session.T("Unassigned", "غير مُعيّن") : name;
 
-    private string DoctorName(Guid id) =>
-        _doctors.FirstOrDefault(d => d.Id == id) is { } doctor
-            ? FullName(doctor.FirstName, doctor.LastName)
-            : Session.T("Unassigned", "غير مُعيّن");
-
-    private string ServiceName(Guid? id) =>
-        id is { } serviceId
-            ? _services.FirstOrDefault(s => s.Id == serviceId)?.Name ?? Session.T("Service", "خدمة")
-            : Session.T("No service", "بدون خدمة");
+    private string ServiceName(string? name) =>
+        string.IsNullOrWhiteSpace(name) ? Session.T("No service", "بدون خدمة") : name;
 
     private IEnumerable<(string Label, int Count, double Percent, string Color)> StatusBreakdown()
     {
-        var total = Math.Max(_appointments.Count, 1);
-        var rows = new[]
-        {
-            (Label: Session.T("Scheduled", "محجوز"), Count: _appointments.Count(a => a.Status == AppointmentStatus.Scheduled), Color: "var(--info)"),
-            (Label: Session.T("Completed", "مكتمل"), Count: _appointments.Count(a => a.Status == AppointmentStatus.Completed), Color: "var(--success)"),
-            (Label: Session.T("Cancelled", "ملغى"), Count: _appointments.Count(a => a.Status == AppointmentStatus.Cancelled), Color: "var(--text-soft)"),
-            (Label: Session.T("No-show", "لم يحضر"), Count: _appointments.Count(a => a.Status == AppointmentStatus.NoShow), Color: "var(--warning)"),
-        };
+        var rows = _summary?.AppointmentStatusBreakdown ?? [];
+        var total = Math.Max(rows.Sum(row => row.Count), 1);
 
-        return rows.Select(r => (r.Label, r.Count, Percent: r.Count * 100.0 / total, r.Color));
+        return rows.Select(row => (
+            Label: ClinicFormatting.StatusLabel(row.Status, IsRtl),
+            Count: row.Count,
+            Percent: row.Count * 100.0 / total,
+            Color: StatusColor(row.Status)));
     }
+
+    private static string StatusColor(AppointmentStatus status) => status switch
+    {
+        AppointmentStatus.Scheduled => "var(--info)",
+        AppointmentStatus.Completed => "var(--success)",
+        AppointmentStatus.Cancelled => "var(--text-soft)",
+        _ => "var(--warning)",
+    };
 }
