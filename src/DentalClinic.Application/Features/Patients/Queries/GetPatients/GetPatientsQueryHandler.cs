@@ -19,24 +19,7 @@ public class GetPatientsQueryHandler(IAppDbContext context) : IRequestHandler<Ge
 
         // 0. Trusted, server-derived scope. Applied before any client-supplied
         //    filter so a doctor only sees patients linked to them.
-        if (request.Scope.IsRestricted)
-        {
-            var scopeDoctorId = request.Scope.DoctorId ?? Guid.Empty;
-            var scopeUserId = request.Scope.UserId;
-
-            if (!string.IsNullOrEmpty(scopeUserId))
-            {
-                var userId = scopeUserId;
-                query = query.Where(p =>
-                    p.CreatedBy == userId ||
-                    context.Appointments.Any(a => a.PatientId == p.Id && a.DoctorId == scopeDoctorId));
-            }
-            else
-            {
-                query = query.Where(p =>
-                    context.Appointments.Any(a => a.PatientId == p.Id && a.DoctorId == scopeDoctorId));
-            }
-        }
+        query = query.ApplyScope(context, request.Scope);
 
         // 1. فلترة بالاسم أو رقم الهاتف إذا كان المستخدم يبحث عن مريض
         if (!string.IsNullOrWhiteSpace(request.SearchTerm))

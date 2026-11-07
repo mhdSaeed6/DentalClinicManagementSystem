@@ -34,6 +34,9 @@ public static class ClinicFormatting
     public static string ShortDate(DateTime date) =>
         date.ToString("dd MMM yyyy", CultureInfo.InvariantCulture);
 
+    public static string ShortDate(DateOnly date) =>
+        date.ToString("dd MMM yyyy", CultureInfo.InvariantCulture);
+
     public static string LongDate(DateTime date) =>
         date.ToString("ddd, dd MMM yyyy", CultureInfo.InvariantCulture);
 

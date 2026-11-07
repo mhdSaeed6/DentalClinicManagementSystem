@@ -1,0 +1,369 @@
+@page "/reports"
+@inject ApiClient Api
+@inject ClinicSessionState Session
+@inject ClinicBranding Branding
+
+<PageTitle>@Session.T("Reports", "التقارير") · @Branding.DisplayName(Session.IsRtl)</PageTitle>
+
+<div class="page-header">
+    <div>
+        <h1>@Session.T("Reports", "التقارير")</h1>
+        <p class="text-muted">@Session.T("Practice performance over the window you choose. Every figure is computed on the server over the whole dataset.", "أداء العيادة خلال الفترة التي تختارها. كل رقم محسوب على الخادم على كامل البيانات.")</p>
+    </div>
+</div>
+
+<div class="card mb-3">
+    <div class="card-body">
+        <div class="flex gap-2 flex-wrap" style="align-items:flex-end">
+            <div class="field" style="margin:0">
+                <label class="label">@Session.T("From", "من")</label>
+                <input type="date" class="input" value="@_from.ToString("yyyy-MM-dd")"
+                       @onchange="args => _from = ToDate(args, _from)" />
+            </div>
+            <div class="field" style="margin:0">
+                <label class="label">@Session.T("To", "إلى")</label>
+                <input type="date" class="input" value="@_to.ToString("yyyy-MM-dd")"
+                       @onchange="args => _to = ToDate(args, _to)" />
+            </div>
+            <button type="button" class="btn btn-primary" @onclick="LoadAsync" disabled="@_loading">
+                <ClinicIcon Name="chart" Class="sm" />
+                <span>@Session.T("Run report", "عرض التقرير")</span>
+            </button>
+            <div class="spacer" style="flex:1"></div>
+            <div class="flex gap-1 flex-wrap">
+                <button type="button" class="btn btn-ghost btn-sm" @onclick="() => ApplyLastDaysAsync(7)">
+                    @Session.T("Last 7 days", "آخر ٧ أيام")
+                </button>
+                <button type="button" class="btn btn-ghost btn-sm" @onclick="() => ApplyLastDaysAsync(30)">
+                    @Session.T("Last 30 days", "آخر ٣٠ يوماً")
+                </button>
+                <button type="button" class="btn btn-ghost btn-sm" @onclick="ApplyThisMonthAsync">
+                    @Session.T("This month", "هذا الشهر")
+                </button>
+                <button type="button" class="btn btn-ghost btn-sm" @onclick="() => ApplyLastDaysAsync(90)">
+                    @Session.T("Last 90 days", "آخر ٩٠ يوماً")
+                </button>
+            </div>
+        </div>
+
+        @if (_rangeError is not null)
+        {
+            <div class="fs-sm mt-2" style="color:var(--danger)">@_rangeError</div>
+        }
+    </div>
+</div>
+
+@if (_loading)
+{
+    <div class="stat-grid">
+        @for (var i = 0; i < 4; i++)
+        {
+            <div class="skeleton stat"></div>
+        }
+    </div>
+    <div class="card"><div class="card-body">
+        <div class="skeleton title"></div>
+        @for (var i = 0; i < 6; i++)
+        {
+            <div class="skeleton row"></div>
+        }
+    </div></div>
+}
+else if (_error is not null)
+{
+    <div class="card">
+        <EmptyState Icon="alert" Title="@Session.T("Could not build the report", "تعذّر إنشاء التقرير")" Message="@_error">
+            <ActionContent>
+                <button type="button" class="btn btn-primary" @onclick="LoadAsync">
+                    <ClinicIcon Name="refresh" Class="sm" />
+                    <span>@Session.T("Try again", "إعادة المحاولة")</span>
+                </button>
+            </ActionContent>
+        </EmptyState>
+    </div>
+}
+else if (_summary is not null)
+{
+    <div class="fs-sm text-muted mb-2">
+        @Session.T("Showing", "الفترة") @ClinicFormatting.ShortDate(_summary.From) – @ClinicFormatting.ShortDate(_summary.To)
+    </div>
+
+    <div class="stat-grid">
+        <div class="stat blue">
+            <div class="stat-icon"><ClinicIcon Name="invoice" /></div>
+            <div class="stat-value">@Money(_summary.Revenue.TotalBilled)</div>
+            <div class="stat-label">@Session.T("Billed in window", "المفوتر في الفترة")</div>
+            <div class="stat-trend up"><ClinicIcon Name="invoice" Class="sm" /> @_summary.Revenue.TotalInvoiceCount @Session.T("invoices issued", "فاتورة صادرة")</div>
+        </div>
+        <div class="stat green">
+            <div class="stat-icon"><ClinicIcon Name="wallet" /></div>
+            <div class="stat-value">@Money(_summary.CashCollected)</div>
+            <div class="stat-label">@Session.T("Cash collected", "النقد المحصّل")</div>
+            <div class="stat-trend up"><ClinicIcon Name="activity" Class="sm" /> @Session.T("payments received in window", "دفعات مستلمة في الفترة")</div>
+        </div>
+        <div class="stat amber">
+            <div class="stat-icon"><ClinicIcon Name="alert" /></div>
+            <div class="stat-value">@Money(_summary.Outstanding.TotalOutstanding)</div>
+            <div class="stat-label">@Session.T("Outstanding on the books", "المستحق على الدفاتر")</div>
+            <div class="stat-trend @(_summary.Outstanding.TotalOutstanding > 0 ? "down" : "up")"><ClinicIcon Name="alert" Class="sm" /> @_summary.Outstanding.OpenInvoiceCount @Session.T("open invoices", "فواتير مفتوحة")</div>
+        </div>
+        <div class="stat teal">
+            <div class="stat-icon"><ClinicIcon Name="calendar" /></div>
+            <div class="stat-value">@AppointmentTotal</div>
+            <div class="stat-label">@Session.T("Appointments in window", "مواعيد في الفترة")</div>
+            <div class="stat-trend up"><ClinicIcon Name="activity" Class="sm" /> @CompletedAppointments @Session.T("completed", "مكتمل")</div>
+        </div>
+    </div>
+
+    <div class="grid grid-2-1">
+        <div class="card">
+            <div class="card-header">
+                <div>
+                    <div class="card-title">@Session.T("Doctor productivity", "إنتاجية الأطباء")</div>
+                    <div class="card-subtitle">@Session.T("Appointments booked and invoices issued against them", "المواعيد المحجوزة والفواتير الصادرة عنها")</div>
+                </div>
+            </div>
+            @if (_summary.DoctorProductivity.Count == 0)
+            {
+                <EmptyState Icon="users" Title="@Session.T("Nothing recorded in this window", "لا يوجد نشاط في هذه الفترة")"
+                            Message="@Session.T("Try a wider date range.", "جرّب فترة أوسع.")" />
+            }
+            else
+            {
+                <div class="table-wrap">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>@Session.T("Doctor", "الطبيب")</th>
+                                <th class="text-end">@Session.T("Appointments", "المواعيد")</th>
+                                <th class="text-end">@Session.T("Invoices", "الفواتير")</th>
+                                <th class="text-end">@Session.T("Billed", "المفوتر")</th>
+                                <th class="text-end">@Session.T("Paid", "المدفوع")</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var doctor in _summary.DoctorProductivity)
+                            {
+                                <tr>
+                                    <td>
+                                        <div class="cell-person">
+                                            <Avatar Name="@DoctorName(doctor.DoctorName)" Size="sm" />
+                                            <span class="cell-main">@DoctorName(doctor.DoctorName)</span>
+                                        </div>
+                                    </td>
+                                    <td class="mono text-end">@doctor.AppointmentCount</td>
+                                    <td class="mono text-end">@doctor.IssuedInvoiceCount</td>
+                                    <td class="mono text-end fw-600">@Money(doctor.BilledAmount)</td>
+                                    <td class="mono text-end">@Money(doctor.PaidAmount)</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+                <div class="card-body">
+                    <p class="fs-sm text-muted" style="margin:0">
+                        @Session.T("Only invoices linked to an appointment are attributed to a doctor; standalone invoices have no owner and are left out.", "تُنسب للطبيب فقط الفواتير المرتبطة بموعد؛ الفواتير المستقلة بلا مالك ولا تُحتسب.")
+                    </p>
+                </div>
+            }
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <div class="card-title">@Session.T("Appointment mix", "توزيع المواعيد")</div>
+            </div>
+            <div class="card-body">
+                @if (AppointmentTotal == 0)
+                {
+                    <EmptyState Icon="calendar" Title="@Session.T("No appointments in this window", "لا مواعيد في هذه الفترة")" />
+                }
+                else
+                {
+                    @foreach (var item in StatusBreakdown())
+                    {
+                        <div class="mb-3">
+                            <div class="flex-between mb-1">
+                                <span class="fs-sm fw-600">@item.Label</span>
+                                <span class="fs-sm text-muted mono">@item.Count</span>
+                            </div>
+                            <div style="height:8px;border-radius:999px;background:var(--surface-3);overflow:hidden">
+                                <div style="height:100%;width:@item.Percent%;border-radius:999px;background:@item.Color"></div>
+                            </div>
+                        </div>
+                    }
+
+                    <div class="divider"></div>
+
+                    <div class="flex-between mb-2">
+                        <span class="text-muted fs-sm">@Session.T("Total appointments", "إجمالي المواعيد")</span>
+                        <span class="fw-700 mono">@AppointmentTotal</span>
+                    </div>
+                    <div class="flex-between">
+                        <span class="text-muted fs-sm">@Session.T("Collection rate", "نسبة التحصيل")</span>
+                        <span class="fw-700 mono">@CollectionRate.ToString("N0", System.Globalization.CultureInfo.InvariantCulture)%</span>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+
+    <div class="card mt-3">
+        <div class="card-header">
+            <div>
+                <div class="card-title">@Session.T("Invoices issued in this window", "الفواتير الصادرة في هذه الفترة")</div>
+                <div class="card-subtitle">@Session.T("The money these invoices billed, and what has been collected against them so far", "ما فوترته هذه الفواتير وما حُصّل منها حتى الآن")</div>
+            </div>
+        </div>
+        <div class="table-wrap">
+            <table class="table">
+                <tbody>
+                    <tr>
+                        <td>@Session.T("Invoices issued", "فواتير صادرة")</td>
+                        <td class="mono text-end fw-600">@_summary.Revenue.TotalInvoiceCount</td>
+                    </tr>
+                    <tr>
+                        <td>@Session.T("Billed", "المفوتر")</td>
+                        <td class="mono text-end fw-600">@Money(_summary.Revenue.TotalBilled)</td>
+                    </tr>
+                    <tr>
+                        <td>@Session.T("Paid against them", "المدفوع منها")</td>
+                        <td class="mono text-end fw-600">@Money(_summary.Revenue.TotalPaid)</td>
+                    </tr>
+                    <tr>
+                        <td>@Session.T("Still outstanding", "المتبقي عليها")</td>
+                        <td class="mono text-end fw-600">@Money(_summary.Revenue.TotalOutstanding)</td>
+                    </tr>
+                    <tr>
+                        <td>@Session.T("Still open", "ما زالت مفتوحة")</td>
+                        <td class="mono text-end fw-600">@_summary.Revenue.OpenInvoiceCount</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+
+@code {
+    private string Money(decimal amount) => ClinicFormatting.Money(amount, Branding.BaseCurrency);
+
+    private bool _loading = true;
+    private string? _error;
+    private string? _rangeError;
+    private DashboardSummaryDto? _summary;
+    private DateOnly _from;
+    private DateOnly _to;
+
+    /// <summary>Appointments in the window: the zero-filled status breakdown, summed.</summary>
+    private int AppointmentTotal => _summary?.AppointmentStatusBreakdown.Sum(row => row.Count) ?? 0;
+
+    private int CompletedAppointments =>
+        _summary?.AppointmentStatusBreakdown
+            .Where(row => row.Status == AppointmentStatus.Completed)
+            .Sum(row => row.Count) ?? 0;
+
+    /// <summary>
+    /// Paid against this window's invoices, as a share of what they billed. It
+    /// is not "cash in the window" (that includes older invoices), so it stays
+    /// between 0 and 100.
+    /// </summary>
+    private double CollectionRate =>
+        _summary is null || _summary.Revenue.TotalBilled <= 0
+            ? 0
+            : (double)(_summary.Revenue.TotalPaid / _summary.Revenue.TotalBilled) * 100;
+
+    protected override Task OnInitializedAsync()
+    {
+        // Start on the same rolling 30-day window the API uses by default, so
+        // the page and the dashboard agree until the user picks a range.
+        _to = DateOnly.FromDateTime(DateTime.Today);
+        _from = _to.AddDays(-29);
+
+        return LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _rangeError = null;
+
+        if (_from > _to)
+        {
+            _rangeError = Session.T(
+                "The start date must be on or before the end date.",
+                "يجب أن يكون تاريخ البداية قبل تاريخ النهاية أو مساوياً له.");
+            return;
+        }
+
+        _loading = true;
+        _error = null;
+        StateHasChanged();
+
+        try
+        {
+            _summary = await Api.GetDashboardSummaryAsync(_from, _to);
+
+            // Trust the window the server actually used (it resolves the clinic
+            // timezone and defaults), so the header can never disagree.
+            _from = _summary.From;
+            _to = _summary.To;
+        }
+        catch (ApiException ex)
+        {
+            _error = ex.Message;
+        }
+        catch (Exception)
+        {
+            _error = Session.T("Unable to reach the clinic server.", "تعذّر الاتصال بالخادم.");
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private Task ApplyLastDaysAsync(int days)
+    {
+        _to = DateOnly.FromDateTime(DateTime.Today);
+        _from = _to.AddDays(-(days - 1));
+        return LoadAsync();
+    }
+
+    private Task ApplyThisMonthAsync()
+    {
+        var today = DateOnly.FromDateTime(DateTime.Today);
+        _from = new DateOnly(today.Year, today.Month, 1);
+        _to = today;
+        return LoadAsync();
+    }
+
+    private static DateOnly ToDate(ChangeEventArgs args, DateOnly fallback) =>
+        DateOnly.TryParse(
+            args.Value?.ToString(),
+            System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.None,
+            out var value)
+            ? value
+            : fallback;
+
+    private string DoctorName(string name) =>
+        string.IsNullOrWhiteSpace(name) ? Session.T("Unassigned", "غير مُعيّن") : name;
+
+    private IEnumerable<(string Label, int Count, double Percent, string Color)> StatusBreakdown()
+    {
+        var rows = _summary?.AppointmentStatusBreakdown ?? [];
+        var total = Math.Max(rows.Sum(row => row.Count), 1);
+
+        return rows.Select(row => (
+            Label: ClinicFormatting.StatusLabel(row.Status, Session.IsRtl),
+            Count: row.Count,
+            Percent: row.Count * 100.0 / total,
+            Color: StatusColor(row.Status)));
+    }
+
+    private static string StatusColor(AppointmentStatus status) => status switch
+    {
+        AppointmentStatus.Scheduled => "var(--info)",
+        AppointmentStatus.Completed => "var(--success)",
+        AppointmentStatus.Cancelled => "var(--text-soft)",
+        _ => "var(--warning)",
+    };
+}

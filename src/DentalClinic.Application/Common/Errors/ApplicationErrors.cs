@@ -131,6 +131,10 @@ public static class ApplicationErrors
         code: "ExchangeRate.NotConfigured",
         description: "No exchange rate has been recorded for the clinic's currency pair.");
 
+    public static readonly Error InvalidReportRange = Error.Validation(
+        code: "Report.InvalidRange",
+        description: "The report end date cannot be before its start date.");
+
     public static readonly Error TokenGenerationFailed = Error.Failure(
         code: "Auth.TokenGeneration.Failed",
         description: "Failed to generate new JWT token.");
