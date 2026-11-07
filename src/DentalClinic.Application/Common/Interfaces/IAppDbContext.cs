@@ -5,6 +5,7 @@ using DentalClinic.Domain.Clinics;
 using DentalClinic.Domain.Doctors;
 using DentalClinic.Domain.Identity;
 using DentalClinic.Domain.Invoices;
+using DentalClinic.Domain.Labs;
 using DentalClinic.Domain.Odontograms;
 using DentalClinic.Domain.Patients;
 using DentalClinic.Domain.Services;
@@ -31,6 +32,7 @@ public interface IAppDbContext
     public DbSet<PatientTooth> PatientTeeth { get; }
     public DbSet<ClinicSetting> ClinicSettings { get; }
     public DbSet<ExchangeRate> ExchangeRates { get; }
+    public DbSet<LabCase> LabCases { get; }
     Task<int> SaveChangesAsync(CancellationToken cancellationToken);
     Task<IAppTransaction> BeginTransactionAsync(IsolationLevel isolationLevel, CancellationToken cancellationToken);
 

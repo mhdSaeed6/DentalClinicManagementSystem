@@ -992,3 +992,83 @@ public sealed class DoctorUserLinkRequest
 {
     public string UserId { get; set; } = string.Empty;
 }
+
+// ---------------------------------------------------------------------------
+// Dental lab tracking
+// ---------------------------------------------------------------------------
+
+public enum LabCaseStatus
+{
+    Sent = 0,
+    AtLab = 1,
+    Trial = 2,
+    TriedIn = 3,
+    Returned = 4,
+    Failed = 5
+}
+
+public sealed class LabCaseDto
+{
+    public Guid Id { get; set; }
+
+    public Guid PatientId { get; set; }
+
+    public string? PatientName { get; set; }
+
+    public Guid DoctorId { get; set; }
+
+    public string? DoctorName { get; set; }
+
+    public Guid? TreatmentRecordId { get; set; }
+
+    public int? ToothNumber { get; set; }
+
+    public string LabName { get; set; } = string.Empty;
+
+    public string CaseType { get; set; } = string.Empty;
+
+    public LabCaseStatus Status { get; set; }
+
+    public DateTimeOffset SentAtUtc { get; set; }
+
+    public DateTimeOffset ExpectedReturnAtUtc { get; set; }
+
+    public DateTimeOffset? ReturnedAtUtc { get; set; }
+
+    public decimal Cost { get; set; }
+
+    public string? Notes { get; set; }
+
+    /// <summary>Derived by the API from the expected return date and the status.</summary>
+    public bool IsOverdue { get; set; }
+}
+
+public sealed class LabCaseFormRequest
+{
+    public Guid PatientId { get; set; }
+
+    public Guid DoctorId { get; set; }
+
+    public Guid? TreatmentRecordId { get; set; }
+
+    public int? ToothNumber { get; set; }
+
+    public string LabName { get; set; } = string.Empty;
+
+    public string CaseType { get; set; } = string.Empty;
+
+    public DateTimeOffset SentAtUtc { get; set; } = DateTimeOffset.UtcNow;
+
+    public DateTimeOffset ExpectedReturnAtUtc { get; set; } = DateTimeOffset.UtcNow.AddDays(7);
+
+    public decimal Cost { get; set; }
+
+    public string? Notes { get; set; }
+}
+
+public sealed class LabCaseStatusRequest
+{
+    public int Status { get; set; }
+
+    public DateTimeOffset? OccurredAtUtc { get; set; }
+}

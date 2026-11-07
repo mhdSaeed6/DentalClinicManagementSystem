@@ -465,6 +465,50 @@ public sealed class ApiClient : IClinicSettingsSource
         DeleteAsync($"doctors/{doctorId}/user-link", ct);
 
     // -----------------------------------------------------------------------
+    // Dental lab tracking
+    // -----------------------------------------------------------------------
+
+    public Task<PaginatedList<LabCaseDto>> GetLabCasesAsync(
+        int page,
+        int pageSize,
+        Guid? patientId = null,
+        Guid? doctorId = null,
+        int? status = null,
+        bool? overdue = null,
+        CancellationToken ct = default) =>
+        GetAsync<PaginatedList<LabCaseDto>>(
+            "lab-cases?" + Query(
+                ("PageNumber", page),
+                ("PageSize", pageSize),
+                ("PatientId", patientId),
+                ("DoctorId", doctorId),
+                ("Status", status),
+                ("Overdue", overdue)),
+            ct);
+
+    public Task<LabCaseDto> GetLabCaseAsync(Guid id, CancellationToken ct = default) =>
+        GetAsync<LabCaseDto>($"lab-cases/{id}", ct);
+
+    public Task<LabCaseDto> CreateLabCaseAsync(LabCaseFormRequest request, CancellationToken ct = default) =>
+        PostAsync<LabCaseDto>("lab-cases", request, ct);
+
+    public Task<LabCaseDto> UpdateLabCaseAsync(Guid id, LabCaseFormRequest request, CancellationToken ct = default) =>
+        PutAsync<LabCaseDto>($"lab-cases/{id}", request, ct);
+
+    public Task<LabCaseDto> ChangeLabCaseStatusAsync(
+        Guid id,
+        int status,
+        DateTimeOffset? occurredAtUtc = null,
+        CancellationToken ct = default) =>
+        PutAsync<LabCaseDto>(
+            $"lab-cases/{id}/status",
+            new LabCaseStatusRequest { Status = status, OccurredAtUtc = occurredAtUtc },
+            ct);
+
+    public Task DeleteLabCaseAsync(Guid id, CancellationToken ct = default) =>
+        DeleteAsync($"lab-cases/{id}", ct);
+
+    // -----------------------------------------------------------------------
     // Core request pipeline
     // -----------------------------------------------------------------------
 

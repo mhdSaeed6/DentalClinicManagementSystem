@@ -7,6 +7,7 @@ using DentalClinic.Domain.Clinics;
 using DentalClinic.Domain.Doctors;
 using DentalClinic.Domain.Identity;
 using DentalClinic.Domain.Invoices;
+using DentalClinic.Domain.Labs;
 using DentalClinic.Domain.Odontograms;
 using DentalClinic.Domain.Patients;
 using DentalClinic.Domain.Services;
@@ -50,6 +51,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> contextOptions) : Ident
     public DbSet<ExchangeRate> ExchangeRates => Set<ExchangeRate>();
 
     public DbSet<InvoiceNumberCounter> InvoiceNumberCounters => Set<InvoiceNumberCounter>();
+
+    public DbSet<LabCase> LabCases => Set<LabCase>();
 
     public bool HasActiveTransaction => Database.CurrentTransaction is not null;
 

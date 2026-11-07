@@ -67,6 +67,21 @@ public static class ApplicationErrors
             code: "TreatmentRecord.AccessForbidden",
             description: "You are not allowed to access this treatment record.");
 
+    public static Error LabCaseNotFound =>
+        Error.NotFound(
+            code: "LabCase.NotFound",
+            description: "Lab case not found.");
+
+    public static Error LabCaseAccessForbidden =>
+        Error.Forbidden(
+            code: "LabCase.AccessForbidden",
+            description: "You are not allowed to access this lab case.");
+
+    public static Error LabCaseTreatmentRecordMismatch =>
+        Error.Validation(
+            code: "LabCase.TreatmentRecordMismatch",
+            description: "The treatment record does not belong to the lab case's patient and doctor.");
+
     public static Error TreatmentPlanNotFound =>
         Error.NotFound(
             code: "TreatmentPlan.NotFound",

@@ -1,0 +1,460 @@
+@page "/lab-cases"
+
+@inject ApiClient Api
+@inject ClinicSessionState Session
+@inject ClinicBranding Branding
+@inject NotificationService Notifier
+
+<PageTitle>@Session.T("Lab cases", "أعمال المخبر") · @Branding.DisplayName(Session.IsRtl)</PageTitle>
+
+<PageHeader Title="@Session.T("Lab cases", "أعمال المخبر")"
+            Subtitle="@Session.T("Track crowns, bridges and prosthetics sent to the dental lab.", "تتبّع التيجان والجسور والتراكيب المرسلة إلى المخبر.")">
+    <Actions>
+        <select class="select filter-select" @bind="_statusFilter" @bind:after="ApplyFilterAsync">
+            <option value="">@Session.T("All statuses", "كل الحالات")</option>
+            <option value="@((int)LabCaseStatus.Sent)">@StatusLabel(LabCaseStatus.Sent)</option>
+            <option value="@((int)LabCaseStatus.AtLab)">@StatusLabel(LabCaseStatus.AtLab)</option>
+            <option value="@((int)LabCaseStatus.Trial)">@StatusLabel(LabCaseStatus.Trial)</option>
+            <option value="@((int)LabCaseStatus.TriedIn)">@StatusLabel(LabCaseStatus.TriedIn)</option>
+            <option value="@((int)LabCaseStatus.Returned)">@StatusLabel(LabCaseStatus.Returned)</option>
+            <option value="@((int)LabCaseStatus.Failed)">@StatusLabel(LabCaseStatus.Failed)</option>
+        </select>
+        <select class="select filter-select" @bind="_overdueFilter" @bind:after="ApplyFilterAsync">
+            <option value="">@Session.T("All due dates", "كل المواعيد")</option>
+            <option value="true">@Session.T("Overdue only", "المتأخرة فقط")</option>
+            <option value="false">@Session.T("Not overdue", "غير المتأخرة")</option>
+        </select>
+        <button type="button" class="btn btn-outline" @onclick="LoadAsync" disabled="@_loading">
+            <ClinicIcon Name="refresh" Class="sm" /> @Session.T("Refresh", "تحديث")
+        </button>
+        <button type="button" class="btn btn-primary" @onclick="OpenCreate">
+            <ClinicIcon Name="plus" Class="sm" /> @Session.T("New lab case", "عمل مخبر جديد")
+        </button>
+    </Actions>
+</PageHeader>
+
+<div class="card">
+    @if (_loading)
+    {
+        <div class="card-body">
+            <div class="skeleton row"></div>
+            <div class="skeleton row"></div>
+        </div>
+    }
+    else if (_cases.Count == 0)
+    {
+        <EmptyState Icon="tooth" Title="@Session.T("No lab cases", "لا توجد أعمال مخبر")"
+                    Message="@Session.T("Open a case when a restoration leaves the clinic.", "افتح عملاً عند إرسال التركيب إلى المخبر.")">
+            <ActionContent><button type="button" class="btn btn-primary" @onclick="OpenCreate">@Session.T("New lab case", "عمل مخبر جديد")</button></ActionContent>
+        </EmptyState>
+    }
+    else
+    {
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>@Session.T("Lab & case", "المخبر والعمل")</th>
+                        <th>@Session.T("Patient", "المريض")</th>
+                        <th>@Session.T("Doctor", "الطبيب")</th>
+                        <th>@Session.T("Status", "الحالة")</th>
+                        <th>@Session.T("Sent", "الإرسال")</th>
+                        <th>@Session.T("Expected return", "الاسترجاع المتوقع")</th>
+                        <th>@Session.T("Cost", "التكلفة")</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var labCase in _cases)
+                    {
+                        <tr @key="labCase.Id">
+                            <td class="cell-main">
+                                <div>@labCase.LabName</div>
+                                <div class="fs-xs text-muted">
+                                    @labCase.CaseType
+                                    @if (labCase.ToothNumber is { } tooth)
+                                    {
+                                        <span> · @Session.T("Tooth", "السن") @tooth</span>
+                                    }
+                                </div>
+                            </td>
+                            <td>@(labCase.PatientName ?? "-")</td>
+                            <td>@(labCase.DoctorName ?? "-")</td>
+                            <td>
+                                <span class="badge @StatusClass(labCase.Status) no-dot">@StatusLabel(labCase.Status)</span>
+                                @if (labCase.IsOverdue)
+                                {
+                                    <span class="badge danger no-dot">@Session.T("Overdue", "متأخر")</span>
+                                }
+                            </td>
+                            <td class="mono">@FormatDate(labCase.SentAtUtc)</td>
+                            <td class="mono">@FormatDate(labCase.ExpectedReturnAtUtc)</td>
+                            <td class="mono">@Money(labCase.Cost)</td>
+                            <td>
+                                <div class="row-actions">
+                                    @foreach (var next in NextStatuses(labCase.Status))
+                                    {
+                                        <button type="button" class="btn btn-outline btn-sm"
+                                                @onclick="() => ChangeStatusAsync(labCase, next)">
+                                            @StatusLabel(next)
+                                        </button>
+                                    }
+                                    @if (labCase.Status is not (LabCaseStatus.Returned or LabCaseStatus.Failed))
+                                    {
+                                        <button type="button" class="btn btn-ghost btn-sm" @onclick="() => OpenEdit(labCase)">
+                                            @Session.T("Edit", "تعديل")
+                                        </button>
+                                    }
+                                    <button type="button" class="btn btn-danger-soft btn-sm" @onclick="() => AskDelete(labCase)">
+                                        @Session.T("Delete", "حذف")
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        <Pager PageNumber="_page" PageSize="PageSize" TotalCount="_total" TotalPages="_totalPages"
+               OnPageChange="GoToPage" />
+    }
+</div>
+
+<Modal IsOpen="_formOpen"
+       Title="@(_editingId is null ? Session.T("New lab case", "عمل مخبر جديد") : Session.T("Edit lab case", "تعديل عمل المخبر"))"
+       OnClose="CloseForm">
+    <ChildContent>
+        @if (!string.IsNullOrWhiteSpace(_formError))
+        {
+            <div class="badge danger no-dot mb-2">@_formError</div>
+        }
+        <div class="form-grid">
+            <div class="field">
+                <label class="label">@Session.T("Patient", "المريض") <span class="req">*</span></label>
+                <select class="select" @bind="_form.PatientId" disabled="@(_editingId is not null)">
+                    <option value="@Guid.Empty">@Session.T("- Select -", "- اختر -")</option>
+                    @foreach (var patient in _patients)
+                    {
+                        <option value="@patient.Id">@patient.FirstName @patient.LastName</option>
+                    }
+                </select>
+            </div>
+            <div class="field">
+                <label class="label">@Session.T("Doctor", "الطبيب") <span class="req">*</span></label>
+                <select class="select" @bind="_form.DoctorId" disabled="@(_editingId is not null)">
+                    <option value="@Guid.Empty">@Session.T("- Select -", "- اختر -")</option>
+                    @foreach (var doctor in _doctors)
+                    {
+                        <option value="@doctor.Id">@doctor.FirstName @doctor.LastName</option>
+                    }
+                </select>
+            </div>
+        </div>
+        <div class="form-grid">
+            <div class="field">
+                <label class="label">@Session.T("Lab name", "اسم المخبر") <span class="req">*</span></label>
+                <input class="input" @bind="_form.LabName" maxlength="128" />
+            </div>
+            <div class="field">
+                <label class="label">@Session.T("Case type", "نوع العمل") <span class="req">*</span></label>
+                <input class="input" @bind="_form.CaseType" maxlength="64" placeholder="@Session.T("e.g. Zirconia crown", "مثال: تاج زيركونيا")" />
+            </div>
+        </div>
+        <div class="form-grid">
+            <div class="field">
+                <label class="label">@Session.T("Tooth (optional)", "السن (اختياري)")</label>
+                <input type="number" min="11" max="85" class="input" @bind="_form.ToothNumber" />
+            </div>
+            <div class="field">
+                <label class="label">@Session.T("Cost", "التكلفة")</label>
+                <input type="number" min="0" step="0.01" class="input" @bind="_form.Cost" />
+            </div>
+        </div>
+        <div class="form-grid">
+            <div class="field">
+                <label class="label">@Session.T("Sent on", "تاريخ الإرسال")</label>
+                <input type="date" class="input"
+                       value="@_form.SentAtUtc.ToLocalTime().ToString("yyyy-MM-dd")"
+                       @onchange="OnSentChanged"
+                       disabled="@(_editingId is not null)" />
+            </div>
+            <div class="field">
+                <label class="label">@Session.T("Expected return", "الاسترجاع المتوقع") <span class="req">*</span></label>
+                <input type="date" class="input"
+                       value="@_form.ExpectedReturnAtUtc.ToLocalTime().ToString("yyyy-MM-dd")"
+                       @onchange="OnExpectedChanged" />
+            </div>
+        </div>
+        <div class="field">
+            <label class="label">@Session.T("Notes", "ملاحظات")</label>
+            <textarea class="textarea" @bind="_form.Notes" maxlength="512"></textarea>
+        </div>
+    </ChildContent>
+    <Footer>
+        <button type="button" class="btn btn-ghost" @onclick="CloseForm">@Session.T("Cancel", "إلغاء")</button>
+        <button type="button" class="btn btn-primary" @onclick="SaveAsync" disabled="@_saving">
+            @Session.T("Save", "حفظ")
+        </button>
+    </Footer>
+</Modal>
+
+<ConfirmDialog IsOpen="_confirmOpen"
+               Title="@Session.T("Delete lab case", "حذف عمل المخبر")"
+               Message="@Session.T($"Delete the {_deleteTargetCaseType} case for {_deleteTargetPatient}? The row is kept in the audit trail.", $"حذف عمل {_deleteTargetCaseType} للمريض {_deleteTargetPatient}؟ سيبقى السجل في سجل التدقيق.")"
+               ConfirmLabel="@Session.T("Delete", "حذف")"
+               OnConfirm="DeleteAsync"
+               OnCancel="() => _confirmOpen = false" />
+
+@code {
+    private const int PageSize = 10;
+
+    private List<LabCaseDto> _cases = [];
+    private List<PatientDto> _patients = [];
+    private List<DoctorDto> _doctors = [];
+
+    private bool _loading = true, _saving, _formOpen, _confirmOpen;
+    private string? _formError;
+    private int _page = 1, _total, _totalPages;
+    private string? _statusFilter;
+    private string? _overdueFilter;
+
+    private Guid? _editingId;
+    private LabCaseFormRequest _form = new();
+
+    private LabCaseDto? _deleteTarget;
+    private string _deleteTargetPatient = string.Empty;
+    private string _deleteTargetCaseType = string.Empty;
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        StateHasChanged();
+
+        try
+        {
+            var status = int.TryParse(_statusFilter, out var parsedStatus) ? parsedStatus : (int?)null;
+            var overdue = bool.TryParse(_overdueFilter, out var parsedOverdue) ? parsedOverdue : (bool?)null;
+
+            var cases = await Api.GetLabCasesAsync(_page, PageSize, status: status, overdue: overdue);
+            _cases = cases.Items?.ToList() ?? [];
+            _total = cases.TotalCount;
+            _totalPages = cases.TotalPages;
+
+            var patients = await Api.GetPatientsAsync(1, 100, null);
+            _patients = patients.Items?.ToList() ?? [];
+
+            var doctors = await Api.GetDoctorsAsync(1, 100, null);
+            _doctors = doctors.Items?.ToList() ?? [];
+        }
+        catch (Exception)
+        {
+            _cases = [];
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task ApplyFilterAsync()
+    {
+        _page = 1;
+        await LoadAsync();
+    }
+
+    private Task GoToPage(int page)
+    {
+        _page = page;
+        return LoadAsync();
+    }
+
+    private void OpenCreate()
+    {
+        _editingId = null;
+        _form = new LabCaseFormRequest();
+        _formError = null;
+        _formOpen = true;
+    }
+
+    private void OpenEdit(LabCaseDto labCase)
+    {
+        _editingId = labCase.Id;
+        _form = new LabCaseFormRequest
+        {
+            PatientId = labCase.PatientId,
+            DoctorId = labCase.DoctorId,
+            TreatmentRecordId = labCase.TreatmentRecordId,
+            ToothNumber = labCase.ToothNumber,
+            LabName = labCase.LabName,
+            CaseType = labCase.CaseType,
+            SentAtUtc = labCase.SentAtUtc,
+            ExpectedReturnAtUtc = labCase.ExpectedReturnAtUtc,
+            Cost = labCase.Cost,
+            Notes = labCase.Notes
+        };
+        _formError = null;
+        _formOpen = true;
+    }
+
+    private void CloseForm()
+    {
+        _formOpen = false;
+        _formError = null;
+    }
+
+    private async Task SaveAsync()
+    {
+        _formError = null;
+
+        if (_editingId is null && (_form.PatientId == Guid.Empty || _form.DoctorId == Guid.Empty))
+        {
+            _formError = Session.T("Select a patient and a doctor.", "اختر مريضاً وطبيباً.");
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_form.LabName) || string.IsNullOrWhiteSpace(_form.CaseType))
+        {
+            _formError = Session.T("The lab name and case type are required.", "اسم المخبر ونوع العمل مطلوبان.");
+            return;
+        }
+
+        if (_editingId is null && _form.ExpectedReturnAtUtc < _form.SentAtUtc)
+        {
+            _formError = Session.T("The expected return cannot precede the send date.", "لا يمكن أن يسبق الاسترجاع المتوقع تاريخ الإرسال.");
+            return;
+        }
+
+        _saving = true;
+
+        try
+        {
+            if (_editingId is { } id)
+            {
+                await Api.UpdateLabCaseAsync(id, _form);
+                Notifier.Success(Session.T("Lab case updated", "تم تحديث عمل المخبر"));
+            }
+            else
+            {
+                await Api.CreateLabCaseAsync(_form);
+                Notifier.Success(Session.T("Lab case opened", "تم تسجيل عمل المخبر"));
+            }
+
+            CloseForm();
+            await LoadAsync();
+        }
+        catch (ApiException ex)
+        {
+            _formError = ex.Message;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task ChangeStatusAsync(LabCaseDto labCase, LabCaseStatus next)
+    {
+        try
+        {
+            await Api.ChangeLabCaseStatusAsync(labCase.Id, (int)next);
+            Notifier.Success(
+                Session.T($"Case moved to {StatusLabel(next)}.", $"تم نقل العمل إلى {StatusLabel(next)}."));
+            await LoadAsync();
+        }
+        catch (ApiException ex)
+        {
+            Notifier.Error(Session.T("Could not change the status", "تعذّر تغيير الحالة"), ex.Message);
+        }
+    }
+
+    private void AskDelete(LabCaseDto labCase)
+    {
+        _deleteTarget = labCase;
+        _deleteTargetPatient = labCase.PatientName ?? "-";
+        _deleteTargetCaseType = labCase.CaseType;
+        _confirmOpen = true;
+    }
+
+    private async Task DeleteAsync()
+    {
+        _confirmOpen = false;
+
+        if (_deleteTarget is not { } target)
+        {
+            return;
+        }
+
+        try
+        {
+            await Api.DeleteLabCaseAsync(target.Id);
+            Notifier.Success(Session.T("Lab case deleted", "تم حذف عمل المخبر"));
+            await LoadAsync();
+        }
+        catch (ApiException ex)
+        {
+            Notifier.Error(Session.T("Delete failed", "فشل الحذف"), ex.Message);
+        }
+        finally
+        {
+            _deleteTarget = null;
+        }
+    }
+
+    private void OnSentChanged(ChangeEventArgs args)
+    {
+        if (DateTime.TryParse(args.Value?.ToString(), out var date))
+        {
+            _form.SentAtUtc = ToOffset(date);
+        }
+    }
+
+    private void OnExpectedChanged(ChangeEventArgs args)
+    {
+        if (DateTime.TryParse(args.Value?.ToString(), out var date))
+        {
+            _form.ExpectedReturnAtUtc = ToOffset(date);
+        }
+    }
+
+    private static DateTimeOffset ToOffset(DateTime date) =>
+        new(DateTime.SpecifyKind(date, DateTimeKind.Local));
+
+    private static IReadOnlyList<LabCaseStatus> NextStatuses(LabCaseStatus status) => status switch
+    {
+        LabCaseStatus.Sent => [LabCaseStatus.AtLab, LabCaseStatus.Failed],
+        LabCaseStatus.AtLab => [LabCaseStatus.Trial, LabCaseStatus.Returned, LabCaseStatus.Failed],
+        LabCaseStatus.Trial => [LabCaseStatus.TriedIn, LabCaseStatus.Failed],
+        LabCaseStatus.TriedIn => [LabCaseStatus.Returned, LabCaseStatus.Failed],
+        LabCaseStatus.Failed => [LabCaseStatus.Sent],
+        _ => []
+    };
+
+    private string StatusLabel(LabCaseStatus status) => status switch
+    {
+        LabCaseStatus.Sent => Session.T("Sent", "مُرسل"),
+        LabCaseStatus.AtLab => Session.T("At the lab", "عند المخبر"),
+        LabCaseStatus.Trial => Session.T("Trial", "تجربة"),
+        LabCaseStatus.TriedIn => Session.T("Back for finishing", "للتشطيب"),
+        LabCaseStatus.Returned => Session.T("Returned", "مستلم"),
+        LabCaseStatus.Failed => Session.T("Failed", "فاشل"),
+        _ => status.ToString()
+    };
+
+    private static string StatusClass(LabCaseStatus status) => status switch
+    {
+        LabCaseStatus.Sent => "info",
+        LabCaseStatus.AtLab => "info",
+        LabCaseStatus.Trial => "warning",
+        LabCaseStatus.TriedIn => "warning",
+        LabCaseStatus.Returned => "success",
+        LabCaseStatus.Failed => "danger",
+        _ => "muted"
+    };
+
+    private static string FormatDate(DateTimeOffset value) =>
+        value.ToLocalTime().ToString("yyyy-MM-dd");
+
+    private string Money(decimal amount) => ClinicFormatting.Money(amount, Branding.BaseCurrency);
+}
