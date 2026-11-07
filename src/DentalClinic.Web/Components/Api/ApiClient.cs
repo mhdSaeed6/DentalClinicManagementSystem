@@ -437,6 +437,34 @@ public sealed class ApiClient : IClinicSettingsSource
         PostAsync<ExchangeRateDto>("clinic/exchange-rates", request, ct);
 
     // -----------------------------------------------------------------------
+    // Staff management
+    // -----------------------------------------------------------------------
+
+    public Task<PaginatedList<StaffUserDto>> GetStaffUsersAsync(int page, int pageSize, string? search, CancellationToken ct = default) =>
+        GetAsync<PaginatedList<StaffUserDto>>("staff/users?" + Query(("PageNumber", page), ("PageSize", pageSize), ("SearchTerm", search)), ct);
+
+    public Task<StaffUserDto> GetStaffUserAsync(string userId, CancellationToken ct = default) =>
+        GetAsync<StaffUserDto>($"staff/users/{Uri.EscapeDataString(userId)}", ct);
+
+    public Task<StaffUserDto> CreateStaffUserAsync(StaffUserFormRequest request, CancellationToken ct = default) =>
+        PostAsync<StaffUserDto>("staff/users", request, ct);
+
+    public Task<StaffUserDto> UpdateStaffUserRolesAsync(string userId, IReadOnlyList<string> roles, CancellationToken ct = default) =>
+        PutAsync<StaffUserDto>($"staff/users/{Uri.EscapeDataString(userId)}/roles", new StaffUserRolesRequest { Roles = roles.ToList() }, ct);
+
+    public Task<StaffUserDto> SetStaffUserActiveAsync(string userId, bool isActive, CancellationToken ct = default) =>
+        PutAsync<StaffUserDto>($"staff/users/{Uri.EscapeDataString(userId)}/status", new StaffUserStatusRequest { IsActive = isActive }, ct);
+
+    public Task<StaffUserDto> ResetStaffUserPasswordAsync(string userId, StaffUserPasswordRequest request, CancellationToken ct = default) =>
+        PutAsync<StaffUserDto>($"staff/users/{Uri.EscapeDataString(userId)}/password", request, ct);
+
+    public Task LinkDoctorUserAsync(Guid doctorId, string userId, CancellationToken ct = default) =>
+        PutNoContentAsync($"doctors/{doctorId}/user-link", new DoctorUserLinkRequest { UserId = userId }, ct);
+
+    public Task UnlinkDoctorUserAsync(Guid doctorId, CancellationToken ct = default) =>
+        DeleteAsync($"doctors/{doctorId}/user-link", ct);
+
+    // -----------------------------------------------------------------------
     // Core request pipeline
     // -----------------------------------------------------------------------
 

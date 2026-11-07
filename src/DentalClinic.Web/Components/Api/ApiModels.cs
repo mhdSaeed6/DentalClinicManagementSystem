@@ -940,3 +940,55 @@ public sealed class DoctorProductivityDto
 
     public decimal PaidAmount { get; set; }
 }
+
+// ---------------------------------------------------------------------------
+// Staff management
+// ---------------------------------------------------------------------------
+
+/// <summary>Mirror of the admin-only staff-account read-back.</summary>
+public sealed class StaffUserDto
+{
+    public string UserId { get; set; } = string.Empty;
+
+    public string Email { get; set; } = string.Empty;
+
+    public string? UserName { get; set; }
+
+    public List<string> Roles { get; set; } = [];
+
+    /// <summary>True when the account is locked out (deactivated or site lockout).</summary>
+    public bool IsLockedOut { get; set; }
+
+    public Guid? LinkedDoctorId { get; set; }
+
+    public string? LinkedDoctorName { get; set; }
+}
+
+public sealed class StaffUserFormRequest
+{
+    public string Email { get; set; } = string.Empty;
+
+    public string Password { get; set; } = string.Empty;
+
+    public List<string> Roles { get; set; } = [];
+}
+
+public sealed class StaffUserRolesRequest
+{
+    public List<string> Roles { get; set; } = [];
+}
+
+public sealed class StaffUserStatusRequest
+{
+    public bool IsActive { get; set; }
+}
+
+public sealed class StaffUserPasswordRequest
+{
+    public string NewPassword { get; set; } = string.Empty;
+}
+
+public sealed class DoctorUserLinkRequest
+{
+    public string UserId { get; set; } = string.Empty;
+}
