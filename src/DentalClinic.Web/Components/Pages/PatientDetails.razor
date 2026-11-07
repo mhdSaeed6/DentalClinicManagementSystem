@@ -3,6 +3,7 @@
 @inject ClinicSessionState Session
 @inject ClinicBranding Branding
 @inject NavigationManager Nav
+@inject NotificationService Notifier
 
 <PageTitle>@(_patient is null ? Session.T("Patient", "مريض") : FullName(_patient)) · @Branding.DisplayName(Session.IsRtl)</PageTitle>
 
@@ -72,6 +73,7 @@ else if (_patient is not null)
         <button type="button" class="tab @(_tab == "invoices" ? "active" : "")" @onclick='() => _tab = "invoices"'>@Session.T("Invoices", "الفواتير") (@_invoices.Count)</button>
         <button type="button" class="tab @(_tab == "plans" ? "active" : "")" @onclick='() => _tab = "plans"'>@Session.T("Treatment plans", "خطط العلاج") (@_plans.Count)</button>
         <button type="button" class="tab @(_tab == "odontogram" ? "active" : "")" @onclick='() => _tab = "odontogram"'>@Session.T("Odontogram", "مخطط الأسنان")</button>
+        <button type="button" class="tab @(_tab == "images" ? "active" : "")" @onclick="OpenImagesAsync">@Session.T("X-rays & photos", "الأشعة والصور") (@_images.Count)</button>
     </div>
 
     @if (_tab == "overview")
@@ -303,16 +305,158 @@ else if (_patient is not null)
             }
         </div>
     }
-    else
+    else if (_tab == "odontogram")
     {
         <Odontogram PatientId="Id" />
     }
+    else if (_tab == "images")
+    {
+        <div class="card">
+            <div class="card-header">
+                <div class="card-title">@Session.T("X-rays & photos", "الأشعة والصور")</div>
+                <div class="spacer" style="flex:1"></div>
+                @if (CanWrite)
+                {
+                    <button type="button" class="btn btn-primary btn-sm" @onclick="OpenUpload">
+                        <ClinicIcon Name="plus" Class="sm" /> @Session.T("Upload image", "رفع صورة")
+                    </button>
+                }
+            </div>
+            <div class="card-body">
+                @if (_imagesLoading)
+                {
+                    <div class="skeleton row"></div>
+                    <div class="skeleton row"></div>
+                }
+                else if (_images.Count == 0)
+                {
+                    <EmptyState Icon="tooth"
+                                Title="@Session.T("No images yet", "لا توجد صور بعد")"
+                                Message="@Session.T("Upload X-rays and before/after photos to keep the clinical record complete.", "ارفع الأشعة والصور قبل وبعد العلاج لإكمال السجل السريري.")" />
+                }
+                else
+                {
+                    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px">
+                        @foreach (var image in _images)
+                        {
+                            <div @key="image.Id" class="card" style="margin:0;overflow:hidden">
+                                <div style="aspect-ratio:4/3;background:var(--surface-2);display:flex;align-items:center;justify-content:center">
+                                    @if (_imageUrls.TryGetValue(image.Id, out var url))
+                                    {
+                                        <img src="@url" alt="@image.FileName" style="width:100%;height:100%;object-fit:cover" />
+                                    }
+                                    else
+                                    {
+                                        <ClinicIcon Name="tooth" />
+                                    }
+                                </div>
+                                <div class="card-body tight">
+                                    <div class="flex gap-2 flex-wrap mb-1">
+                                        <span class="badge brand no-dot">@KindLabel(image.Kind)</span>
+                                        @if (image.ToothNumber is { } tooth)
+                                        {
+                                            <span class="badge muted no-dot">@Session.T("Tooth", "السن") @tooth</span>
+                                        }
+                                    </div>
+                                    <div class="fs-sm" style="word-break:break-all">@image.FileName</div>
+                                    <div class="fs-xs text-muted">
+                                        @ClinicFormatting.LongDate(image.CapturedAtUtc.ToLocalTime().DateTime) · @FormatBytes(image.SizeBytes)
+                                    </div>
+                                    @if (CanWrite)
+                                    {
+                                        <div class="row-actions mt-2">
+                                            <button type="button" class="btn btn-danger-soft btn-sm"
+                                                    @onclick="() => AskDeleteImage(image)">
+                                                @Session.T("Delete", "حذف")
+                                            </button>
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+    }
 }
+
+<Modal IsOpen="_uploadOpen" Title="@Session.T("Upload clinical image", "رفع صورة سريرية")" OnClose="CloseUpload">
+    <ChildContent>
+        @if (!string.IsNullOrWhiteSpace(_uploadError))
+        {
+            <div class="badge danger no-dot mb-2">@_uploadError</div>
+        }
+        <div class="field">
+            <label class="label">@Session.T("Image file", "ملف الصورة") <span class="req">*</span></label>
+            <InputFile OnChange="OnImageSelected" accept="image/jpeg,image/png,image/webp" />
+            <div class="fs-xs text-muted mt-1">
+                @Session.T("JPEG, PNG or WebP up to 10 MB.", "JPEG أو PNG أو WebP بحد أقصى 10 ميجابايت.")
+            </div>
+            @if (_uploadPreviewUrl is not null)
+            {
+                <div class="mt-2" style="max-height:180px;overflow:hidden;border-radius:8px">
+                    <img src="@_uploadPreviewUrl" alt="preview" style="max-width:100%;max-height:180px;object-fit:contain" />
+                </div>
+            }
+        </div>
+        <div class="form-grid">
+            <div class="field">
+                <label class="label">@Session.T("Category", "التصنيف") <span class="req">*</span></label>
+                <select class="select" @bind="_uploadKind">
+                    <option value="@((int)PatientImageKind.Xray)">@KindLabel(PatientImageKind.Xray)</option>
+                    <option value="@((int)PatientImageKind.Before)">@KindLabel(PatientImageKind.Before)</option>
+                    <option value="@((int)PatientImageKind.After)">@KindLabel(PatientImageKind.After)</option>
+                    <option value="@((int)PatientImageKind.Other)">@KindLabel(PatientImageKind.Other)</option>
+                </select>
+            </div>
+            <div class="field">
+                <label class="label">@Session.T("Tooth (optional)", "السن (اختياري)")</label>
+                <input type="number" min="11" max="85" class="input" @bind="_uploadToothNumber" />
+            </div>
+        </div>
+        <div class="field">
+            <label class="label">@Session.T("Captured on", "تاريخ التصوير")</label>
+            <input type="date" class="input"
+                   value="@_uploadCapturedAt.ToLocalTime().ToString("yyyy-MM-dd")"
+                   @onchange="OnCapturedChanged" />
+        </div>
+        <div class="field">
+            <label class="label">@Session.T("Link to treatment (optional)", "ربط بعلاج (اختياري)")</label>
+            <select class="select" @bind="_uploadTreatmentRecordId">
+                <option value="@Guid.Empty">@Session.T("- None -", "- بدون -")</option>
+                @foreach (var treatment in _treatments)
+                {
+                    <option value="@treatment.Id">@TreatmentLabel(treatment)</option>
+                }
+            </select>
+        </div>
+    </ChildContent>
+    <Footer>
+        <button type="button" class="btn btn-ghost" @onclick="CloseUpload">@Session.T("Cancel", "إلغاء")</button>
+        <button type="button" class="btn btn-primary" @onclick="UploadImageAsync" disabled="@(_uploading || _uploadBytes is null)">
+            @if (_uploading)
+            {
+                <span class="spinner"></span>
+            }
+            @Session.T("Upload", "رفع")
+        </button>
+    </Footer>
+</Modal>
+
+<ConfirmDialog IsOpen="_imageConfirmOpen"
+               Title="@Session.T("Delete image", "حذف الصورة")"
+               Message="@Session.T($"Delete {_deleteImageName}? The file is removed from storage.", $"حذف {_deleteImageName}؟ سيُحذف الملف من التخزين.")"
+               ConfirmLabel="@Session.T("Delete", "حذف")"
+               OnConfirm="DeleteImageAsync"
+               OnCancel="() => _imageConfirmOpen = false" />
 
 @code {
     private string Money(decimal amount) => ClinicFormatting.Money(amount, Branding.BaseCurrency);
 
     [Parameter] public Guid Id { get; set; }
+
+    private const long MaxImageBytes = 10 * 1024 * 1024;
 
     private bool _loading = true;
     private string? _error;
@@ -326,6 +470,27 @@ else if (_patient is not null)
     private List<InvoiceDto> _invoices = [];
     private InvoiceSummaryDto? _invoiceSummary;
 
+    private List<PatientImageDto> _images = [];
+    private Dictionary<Guid, string> _imageUrls = [];
+    private bool _imagesLoading;
+
+    private bool _uploadOpen, _uploading;
+    private string? _uploadError;
+    private byte[]? _uploadBytes;
+    private string? _uploadFileName;
+    private string? _uploadContentType;
+    private string? _uploadPreviewUrl;
+    private int _uploadKind = (int)PatientImageKind.Xray;
+    private int? _uploadToothNumber;
+    private DateTimeOffset _uploadCapturedAt = DateTimeOffset.UtcNow;
+    private Guid _uploadTreatmentRecordId = Guid.Empty;
+
+    private bool _imageConfirmOpen;
+    private PatientImageDto? _deleteImage;
+    private string _deleteImageName = string.Empty;
+
+    private bool CanWrite => Session.IsAdmin || Session.IsDoctor;
+
     protected override async Task OnInitializedAsync()
     {
         try
@@ -338,8 +503,9 @@ else if (_patient is not null)
             var plansTask = Api.GetTreatmentPlansAsync(1, 100, patientId: Id);
             var invoicesTask = Api.GetInvoicesAsync(1, 100, patientId: Id);
             var summaryTask = Api.GetInvoiceSummaryAsync(Id);
+            var imagesTask = Api.GetPatientImagesAsync(Id);
 
-            await Task.WhenAll(patientTask, doctorsTask, servicesTask, appointmentsTask, treatmentsTask, plansTask, invoicesTask, summaryTask);
+            await Task.WhenAll(patientTask, doctorsTask, servicesTask, appointmentsTask, treatmentsTask, plansTask, invoicesTask, summaryTask, imagesTask);
 
             _patient = await patientTask;
             _doctors = (await doctorsTask).Items ?? [];
@@ -349,6 +515,7 @@ else if (_patient is not null)
             _plans = (await plansTask).Items ?? [];
             _invoices = (await invoicesTask).Items ?? [];
             _invoiceSummary = await summaryTask;
+            _images = [.. await imagesTask];
         }
         catch (ApiException ex)
         {
@@ -363,6 +530,258 @@ else if (_patient is not null)
             _loading = false;
         }
     }
+
+    private async Task OpenImagesAsync()
+    {
+        _tab = "images";
+
+        if (_images.Count == 0 || _imageUrls.Count == _images.Count)
+        {
+            return;
+        }
+
+        await LoadImagePreviewsAsync();
+    }
+
+    private async Task LoadImagePreviewsAsync()
+    {
+        _imagesLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            foreach (var image in _images)
+            {
+                if (_imageUrls.ContainsKey(image.Id))
+                {
+                    continue;
+                }
+
+                try
+                {
+                    var file = await Api.GetPatientImageContentAsync(Id, image.Id);
+                    _imageUrls[image.Id] = ToDataUrl(file.ContentType, file.Content);
+                }
+                catch (Exception)
+                {
+                    // A missing or unreadable binary must never blank the gallery.
+                }
+            }
+        }
+        finally
+        {
+            _imagesLoading = false;
+        }
+    }
+
+    private void OpenUpload()
+    {
+        _uploadError = null;
+        _uploadBytes = null;
+        _uploadFileName = null;
+        _uploadContentType = null;
+        _uploadPreviewUrl = null;
+        _uploadKind = (int)PatientImageKind.Xray;
+        _uploadToothNumber = null;
+        _uploadCapturedAt = DateTimeOffset.UtcNow;
+        _uploadTreatmentRecordId = Guid.Empty;
+        _uploadOpen = true;
+    }
+
+    private void CloseUpload()
+    {
+        _uploadOpen = false;
+        _uploadError = null;
+    }
+
+    private async Task OnImageSelected(InputFileChangeEventArgs args)
+    {
+        _uploadError = null;
+        _uploadBytes = null;
+        _uploadPreviewUrl = null;
+
+        var file = args.File;
+
+        if (file.Size <= 0)
+        {
+            _uploadError = Session.T("The selected file is empty.", "الملف المحدد فارغ.");
+            return;
+        }
+
+        if (file.Size > MaxImageBytes)
+        {
+            _uploadError = Session.T("Images must be 10 MB or smaller.", "يجب ألا يتجاوز حجم الصورة 10 ميجابايت.");
+            return;
+        }
+
+        try
+        {
+            await using var stream = file.OpenReadStream(MaxImageBytes);
+            using var buffer = new MemoryStream();
+            await stream.CopyToAsync(buffer);
+            var content = buffer.ToArray();
+
+            // Sniff locally so the declared type always agrees with what the API
+            // will detect from the bytes, and reject non-images before uploading.
+            var contentType = DetectContentType(content);
+
+            if (contentType is null)
+            {
+                _uploadError = Session.T("Only JPEG, PNG or WebP images are accepted.", "تُقبل صور JPEG أو PNG أو WebP فقط.");
+                return;
+            }
+
+            _uploadBytes = content;
+            _uploadFileName = file.Name;
+            _uploadContentType = contentType;
+            _uploadPreviewUrl = ToDataUrl(contentType, content);
+        }
+        catch (Exception)
+        {
+            _uploadError = Session.T("Could not read the selected file.", "تعذّر قراءة الملف المحدد.");
+        }
+    }
+
+    private async Task UploadImageAsync()
+    {
+        if (_uploadBytes is null || _uploadFileName is null || _uploadContentType is null)
+        {
+            _uploadError = Session.T("Choose an image first.", "اختر صورة أولاً.");
+            return;
+        }
+
+        _uploading = true;
+        _uploadError = null;
+
+        try
+        {
+            var created = await Api.UploadPatientImageAsync(
+                Id,
+                _uploadBytes,
+                _uploadFileName,
+                _uploadContentType,
+                _uploadKind,
+                _uploadTreatmentRecordId == Guid.Empty ? null : _uploadTreatmentRecordId,
+                _uploadToothNumber,
+                _uploadCapturedAt);
+
+            _images = [.. await Api.GetPatientImagesAsync(Id)];
+
+            if (_uploadPreviewUrl is not null)
+            {
+                _imageUrls[created.Id] = _uploadPreviewUrl;
+            }
+
+            Notifier.Success(Session.T("Image uploaded", "تم رفع الصورة"));
+            CloseUpload();
+        }
+        catch (ApiException ex)
+        {
+            _uploadError = ex.Message;
+        }
+        finally
+        {
+            _uploading = false;
+        }
+    }
+
+    private void OnCapturedChanged(ChangeEventArgs args)
+    {
+        if (DateTime.TryParse(args.Value?.ToString(), out var date))
+        {
+            _uploadCapturedAt = new DateTimeOffset(DateTime.SpecifyKind(date, DateTimeKind.Local));
+        }
+    }
+
+    private void AskDeleteImage(PatientImageDto image)
+    {
+        _deleteImage = image;
+        _deleteImageName = image.FileName;
+        _imageConfirmOpen = true;
+    }
+
+    private async Task DeleteImageAsync()
+    {
+        _imageConfirmOpen = false;
+
+        if (_deleteImage is not { } image)
+        {
+            return;
+        }
+
+        try
+        {
+            await Api.DeletePatientImageAsync(Id, image.Id);
+            _images.RemoveAll(i => i.Id == image.Id);
+            _imageUrls.Remove(image.Id);
+            Notifier.Success(Session.T("Image deleted", "تم حذف الصورة"));
+        }
+        catch (ApiException ex)
+        {
+            Notifier.Error(Session.T("Delete failed", "فشل الحذف"), ex.Message);
+        }
+        finally
+        {
+            _deleteImage = null;
+        }
+    }
+
+    private string KindLabel(PatientImageKind kind) => kind switch
+    {
+        PatientImageKind.Xray => Session.T("X-ray", "أشعة"),
+        PatientImageKind.Before => Session.T("Before", "قبل"),
+        PatientImageKind.After => Session.T("After", "بعد"),
+        PatientImageKind.Other => Session.T("Other", "أخرى"),
+        _ => kind.ToString()
+    };
+
+    private string TreatmentLabel(TreatmentRecordDto treatment)
+    {
+        var details = string.IsNullOrWhiteSpace(treatment.ProcedureDetails)
+            ? Session.T("Treatment", "علاج")
+            : treatment.ProcedureDetails;
+
+        return treatment.ToothNumber is { } tooth
+            ? $"{details} · {Session.T("Tooth", "السن")} {tooth}"
+            : details;
+    }
+
+    private static string ToDataUrl(string contentType, byte[] content) =>
+        $"data:{contentType};base64,{Convert.ToBase64String(content)}";
+
+    /// <summary>
+    /// Local mirror of the API's magic-byte sniffing. Only decides whether the
+    /// file looks like an image; the server stays the authority.
+    /// </summary>
+    private static string? DetectContentType(byte[] content)
+    {
+        if (content.Length >= 3 && content[0] == 0xFF && content[1] == 0xD8 && content[2] == 0xFF)
+        {
+            return "image/jpeg";
+        }
+
+        if (content.Length >= 8 &&
+            content[0] == 0x89 && content[1] == 0x50 && content[2] == 0x4E && content[3] == 0x47)
+        {
+            return "image/png";
+        }
+
+        if (content.Length >= 12 &&
+            content[0] == (byte)'R' && content[1] == (byte)'I' && content[2] == (byte)'F' && content[3] == (byte)'F' &&
+            content[8] == (byte)'W' && content[9] == (byte)'E' && content[10] == (byte)'B' && content[11] == (byte)'P')
+        {
+            return "image/webp";
+        }
+
+        return null;
+    }
+
+    private static string FormatBytes(long bytes) => bytes switch
+    {
+        >= 1024 * 1024 => $"{bytes / (1024d * 1024d):0.#} MB",
+        >= 1024 => $"{bytes / 1024d:0.#} KB",
+        _ => $"{bytes} B"
+    };
 
     private string GeneralWhatsAppMessage =>
         WhatsAppMessageBuilder.GeneralContactMessage(Session.IsRtl, FullName(_patient!));

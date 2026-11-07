@@ -119,6 +119,13 @@ namespace DentalClinic.Application.SubcutaneousTests.Common;
 public class WebAppFactory : WebApplicationFactory<IAssemblyMarker>, IAsyncLifetime
 {
     private readonly MsSqlContainer _dbContainer = new MsSqlBuilder().Build();
+
+    // Uploads must not land in the test output directory, and every run must
+    // start from an empty store so image tests cannot see each other's files.
+    private readonly string _imagesRoot = Path.Combine(
+        Path.GetTempPath(),
+        $"dentalclinic-images-{Guid.NewGuid():N}");
+
     private DbConnection _dbConnection = default!;
     private Respawner _respawner = default!;
 
@@ -221,6 +228,18 @@ public class WebAppFactory : WebApplicationFactory<IAssemblyMarker>, IAsyncLifet
         }
 
         await _dbContainer.StopAsync();
+
+        try
+        {
+            if (Directory.Exists(_imagesRoot))
+            {
+                Directory.Delete(_imagesRoot, recursive: true);
+            }
+        }
+        catch (IOException)
+        {
+            // Best-effort cleanup: a locked file must not fail the test run.
+        }
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -234,6 +253,7 @@ public class WebAppFactory : WebApplicationFactory<IAssemblyMarker>, IAsyncLifet
             {
                 ["JwtSettings:Secret"] = TestConfiguration.JwtSecret,
                 ["AppSettings:RateLimiting:AuthPermitLimit"] = TestConfiguration.AuthPermitLimit.ToString(),
+                ["Images:StoragePath"] = _imagesRoot,
             }));
 
         builder.ConfigureTestServices(services =>

@@ -738,6 +738,82 @@ namespace DentalClinic.Infrastructure.Data.Migrations
                     b.ToTable("Patients", (string)null);
                 });
 
+            modelBuilder.Entity("DentalClinic.Domain.Patients.PatientImage", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("CapturedAtUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTimeOffset?>("DeletedAtUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("int");
+
+                    b.Property<string>("LastModifiedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTimeOffset?>("LastModifiedUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid>("PatientId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<long>("SizeBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("StoragePath")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<int?>("ToothNumber")
+                        .HasColumnType("int");
+
+                    b.Property<Guid?>("TreatmentRecordId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("UploadedBy")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PatientId");
+
+                    b.HasIndex("TreatmentRecordId");
+
+                    b.HasIndex("PatientId", "Kind");
+
+                    b.ToTable("PatientImages", (string)null);
+                });
+
             modelBuilder.Entity("DentalClinic.Domain.Services.DentalService", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1350,6 +1426,24 @@ namespace DentalClinic.Infrastructure.Data.Migrations
 
                     b.Navigation("MedicalHistory")
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("DentalClinic.Domain.Patients.PatientImage", b =>
+                {
+                    b.HasOne("DentalClinic.Domain.Patients.Patient", "Patient")
+                        .WithMany()
+                        .HasForeignKey("PatientId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("DentalClinic.Domain.TreatmentRecords.TreatmentRecord", "TreatmentRecord")
+                        .WithMany()
+                        .HasForeignKey("TreatmentRecordId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("Patient");
+
+                    b.Navigation("TreatmentRecord");
                 });
 
             modelBuilder.Entity("DentalClinic.Domain.TreatmentPlans.TreatmentPlan", b =>

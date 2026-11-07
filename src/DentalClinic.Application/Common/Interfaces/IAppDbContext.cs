@@ -30,6 +30,7 @@ public interface IAppDbContext
     public DbSet<TreatmentRecord> TreatmentRecords { get; }
     public DbSet<TreatmentPlan> TreatmentPlans { get; }
     public DbSet<PatientTooth> PatientTeeth { get; }
+    public DbSet<PatientImage> PatientImages { get; }
     public DbSet<ClinicSetting> ClinicSettings { get; }
     public DbSet<ExchangeRate> ExchangeRates { get; }
     public DbSet<LabCase> LabCases { get; }

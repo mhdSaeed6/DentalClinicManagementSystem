@@ -46,6 +46,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> contextOptions) : Ident
 
     public DbSet<PatientTooth> PatientTeeth => Set<PatientTooth>();
 
+    public DbSet<PatientImage> PatientImages => Set<PatientImage>();
+
     public DbSet<ClinicSetting> ClinicSettings => Set<ClinicSetting>();
 
     public DbSet<ExchangeRate> ExchangeRates => Set<ExchangeRate>();

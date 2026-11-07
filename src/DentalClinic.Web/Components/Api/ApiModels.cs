@@ -1072,3 +1072,43 @@ public sealed class LabCaseStatusRequest
 
     public DateTimeOffset? OccurredAtUtc { get; set; }
 }
+
+// ---------------------------------------------------------------------------
+// Clinical images
+// ---------------------------------------------------------------------------
+
+public enum PatientImageKind
+{
+    Xray = 0,
+    Before = 1,
+    After = 2,
+    Other = 3
+}
+
+public sealed class PatientImageDto
+{
+    public Guid Id { get; set; }
+
+    public Guid PatientId { get; set; }
+
+    public Guid? TreatmentRecordId { get; set; }
+
+    public int? ToothNumber { get; set; }
+
+    public PatientImageKind Kind { get; set; }
+
+    public string FileName { get; set; } = string.Empty;
+
+    public string ContentType { get; set; } = string.Empty;
+
+    public long SizeBytes { get; set; }
+
+    public DateTimeOffset CapturedAtUtc { get; set; }
+
+    public string UploadedBy { get; set; } = string.Empty;
+
+    public DateTimeOffset CreatedAtUtc { get; set; }
+}
+
+/// <summary>Raw binary plus the MIME type the API served it with.</summary>
+public sealed record DownloadedFile(byte[] Content, string ContentType);

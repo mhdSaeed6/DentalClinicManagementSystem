@@ -509,6 +509,37 @@ public sealed class ApiClient : IClinicSettingsSource
         DeleteAsync($"lab-cases/{id}", ct);
 
     // -----------------------------------------------------------------------
+    // Clinical images
+    // -----------------------------------------------------------------------
+
+    public Task<IReadOnlyList<PatientImageDto>> GetPatientImagesAsync(Guid patientId, CancellationToken ct = default) =>
+        GetAsync<IReadOnlyList<PatientImageDto>>($"patients/{patientId}/images", ct);
+
+    public Task<DownloadedFile> GetPatientImageContentAsync(
+        Guid patientId,
+        Guid imageId,
+        CancellationToken ct = default) =>
+        GetFileAsync($"patients/{patientId}/images/{imageId}/content", ct);
+
+    public Task<PatientImageDto> UploadPatientImageAsync(
+        Guid patientId,
+        byte[] content,
+        string fileName,
+        string contentType,
+        int kind,
+        Guid? treatmentRecordId = null,
+        int? toothNumber = null,
+        DateTimeOffset? capturedAtUtc = null,
+        CancellationToken ct = default) =>
+        PostMultipartAsync<PatientImageDto>(
+            $"patients/{patientId}/images",
+            () => BuildImageForm(content, fileName, contentType, kind, treatmentRecordId, toothNumber, capturedAtUtc),
+            ct);
+
+    public Task DeletePatientImageAsync(Guid patientId, Guid imageId, CancellationToken ct = default) =>
+        DeleteAsync($"patients/{patientId}/images/{imageId}", ct);
+
+    // -----------------------------------------------------------------------
     // Core request pipeline
     // -----------------------------------------------------------------------
 
@@ -573,6 +604,97 @@ public sealed class ApiClient : IClinicSettingsSource
 
         var value = await response.Content.ReadFromJsonAsync<T>(JsonOptions, ct);
         return value!;
+    }
+
+    private async Task<DownloadedFile> GetFileAsync(string url, CancellationToken ct)
+    {
+        var response = await SendAsync(HttpMethod.Get, url, null, ct);
+
+        if (response.StatusCode == HttpStatusCode.Unauthorized && await TryRefreshAsync(ct))
+        {
+            response = await SendAsync(HttpMethod.Get, url, null, ct);
+        }
+
+        await EnsureSuccessAsync(response, ct);
+
+        var content = await response.Content.ReadAsByteArrayAsync(ct);
+        var contentType = response.Content.Headers.ContentType?.MediaType ?? "application/octet-stream";
+
+        return new DownloadedFile(content, contentType);
+    }
+
+    private async Task<T> PostMultipartAsync<T>(
+        string url,
+        Func<MultipartFormDataContent> formFactory,
+        CancellationToken ct)
+    {
+        var response = await SendContentAsync(HttpMethod.Post, url, formFactory, ct);
+
+        if (response.StatusCode == HttpStatusCode.Unauthorized && await TryRefreshAsync(ct))
+        {
+            response = await SendContentAsync(HttpMethod.Post, url, formFactory, ct);
+        }
+
+        await EnsureSuccessAsync(response, ct);
+
+        var value = await response.Content.ReadFromJsonAsync<T>(JsonOptions, ct);
+        return value!;
+    }
+
+    /// <summary>
+    /// Builds a fresh multipart payload per attempt so a token refresh can
+    /// safely retry the upload (an HttpContent cannot be reused once disposed).
+    /// </summary>
+    private static MultipartFormDataContent BuildImageForm(
+        byte[] content,
+        string fileName,
+        string contentType,
+        int kind,
+        Guid? treatmentRecordId,
+        int? toothNumber,
+        DateTimeOffset? capturedAtUtc)
+    {
+        var form = new MultipartFormDataContent();
+        var file = new ByteArrayContent(content);
+        file.Headers.ContentType = new MediaTypeHeaderValue(contentType);
+        form.Add(file, "file", fileName);
+        form.Add(new StringContent(kind.ToString(CultureInfo.InvariantCulture)), "kind");
+
+        if (treatmentRecordId.HasValue)
+        {
+            form.Add(new StringContent(treatmentRecordId.Value.ToString()), "treatmentRecordId");
+        }
+
+        if (toothNumber.HasValue)
+        {
+            form.Add(new StringContent(toothNumber.Value.ToString(CultureInfo.InvariantCulture)), "toothNumber");
+        }
+
+        if (capturedAtUtc.HasValue)
+        {
+            form.Add(new StringContent(capturedAtUtc.Value.ToString("O", CultureInfo.InvariantCulture)), "capturedAtUtc");
+        }
+
+        return form;
+    }
+
+    private async Task<HttpResponseMessage> SendContentAsync(
+        HttpMethod method,
+        string url,
+        Func<HttpContent> contentFactory,
+        CancellationToken ct)
+    {
+        using var request = new HttpRequestMessage(method, Prefix + url)
+        {
+            Content = contentFactory()
+        };
+
+        if (!string.IsNullOrWhiteSpace(_session.AccessToken))
+        {
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _session.AccessToken);
+        }
+
+        return await _http.SendAsync(request, ct);
     }
 
     private async Task<HttpResponseMessage> SendAsync(HttpMethod method, string url, object? body, CancellationToken ct)

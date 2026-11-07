@@ -82,6 +82,16 @@ public static class ApplicationErrors
             code: "LabCase.TreatmentRecordMismatch",
             description: "The treatment record does not belong to the lab case's patient and doctor.");
 
+    public static Error PatientImageNotFound =>
+        Error.NotFound(
+            code: "PatientImage.NotFound",
+            description: "Patient image not found.");
+
+    public static Error PatientImageTreatmentRecordMismatch =>
+        Error.Validation(
+            code: "PatientImage.TreatmentRecordMismatch",
+            description: "The treatment record does not belong to this patient.");
+
     public static Error TreatmentPlanNotFound =>
         Error.NotFound(
             code: "TreatmentPlan.NotFound",

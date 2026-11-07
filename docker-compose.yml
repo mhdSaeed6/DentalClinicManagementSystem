@@ -15,6 +15,11 @@ services:
       - Serilog__WriteTo__1__Args__serverUrl=http://seq:5341
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://seq:5341/ingest/otlp/v1/traces
       - OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+      # Clinical images are written outside the web root; mount a named volume
+      # so uploads survive container recreation.
+      - Images__StoragePath=/app/App_Data/images
+    volumes:
+      - dentalclinic-images:/app/App_Data/images
     depends_on:
       - sqlserver
       - seq
@@ -126,6 +131,7 @@ services:
 volumes:
   sqlserver-data: {}
   grafana-data: {}
+  dentalclinic-images: {}
 
 networks:
   dentalclinic-net:
