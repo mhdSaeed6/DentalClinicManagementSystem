@@ -81,7 +81,8 @@ public class ImportJob : AuditableEntity
             return ImportErrors.InvalidRowCounts;
         }
 
-        var safeFileName = Path.GetFileName(fileName.Trim());
+        var normalizedFileName = fileName.Trim().Replace('\\', '/');
+        var safeFileName = Path.GetFileName(normalizedFileName);
 
         if (safeFileName.Length > 260)
         {
