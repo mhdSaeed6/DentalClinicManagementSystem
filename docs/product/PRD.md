@@ -863,7 +863,7 @@ counter monotonic; issued invoices immutable; every money mutation audited.
 - Transactions for draft/issue/payment/provision.
 - Optimistic concurrency on `Invoice`.
 - DB constraints for invariants where possible.
-- **Backup/restore:** introduce automated SQL Server backups + a tested restore procedure (`REL-001`, `TEST-010`). Not present today `[CODE]`.
+- **Backup/restore:** introduce automated SQL Server backups + a tested restore procedure (`REL-001`, `TEST-010`). **Status 2026-11-08:** the nightly backup job is implemented (SQL Agent + `sql-backup-init` sidecar in `docker-compose.yml`); the **tested restore is still open**. Runbook: [`../operations/BACKUP-RESTORE.md`](../operations/BACKUP-RESTORE.md). Off-box copy and staleness alerting are also still open.
 
 ## I.5 Performance targets (provisional — HYPOTHESES to validate)
 
@@ -909,7 +909,7 @@ counter monotonic; issued invoices immutable; every money mutation audited.
 | TEST-007 | Payment exceeding balance | rejected; balance unchanged |
 | TEST-008 | Change service price | historical docs unchanged |
 | TEST-009 | Bill a `Planned` treatment | blocked without explicit perform |
-| TEST-010 | Restore backup | records/relationships intact |
+| TEST-010 | Restore backup | records/relationships intact — backup job ✅, rehearsal **pending** |
 | TEST-011 | Silent edit of issued invoice/line | blocked |
 | TEST-012 | Double-submit payment | single payment (idempotent) |
 | TEST-013 | Concurrent payments | no overpay, no lost update |
@@ -921,7 +921,7 @@ counter monotonic; issued invoices immutable; every money mutation audited.
 1. All P0 requirements have at least one passing test (see Part O).
 2. Tenant-isolation and authorization tests green.
 3. Financial-correctness + concurrency tests green.
-4. Backup/restore rehearsal completed.
+4. Backup/restore rehearsal completed. **Open:** backups are scheduled, but no rehearsal has been recorded yet (see `docs/operations/BACKUP-RESTORE.md` §2).
 5. No secrets in source; config reviewed.
 6. Arabic RTL smoke test on every P0 screen.
 7. Migrations apply cleanly to a fresh DB **and** to a copy of existing data.
@@ -1014,7 +1014,8 @@ Full decision list is in [`OPEN-QUESTIONS.md`](./OPEN-QUESTIONS.md).
 
 **Data**
 - [ ] Migrations apply to a fresh DB and to a copy of pilot data.
-- [ ] Automated backups scheduled; restore rehearsed (TEST-010).
+- [x] Automated backups scheduled (SQL Agent job + compose sidecar, 7-day retention).
+- [ ] Restore rehearsed and recorded (TEST-010) — **open**; off-box copy and staleness alerting also outstanding. See `docs/operations/BACKUP-RESTORE.md`.
 - [ ] Soft-delete filters consistent across tenant entities.
 
 **Financial**
@@ -1071,7 +1072,7 @@ pilot retention ≥ 1 quarter; willingness-to-pay signals captured.
 | DASH-001 | US-06 | Dashboard | 8 | TEST-015 | definitions correct |
 | SET-001/003 | US-12 | Settings | 8 | — | clinic locale/currency |
 | SEC-001/002 | — | Security | 0/2 | TEST-014 | secrets out; authz enforced |
-| REL-001 | — | Reliability | 9 | TEST-010 | restore verified |
+| REL-001 | — | Reliability | 9 | TEST-010 | backup scheduled; restore rehearsal **pending** |
 
 ---
 

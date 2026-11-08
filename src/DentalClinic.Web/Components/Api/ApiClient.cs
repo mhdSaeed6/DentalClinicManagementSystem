@@ -437,6 +437,142 @@ public sealed class ApiClient : IClinicSettingsSource
         PostAsync<ExchangeRateDto>("clinic/exchange-rates", request, ct);
 
     // -----------------------------------------------------------------------
+    // Staff management
+    // -----------------------------------------------------------------------
+
+    public Task<PaginatedList<StaffUserDto>> GetStaffUsersAsync(int page, int pageSize, string? search, CancellationToken ct = default) =>
+        GetAsync<PaginatedList<StaffUserDto>>("staff/users?" + Query(("PageNumber", page), ("PageSize", pageSize), ("SearchTerm", search)), ct);
+
+    public Task<StaffUserDto> GetStaffUserAsync(string userId, CancellationToken ct = default) =>
+        GetAsync<StaffUserDto>($"staff/users/{Uri.EscapeDataString(userId)}", ct);
+
+    public Task<StaffUserDto> CreateStaffUserAsync(StaffUserFormRequest request, CancellationToken ct = default) =>
+        PostAsync<StaffUserDto>("staff/users", request, ct);
+
+    public Task<StaffUserDto> UpdateStaffUserRolesAsync(string userId, IReadOnlyList<string> roles, CancellationToken ct = default) =>
+        PutAsync<StaffUserDto>($"staff/users/{Uri.EscapeDataString(userId)}/roles", new StaffUserRolesRequest { Roles = roles.ToList() }, ct);
+
+    public Task<StaffUserDto> SetStaffUserActiveAsync(string userId, bool isActive, CancellationToken ct = default) =>
+        PutAsync<StaffUserDto>($"staff/users/{Uri.EscapeDataString(userId)}/status", new StaffUserStatusRequest { IsActive = isActive }, ct);
+
+    public Task<StaffUserDto> ResetStaffUserPasswordAsync(string userId, StaffUserPasswordRequest request, CancellationToken ct = default) =>
+        PutAsync<StaffUserDto>($"staff/users/{Uri.EscapeDataString(userId)}/password", request, ct);
+
+    public Task LinkDoctorUserAsync(Guid doctorId, string userId, CancellationToken ct = default) =>
+        PutNoContentAsync($"doctors/{doctorId}/user-link", new DoctorUserLinkRequest { UserId = userId }, ct);
+
+    public Task UnlinkDoctorUserAsync(Guid doctorId, CancellationToken ct = default) =>
+        DeleteAsync($"doctors/{doctorId}/user-link", ct);
+
+    // -----------------------------------------------------------------------
+    // Dental lab tracking
+    // -----------------------------------------------------------------------
+
+    public Task<PaginatedList<LabCaseDto>> GetLabCasesAsync(
+        int page,
+        int pageSize,
+        Guid? patientId = null,
+        Guid? doctorId = null,
+        int? status = null,
+        bool? overdue = null,
+        CancellationToken ct = default) =>
+        GetAsync<PaginatedList<LabCaseDto>>(
+            "lab-cases?" + Query(
+                ("PageNumber", page),
+                ("PageSize", pageSize),
+                ("PatientId", patientId),
+                ("DoctorId", doctorId),
+                ("Status", status),
+                ("Overdue", overdue)),
+            ct);
+
+    public Task<LabCaseDto> GetLabCaseAsync(Guid id, CancellationToken ct = default) =>
+        GetAsync<LabCaseDto>($"lab-cases/{id}", ct);
+
+    public Task<LabCaseDto> CreateLabCaseAsync(LabCaseFormRequest request, CancellationToken ct = default) =>
+        PostAsync<LabCaseDto>("lab-cases", request, ct);
+
+    public Task<LabCaseDto> UpdateLabCaseAsync(Guid id, LabCaseFormRequest request, CancellationToken ct = default) =>
+        PutAsync<LabCaseDto>($"lab-cases/{id}", request, ct);
+
+    public Task<LabCaseDto> ChangeLabCaseStatusAsync(
+        Guid id,
+        int status,
+        DateTimeOffset? occurredAtUtc = null,
+        CancellationToken ct = default) =>
+        PutAsync<LabCaseDto>(
+            $"lab-cases/{id}/status",
+            new LabCaseStatusRequest { Status = status, OccurredAtUtc = occurredAtUtc },
+            ct);
+
+    public Task DeleteLabCaseAsync(Guid id, CancellationToken ct = default) =>
+        DeleteAsync($"lab-cases/{id}", ct);
+
+    // -----------------------------------------------------------------------
+    // Clinical images
+    // -----------------------------------------------------------------------
+
+    public Task<IReadOnlyList<PatientImageDto>> GetPatientImagesAsync(Guid patientId, CancellationToken ct = default) =>
+        GetAsync<IReadOnlyList<PatientImageDto>>($"patients/{patientId}/images", ct);
+
+    public Task<DownloadedFile> GetPatientImageContentAsync(
+        Guid patientId,
+        Guid imageId,
+        CancellationToken ct = default) =>
+        GetFileAsync($"patients/{patientId}/images/{imageId}/content", ct);
+
+    public Task<PatientImageDto> UploadPatientImageAsync(
+        Guid patientId,
+        byte[] content,
+        string fileName,
+        string contentType,
+        int kind,
+        Guid? treatmentRecordId = null,
+        int? toothNumber = null,
+        DateTimeOffset? capturedAtUtc = null,
+        CancellationToken ct = default) =>
+        PostMultipartAsync<PatientImageDto>(
+            $"patients/{patientId}/images",
+            () => BuildImageForm(content, fileName, contentType, kind, treatmentRecordId, toothNumber, capturedAtUtc),
+            ct);
+
+    public Task DeletePatientImageAsync(Guid patientId, Guid imageId, CancellationToken ct = default) =>
+        DeleteAsync($"patients/{patientId}/images/{imageId}", ct);
+
+    // -----------------------------------------------------------------------
+    // Patient import (administrators only)
+    // -----------------------------------------------------------------------
+
+    public Task<DownloadedFile> GetPatientImportTemplateAsync(CancellationToken ct = default) =>
+        GetFileAsync("imports/patients/template", ct);
+
+    public Task<PatientImportPreviewDto> PreviewPatientImportAsync(
+        byte[] content,
+        string fileName,
+        string? mappingJson = null,
+        CancellationToken ct = default) =>
+        PostMultipartAsync<PatientImportPreviewDto>(
+            "imports/patients/preview",
+            () => BuildImportForm(content, fileName, mappingJson),
+            ct);
+
+    public Task<PatientImportReportDto> CommitPatientImportAsync(
+        byte[] content,
+        string fileName,
+        string? mappingJson = null,
+        CancellationToken ct = default) =>
+        PostMultipartAsync<PatientImportReportDto>(
+            "imports/patients",
+            () => BuildImportForm(content, fileName, mappingJson),
+            ct);
+
+    public Task<ImportJobDto> GetImportJobAsync(Guid id, CancellationToken ct = default) =>
+        GetAsync<ImportJobDto>($"imports/{id}", ct);
+
+    public Task<DownloadedFile> GetImportJobErrorsAsync(Guid id, CancellationToken ct = default) =>
+        GetFileAsync($"imports/{id}/errors", ct);
+
+    // -----------------------------------------------------------------------
     // Core request pipeline
     // -----------------------------------------------------------------------
 
@@ -501,6 +637,116 @@ public sealed class ApiClient : IClinicSettingsSource
 
         var value = await response.Content.ReadFromJsonAsync<T>(JsonOptions, ct);
         return value!;
+    }
+
+    private async Task<DownloadedFile> GetFileAsync(string url, CancellationToken ct)
+    {
+        var response = await SendAsync(HttpMethod.Get, url, null, ct);
+
+        if (response.StatusCode == HttpStatusCode.Unauthorized && await TryRefreshAsync(ct))
+        {
+            response = await SendAsync(HttpMethod.Get, url, null, ct);
+        }
+
+        await EnsureSuccessAsync(response, ct);
+
+        var content = await response.Content.ReadAsByteArrayAsync(ct);
+        var contentType = response.Content.Headers.ContentType?.MediaType ?? "application/octet-stream";
+
+        return new DownloadedFile(content, contentType);
+    }
+
+    private async Task<T> PostMultipartAsync<T>(
+        string url,
+        Func<MultipartFormDataContent> formFactory,
+        CancellationToken ct)
+    {
+        var response = await SendContentAsync(HttpMethod.Post, url, formFactory, ct);
+
+        if (response.StatusCode == HttpStatusCode.Unauthorized && await TryRefreshAsync(ct))
+        {
+            response = await SendContentAsync(HttpMethod.Post, url, formFactory, ct);
+        }
+
+        await EnsureSuccessAsync(response, ct);
+
+        var value = await response.Content.ReadFromJsonAsync<T>(JsonOptions, ct);
+        return value!;
+    }
+
+    /// <summary>
+    /// Builds a fresh multipart payload per attempt so a token refresh can
+    /// safely retry the upload (an HttpContent cannot be reused once disposed).
+    /// </summary>
+    private static MultipartFormDataContent BuildImageForm(
+        byte[] content,
+        string fileName,
+        string contentType,
+        int kind,
+        Guid? treatmentRecordId,
+        int? toothNumber,
+        DateTimeOffset? capturedAtUtc)
+    {
+        var form = new MultipartFormDataContent();
+        var file = new ByteArrayContent(content);
+        file.Headers.ContentType = new MediaTypeHeaderValue(contentType);
+        form.Add(file, "file", fileName);
+        form.Add(new StringContent(kind.ToString(CultureInfo.InvariantCulture)), "kind");
+
+        if (treatmentRecordId.HasValue)
+        {
+            form.Add(new StringContent(treatmentRecordId.Value.ToString()), "treatmentRecordId");
+        }
+
+        if (toothNumber.HasValue)
+        {
+            form.Add(new StringContent(toothNumber.Value.ToString(CultureInfo.InvariantCulture)), "toothNumber");
+        }
+
+        if (capturedAtUtc.HasValue)
+        {
+            form.Add(new StringContent(capturedAtUtc.Value.ToString("O", CultureInfo.InvariantCulture)), "capturedAtUtc");
+        }
+
+        return form;
+    }
+
+    private static MultipartFormDataContent BuildImportForm(
+        byte[] content,
+        string fileName,
+        string? mappingJson)
+    {
+        var form = new MultipartFormDataContent();
+        var file = new ByteArrayContent(content);
+        file.Headers.ContentType = new MediaTypeHeaderValue(
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        form.Add(file, "file", fileName);
+
+        if (!string.IsNullOrWhiteSpace(mappingJson))
+        {
+            form.Add(new StringContent(mappingJson, System.Text.Encoding.UTF8, "application/json"), "mapping");
+        }
+
+        return form;
+    }
+
+    private async Task<HttpResponseMessage> SendContentAsync(
+        HttpMethod method,
+        string url,
+        Func<HttpContent> contentFactory,
+        CancellationToken ct)
+    {
+        using var request = new HttpRequestMessage(method, Prefix + url)
+        {
+            Content = contentFactory()
+        };
+
+        if (!string.IsNullOrWhiteSpace(_session.AccessToken))
+        {
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _session.AccessToken);
+        }
+
+        return await _http.SendAsync(request, ct);
     }
 
     private async Task<HttpResponseMessage> SendAsync(HttpMethod method, string url, object? body, CancellationToken ct)

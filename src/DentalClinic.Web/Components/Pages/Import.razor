@@ -1,0 +1,513 @@
+@page "/import"
+@using System.Text.Json
+
+@inject ApiClient Api
+@inject ClinicSessionState Session
+@inject ClinicBranding Branding
+@inject NotificationService Notifier
+
+<PageTitle>@Session.T("Import", "استيراد") · @Branding.DisplayName(Session.IsRtl)</PageTitle>
+
+<PageHeader Title="@Session.T("Import patients", "استيراد المرضى")"
+            Subtitle="@Session.T("Upload a workbook, preview every row, then import in one all-or-nothing step.", "ارفع ملف إكسل، راجع كل صف، ثم استورد الكل دفعة واحدة.")">
+    <Actions>
+        @if (_templateHref is not null)
+        {
+            <a class="btn btn-outline" href="@_templateHref" download="patient-import-template.xlsx">
+                <ClinicIcon Name="download" Class="sm" /> @Session.T("Template", "القالب")
+            </a>
+        }
+        @if (HasWork)
+        {
+            <button type="button" class="btn btn-ghost" @onclick="Reset">
+                <ClinicIcon Name="refresh" Class="sm" /> @Session.T("Start over", "البدء من جديد")
+            </button>
+        }
+    </Actions>
+</PageHeader>
+
+@if (!Session.IsAdmin)
+{
+    <div class="card">
+        <div class="card-body tight">
+            <EmptyState Icon="users"
+                        Title="@Session.T("Administrators only", "للمسؤولين فقط")"
+                        Message="@Session.T("Only the clinic owner can bulk-import patient data.", "مالك العيادة فقط يمكنه استيراد بيانات المرضى.")" />
+        </div>
+    </div>
+}
+else
+{
+    @if (_error is not null)
+    {
+        <div class="card">
+            <div class="card-body tight">
+                <div class="badge danger no-dot">@_error</div>
+            </div>
+        </div>
+    }
+
+    <div class="card">
+        <div class="card-header">
+            <div class="card-title">@Session.T("1. Choose a workbook", "١. اختر ملف إكسل")</div>
+        </div>
+        <div class="card-body">
+            <div class="field">
+                <label class="label">@Session.T("Excel file (.xlsx)", "ملف إكسل (.xlsx)")</label>
+                <InputFile OnChange="OnFileSelected" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" />
+                <div class="fs-xs text-muted mt-1">
+                    @Session.T("Required headers: First name, Last name, Primary phone, Date of birth, Gender. Up to 10 MB.",
+                                "الأعمدة المطلوبة: الاسم الأول، اسم العائلة، الهاتف، تاريخ الميلاد، الجنس. بحد أقصى ١٠ ميجابايت.")
+                </div>
+                @if (!string.IsNullOrWhiteSpace(_fileName))
+                {
+                    <div class="fs-sm mt-2">
+                        <ClinicIcon Name="file" Class="sm" /> @_fileName
+                        <span class="text-muted">· @FormatBytes(_fileBytes?.Length ?? 0)</span>
+                    </div>
+                }
+            </div>
+            @if (_previewLoading)
+            {
+                <div class="skeleton row mt-2"></div>
+            }
+        </div>
+    </div>
+
+    @if (_preview is not null)
+    {
+        <div class="card">
+            <div class="card-header">
+                <div class="card-title">@Session.T("2. Map columns and review", "٢. ربط الأعمدة والمراجعة")</div>
+                <div class="spacer" style="flex:1"></div>
+                <button type="button" class="btn btn-outline btn-sm" @onclick="ApplyMappingAsync" disabled="@_previewLoading">
+                    <ClinicIcon Name="refresh" Class="sm" /> @Session.T("Apply mapping", "تطبيق الربط")
+                </button>
+            </div>
+            <div class="card-body">
+                <div class="flex gap-2 flex-wrap mb-3">
+                    <span class="badge muted no-dot">@Session.T("Rows", "الصفوف"): @_preview.TotalRows</span>
+                    <span class="badge success no-dot">@Session.T("Valid", "صالح"): @_preview.ValidRows</span>
+                    <span class="badge danger no-dot">@Session.T("Rejected", "مرفوض"): @_preview.InvalidRows</span>
+                </div>
+
+                <div class="form-grid">
+                    @foreach (var column in _preview.Columns)
+                    {
+                        <div class="field" @key="column.Key">
+                            <label class="label">
+                                @column.Label
+                                @if (column.IsRequired)
+                                {
+                                    <span class="req">*</span>
+                                }
+                            </label>
+                            <select class="select"
+                                    value="@MappedHeader(column.Key)"
+                                    @onchange="args => OnMappingChanged(column.Key, args.Value?.ToString())">
+                                <option value="">@Session.T("- Not imported -", "- لا يتم استيراده -")</option>
+                                @foreach (var header in _preview.AvailableHeaders)
+                                {
+                                    <option value="@header">@header</option>
+                                }
+                            </select>
+                        </div>
+                    }
+                </div>
+
+                <div class="fs-xs text-muted mt-2">
+                    @Session.T("The preview validates every row through the same rules as the single-patient form. Nothing is written until you confirm.",
+                                "تتحقق المعاينة من كل صف بنفس قواعد نموذج المريض. لا يتم حفظ أي شيء قبل التأكيد.")
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <div class="card-title">
+                    @Session.T("Preview", "المعاينة")
+                    @if (_preview.TotalRows > _preview.PreviewRowLimit)
+                    {
+                        <span class="text-muted fs-sm">— @Session.T($"first {_preview.PreviewRowLimit} rows", $"أول {_preview.PreviewRowLimit} صف")</span>
+                    }
+                </div>
+                <div class="spacer" style="flex:1"></div>
+                <button type="button" class="btn btn-primary"
+                        disabled="@(_previewLoading || _importing || _preview.InvalidRows > 0)"
+                        @onclick="() => _confirmOpen = true">
+                    @if (_importing)
+                    {
+                        <span class="spinner"></span>
+                    }
+                    <ClinicIcon Name="download" Class="sm" />
+                    @Session.T($"Import {_preview.ValidRows} patients", $"استيراد {_preview.ValidRows} مريض")
+                </button>
+            </div>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>@Session.T("Row", "الصف")</th>
+                            <th>@Session.T("Name", "الاسم")</th>
+                            <th>@Session.T("Phone", "الهاتف")</th>
+                            <th>@Session.T("Birth date", "تاريخ الميلاد")</th>
+                            <th>@Session.T("Gender", "الجنس")</th>
+                            <th>@Session.T("Status", "الحالة")</th>
+                            <th>@Session.T("Problems", "المشاكل")</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var row in _preview.Rows)
+                        {
+                            <tr @key="row.RowNumber">
+                                <td class="mono">@row.RowNumber</td>
+                                <td class="cell-main">@Dash(row.DisplayName)</td>
+                                <td class="mono">@Dash(row.PrimaryPhone)</td>
+                                <td class="mono">@Dash(row.DateOfBirth)</td>
+                                <td>@Dash(row.Gender)</td>
+                                <td>
+                                    @if (row.IsValid)
+                                    {
+                                        <span class="badge success no-dot">@Session.T("Valid", "صالح")</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge danger no-dot">@Session.T("Rejected", "مرفوض")</span>
+                                    }
+                                </td>
+                                <td>
+                                    @foreach (var error in row.Errors)
+                                    {
+                                        <div class="fs-xs text-danger">
+                                            <strong>@error.Column:</strong> @error.Message
+                                        </div>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            @if (_preview.InvalidRows > 0)
+            {
+                <div class="card-body tight">
+                    <div class="badge warning no-dot">
+                        @Session.T("Fix every rejected row and re-preview — the import is all-or-nothing.", "أصلح كل صف مرفوض ثم أعد المعاينة — الاستيراد كلي أو لا شيء.")
+                    </div>
+                </div>
+            }
+        </div>
+    }
+
+    @if (_report is not null)
+    {
+        <div class="card">
+            <div class="card-header">
+                <div class="card-title">@Session.T("3. Result", "٣. النتيجة")</div>
+                <div class="spacer" style="flex:1"></div>
+                @if (_errorHref is not null)
+                {
+                    <a class="btn btn-outline btn-sm" href="@_errorHref" download="@_errorFileName">
+                        <ClinicIcon Name="download" Class="sm" /> @Session.T("Error report (CSV)", "تقرير الأخطاء (CSV)")
+                    </a>
+                }
+            </div>
+            <div class="card-body">
+                <div class="flex gap-2 flex-wrap items-center">
+                    @if (_report.Status == ImportJobStatus.Completed)
+                    {
+                        <span class="badge success">@Session.T("Completed", "مكتمل")</span>
+                    }
+                    else
+                    {
+                        <span class="badge danger">@Session.T("Rejected", "مرفوض")</span>
+                    }
+                    <span class="fs-sm">@_report.FileName</span>
+                    <span class="badge muted no-dot">@Session.T("Rows", "الصفوف"): @_report.TotalRows</span>
+                    <span class="badge success no-dot">@Session.T("Imported", "تم استيراده"): @_report.ImportedRows</span>
+                    <span class="badge danger no-dot">@Session.T("Rejected", "مرفوض"): @_report.RejectedRows</span>
+                </div>
+
+                @if (_report.Status == ImportJobStatus.Completed)
+                {
+                    <div class="mt-3">
+                        <a class="btn btn-primary btn-sm" href="patients">
+                            <ClinicIcon Name="users" Class="sm" /> @Session.T("Open patients", "فتح المرضى")
+                        </a>
+                    </div>
+                }
+                else
+                {
+                    <div class="table-wrap mt-3">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>@Session.T("Row", "الصف")</th>
+                                    <th>@Session.T("Column", "العمود")</th>
+                                    <th>@Session.T("Message", "الرسالة")</th>
+                                    <th>@Session.T("Value", "القيمة")</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var error in _report.Errors)
+                                {
+                                    <tr @key="@($"{error.RowNumber}-{error.Column}-{error.Message}")">
+                                        <td class="mono">@error.RowNumber</td>
+                                        <td>@error.Column</td>
+                                        <td>@error.Message</td>
+                                        <td class="mono">@Dash(error.Value)</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+}
+
+<ConfirmDialog IsOpen="_confirmOpen"
+               Title="@Session.T("Import patients", "استيراد المرضى")"
+               Message="@ConfirmMessage"
+               Detail="@Session.T("The import is all-or-nothing and cannot be undone from this screen.", "الاستيراد كلي أو لا شيء ولا يمكن التراجع عنه من هذه الشاشة.")"
+               ConfirmLabel="@Session.T("Import", "استيراد")"
+               OnConfirm="CommitAsync"
+               OnCancel="() => _confirmOpen = false" />
+
+@code {
+    private const long MaxFileBytes = 10 * 1024 * 1024;
+
+    private byte[]? _fileBytes;
+    private string? _fileName;
+
+    private PatientImportPreviewDto? _preview;
+    private PatientImportReportDto? _report;
+
+    private readonly Dictionary<string, string> _mapping = new(StringComparer.OrdinalIgnoreCase);
+
+    private string? _templateHref;
+    private string? _errorHref;
+    private string _errorFileName = "import-errors.csv";
+
+    private bool _previewLoading;
+    private bool _importing;
+    private bool _confirmOpen;
+    private string? _error;
+
+    private bool HasWork => _fileBytes is not null || _preview is not null || _report is not null;
+
+    private string ConfirmMessage =>
+        _preview is null
+            ? string.Empty
+            : Session.T(
+                $"Import {_preview.ValidRows} patients from {_fileName}?",
+                $"استيراد {_preview.ValidRows} مريض من {_fileName}؟");
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!Session.IsAdmin)
+        {
+            return;
+        }
+
+        try
+        {
+            var template = await Api.GetPatientImportTemplateAsync();
+            _templateHref = ToDataUrl(template.ContentType, template.Content);
+        }
+        catch (ApiException ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private async Task OnFileSelected(InputFileChangeEventArgs args)
+    {
+        _error = null;
+        _preview = null;
+        _report = null;
+        _errorHref = null;
+        _mapping.Clear();
+
+        var file = args.File;
+
+        if (file.Size <= 0)
+        {
+            _error = Session.T("The selected file is empty.", "الملف المحدد فارغ.");
+            return;
+        }
+
+        if (file.Size > MaxFileBytes)
+        {
+            _error = Session.T("Workbooks must be 10 MB or smaller.", "يجب ألا يتجاوز حجم الملف ١٠ ميجابايت.");
+            return;
+        }
+
+        try
+        {
+            await using var stream = file.OpenReadStream(MaxFileBytes);
+            using var buffer = new MemoryStream();
+            await stream.CopyToAsync(buffer);
+
+            _fileBytes = buffer.ToArray();
+            _fileName = file.Name;
+
+            await RunPreviewAsync();
+        }
+        catch (Exception ex) when (ex is IOException or InvalidOperationException)
+        {
+            _error = Session.T("Could not read the selected file.", "تعذّر قراءة الملف المحدد.");
+        }
+    }
+
+    private async Task ApplyMappingAsync()
+    {
+        if (_fileBytes is null || _fileName is null)
+        {
+            return;
+        }
+
+        await RunPreviewAsync();
+    }
+
+    private async Task RunPreviewAsync()
+    {
+        if (_fileBytes is null || _fileName is null)
+        {
+            return;
+        }
+
+        _previewLoading = true;
+        _error = null;
+        _report = null;
+
+        try
+        {
+            var preview = await Api.PreviewPatientImportAsync(_fileBytes, _fileName, BuildMappingJson());
+
+            _preview = preview;
+
+            // Keep only real mappings so a cleared select becomes "not imported"
+            // rather than an empty override.
+            _mapping.Clear();
+
+            foreach (var column in preview.Columns.Where(column => !string.IsNullOrWhiteSpace(column.SourceHeader)))
+            {
+                _mapping[column.Key] = column.SourceHeader!;
+            }
+        }
+        catch (ApiException ex)
+        {
+            _preview = null;
+            _error = ex.Message;
+        }
+        finally
+        {
+            _previewLoading = false;
+        }
+    }
+
+    private async Task CommitAsync()
+    {
+        _confirmOpen = false;
+
+        if (_fileBytes is null || _fileName is null)
+        {
+            return;
+        }
+
+        _importing = true;
+        _error = null;
+
+        try
+        {
+            var report = await Api.CommitPatientImportAsync(_fileBytes, _fileName, BuildMappingJson());
+
+            _report = report;
+
+            if (report.Status == ImportJobStatus.Completed)
+            {
+                Notifier.Success(
+                    Session.T("Import completed", "تم الاستيراد"),
+                    Session.T($"{report.ImportedRows} patients added.", $"تمت إضافة {report.ImportedRows} مريض."));
+
+                _preview = null;
+                _fileBytes = null;
+                _fileName = null;
+                _mapping.Clear();
+            }
+            else
+            {
+                Notifier.Warning(
+                    Session.T("Import rejected", "تم رفض الاستيراد"),
+                    Session.T($"{report.RejectedRows} row(s) need attention.", $"{report.RejectedRows} صف يحتاج إلى مراجعة."));
+
+                await LoadErrorReportAsync(report.JobId);
+            }
+        }
+        catch (ApiException ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _importing = false;
+        }
+    }
+
+    private async Task LoadErrorReportAsync(Guid jobId)
+    {
+        try
+        {
+            var file = await Api.GetImportJobErrorsAsync(jobId);
+            _errorHref = ToDataUrl(file.ContentType, file.Content);
+            _errorFileName = $"import-errors-{jobId:N}.csv";
+        }
+        catch (ApiException)
+        {
+            _errorHref = null;
+        }
+    }
+
+    private void OnMappingChanged(string key, string? header)
+    {
+        if (string.IsNullOrWhiteSpace(header))
+        {
+            _mapping.Remove(key);
+        }
+        else
+        {
+            _mapping[key] = header;
+        }
+    }
+
+    private string? MappedHeader(string key) =>
+        _mapping.TryGetValue(key, out var header) ? header : null;
+
+    private string? BuildMappingJson() =>
+        _mapping.Count == 0 ? null : JsonSerializer.Serialize(_mapping);
+
+    private void Reset()
+    {
+        _fileBytes = null;
+        _fileName = null;
+        _preview = null;
+        _report = null;
+        _errorHref = null;
+        _error = null;
+        _mapping.Clear();
+    }
+
+    private string Dash(string? value) => string.IsNullOrWhiteSpace(value) ? "—" : value;
+
+    private static string ToDataUrl(string contentType, byte[] content) =>
+        $"data:{contentType};base64,{Convert.ToBase64String(content)}";
+
+    private static string FormatBytes(long bytes) => bytes switch
+    {
+        >= 1024 * 1024 => $"{bytes / (1024d * 1024d):0.#} MB",
+        >= 1024 => $"{bytes / 1024d:0.#} KB",
+        _ => $"{bytes} B"
+    };
+}

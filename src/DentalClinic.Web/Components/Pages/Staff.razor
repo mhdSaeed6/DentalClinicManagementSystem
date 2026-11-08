@@ -1,0 +1,550 @@
+@page "/staff"
+
+@inject DentalClinic.Web.Api.ApiClient Api
+@inject ClinicSessionState Session
+@inject ClinicBranding Branding
+@inject NotificationService Notifier
+
+<PageTitle>@Session.T("Staff", "الموظفون") · @Branding.DisplayName(Session.IsRtl)</PageTitle>
+
+<PageHeader Title="@Session.T("Staff accounts", "حسابات الموظفين")"
+            Subtitle="@Session.T("Create clinic accounts, manage roles and keep the sign-in list accurate.", "إنشاء حسابات العيادة وإدارة الأدوار والتحقق من بيانات الدخول.")">
+    <Actions>
+        <button class="btn btn-primary" @onclick="OpenCreate">@Session.T("New account", "حساب جديد")</button>
+    </Actions>
+</PageHeader>
+
+@if (!Session.IsAdmin)
+{
+    <div class="card">
+        <div class="card-body tight">
+            <EmptyState Icon="users"
+                        Title="@Session.T("Administrators only", "للمسؤولين فقط")"
+                        Message="@Session.T("Only the clinic owner can manage staff accounts.", "يمكن لمالك العيادة فقط إدارة حسابات الموظفين.")" />
+        </div>
+    </div>
+}
+else
+{
+    @if (_loading)
+    {
+        <div class="card">
+            <div class="card-body tight">
+                <div class="skeleton" style="height:44px;border-radius:12px"></div>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="card">
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>@Session.T("Account", "الحساب")</th>
+                            <th>@Session.T("Roles", "الأدوار")</th>
+                            <th>@Session.T("Status", "الحالة")</th>
+                            <th>@Session.T("Linked doctor", "الطبيب المرتبط")</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var account in _users)
+                        {
+                            <tr @key="account.UserId">
+                                <td class="cell-main">@account.Email</td>
+                                <td>
+                                    <div class="flex gap-1 flex-wrap">
+                                        @foreach (var role in account.Roles)
+                                        {
+                                            <span class="badge @(RoleBadgeClass(role))">@RoleLabel(role)</span>
+                                        }
+                                    </div>
+                                </td>
+                                <td>
+                                    @if (account.IsLockedOut)
+                                    {
+                                        <span class="badge danger">@Session.T("Deactivated", "معطّل")</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge success">@Session.T("Active", "نشط")</span>
+                                    }
+                                </td>
+                                <td class="text-muted">@account.LinkedDoctorName</td>
+                                <td>
+                                    <div class="row-actions">
+                                        <button class="btn btn-ghost btn-sm" @onclick="() => OpenRoles(account)">@Session.T("Roles", "الأدوار")</button>
+                                        <button class="btn btn-ghost btn-sm" @onclick="() => OpenPassword(account)">@Session.T("Password", "كلمة المرور")</button>
+                                        @if (account.Roles.Contains(DoctorRole, StringComparer.OrdinalIgnoreCase))
+                                        {
+                                            <button class="btn btn-ghost btn-sm" @onclick="() => OpenLink(account)">@Session.T("Doctor link", "ربط الطبيب")</button>
+                                        }
+                                        @if (account.IsLockedOut)
+                                        {
+                                            <button class="btn btn-outline btn-sm" @onclick="() => ToggleActive(account)">@Session.T("Reactivate", "إعادة تنشيط")</button>
+                                        }
+                                        else
+                                        {
+                                            <button class="btn btn-danger-soft btn-sm" @onclick="() => AskDeactivate(account)">@Session.T("Deactivate", "تعطيل")</button>
+                                        }
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            <Pager PageNumber="_page" PageSize="PageSize" TotalCount="_total" TotalPages="_totalPages" OnPageChange="GoToPage" />
+        </div>
+    }
+}
+
+<Modal IsOpen="_createOpen" Title="@Session.T("New staff account", "حساب موظف جديد")" OnClose="CloseCreate">
+    <ChildContent>
+        @if (!string.IsNullOrWhiteSpace(_formError))
+        {
+            <div class="badge danger no-dot mb-2">@_formError</div>
+        }
+        <div class="field">
+            <label class="label">@Session.T("Email", "البريد الإلكتروني") <span class="req">*</span></label>
+            <input class="input" @bind="_createForm.Email" />
+        </div>
+        <div class="field">
+            <label class="label">@Session.T("Password", "كلمة المرور") <span class="req">*</span></label>
+            <input class="input" type="password" @bind="_createForm.Password" />
+            <p class="fs-xs text-muted mt-1">@Session.T("At least 12 characters with digits, upper and lower case and a symbol.", "12 حرفاً على الأقل مع أرقام وحروف كبيرة وصغيرة ورمز.")</p>
+        </div>
+        <div class="field">
+            <label class="label">@Session.T("Roles", "الأدوار")</label>
+            <div class="flex gap-2 flex-wrap">
+                @foreach (var role in KnownRoles)
+                {
+                    <label class="chip-check">
+                        <input type="checkbox" @bind="role.Selected" />
+                        @role.Label
+                    </label>
+                }
+            </div>
+        </div>
+    </ChildContent>
+    <Footer>
+        <button class="btn btn-ghost" @onclick="CloseCreate">@Session.T("Cancel", "إلغاء")</button>
+        <button class="btn btn-primary" @onclick="CreateAsync" disabled="@_saving">@Session.T("Create", "إنشاء")</button>
+    </Footer>
+</Modal>
+
+<Modal IsOpen="_rolesOpen" Title="@Session.T("Account roles", "أدوار الحساب")" OnClose="CloseRoles">
+    <ChildContent>
+        @if (!string.IsNullOrWhiteSpace(_formError))
+        {
+            <div class="badge danger no-dot mb-2">@_formError</div>
+        }
+        <p class="fs-sm text-muted mb-2">@_editing?.Email</p>
+        <div class="field">
+            <div class="flex gap-2 flex-wrap">
+                @foreach (var role in KnownRoles)
+                {
+                    <label class="chip-check">
+                        <input type="checkbox" @bind="role.Selected" />
+                        @role.Label
+                    </label>
+                }
+            </div>
+        </div>
+    </ChildContent>
+    <Footer>
+        <button class="btn btn-ghost" @onclick="CloseRoles">@Session.T("Cancel", "إلغاء")</button>
+        <button class="btn btn-primary" @onclick="SaveRolesAsync" disabled="@_saving">@Session.T("Save roles", "حفظ الأدوار")</button>
+    </Footer>
+</Modal>
+
+<Modal IsOpen="_passwordOpen" Title="@Session.T("Reset password", "تصفير كلمة المرور")" OnClose="ClosePassword">
+    <ChildContent>
+        @if (!string.IsNullOrWhiteSpace(_formError))
+        {
+            <div class="badge danger no-dot mb-2">@_formError</div>
+        }
+        <p class="fs-sm text-muted mb-2">@_editing?.Email</p>
+        <div class="field">
+            <label class="label">@Session.T("New password", "كلمة المرور الجديدة") <span class="req">*</span></label>
+            <input class="input" type="password" @bind="_newPassword" />
+        </div>
+    </ChildContent>
+    <Footer>
+        <button class="btn btn-ghost" @onclick="ClosePassword">@Session.T("Cancel", "إلغاء")</button>
+        <button class="btn btn-primary" @onclick="SavePasswordAsync" disabled="@_saving">@Session.T("Set password", "تعيين")</button>
+    </Footer>
+</Modal>
+
+<Modal IsOpen="_linkOpen" Title="@Session.T("Doctor link", "ربط الطبيب")" OnClose="CloseLink">
+    <ChildContent>
+        @if (!string.IsNullOrWhiteSpace(_formError))
+        {
+            <div class="badge danger no-dot mb-2">@_formError</div>
+        }
+        <p class="fs-sm text-muted mb-2">@Session.T("Choose the doctor profile this account signs in as.", "اختر ملف الطبيب الذي يدخل به هذا الحساب.")</p>
+        <div class="field">
+            <label class="label">@Session.T("Doctor", "الطبيب")</label>
+            <select class="select" @bind="_linkDoctorId">
+                <option value="">@Session.T("Not linked", "غير مرتبط")</option>
+                @foreach (var doctor in _doctors)
+                {
+                    <option value="@doctor.Id">@doctor.FirstName @doctor.LastName</option>
+                }
+            </select>
+        </div>
+    </ChildContent>
+    <Footer>
+        <button class="btn btn-ghost" @onclick="CloseLink">@Session.T("Cancel", "إلغاء")</button>
+        <button class="btn btn-primary" @onclick="SaveLinkAsync" disabled="@_saving">@Session.T("Save link", "حفظ الربط")</button>
+    </Footer>
+</Modal>
+
+<ConfirmDialog IsOpen="_confirmOpen"
+               Title="@Session.T("Deactivate account", "تعطيل الحساب")"
+               Message="@Session.T($"Deactivate {_deactivateTargetEmail}? The account will no longer be able to sign in.", $"تعطيل {_deactivateTargetEmail}؟ لن يستطيع الحساب تسجيل الدخول بعد الآن.")"
+               ConfirmLabel="@Session.T("Deactivate", "تعطيل")"
+               OnConfirm="DeactivateAsync"
+               OnCancel="() => _confirmOpen = false" />
+
+@code {
+    private const string DoctorRole = "Doctor";
+    private const string AdminRole = "Admin";
+    private const string ReceptionistRole = "Receptionist";
+
+    private const int PageSize = 10;
+
+    private List<StaffUserDto> _users = [];
+    private List<DoctorDto> _doctors = [];
+    private List<RoleChip> KnownRoles { get; } = [];
+
+    private bool _loading = true, _saving, _createOpen, _rolesOpen, _passwordOpen, _linkOpen, _confirmOpen;
+    private string? _formError;
+    private int _page = 1, _total, _totalPages;
+
+    private StaffUserFormRequest _createForm = new();
+    private StaffUserDto? _editing;
+    private string _newPassword = string.Empty;
+    private string? _linkDoctorId;
+
+    private StaffUserDto? _deactivateTarget;
+    private string _deactivateTargetEmail = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        KnownRoles.AddRange(
+        [
+            new("Admin", () => Session.T("Admin", "مسؤول")),
+            new("Doctor", () => Session.T("Doctor", "طبيب")),
+            new("Receptionist", () => Session.T("Receptionist", "موظف استقبال")),
+        ]);
+
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        StateHasChanged();
+
+        try
+        {
+            var users = await Api.GetStaffUsersAsync(_page, PageSize, null);
+
+            _users = users.Items?.ToList() ?? [];
+            _total = users.TotalCount;
+            _totalPages = users.TotalPages;
+
+            var doctors = await Api.GetDoctorsAsync(1, 100, null);
+            _doctors = doctors.Items?.ToList() ?? [];
+        }
+        catch (Exception)
+        {
+            _users = [];
+            _doctors = [];
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private Task GoToPage(int page)
+    {
+        _page = page;
+        return LoadAsync();
+    }
+
+    private void ClearSelections()
+    {
+        foreach (var chip in KnownRoles)
+        {
+            chip.Selected = false;
+        }
+    }
+
+    private void SelectRoles(IEnumerable<string> roles)
+    {
+        ClearSelections();
+
+        foreach (var chip in KnownRoles)
+        {
+            if (roles.Contains(chip.Name, StringComparer.OrdinalIgnoreCase))
+            {
+                chip.Selected = true;
+            }
+        }
+    }
+
+    private List<string> SelectedRoles =>
+        KnownRoles.Where(chip => chip.Selected).Select(chip => chip.Name).ToList();
+
+    private void OpenCreate()
+    {
+        _createForm = new();
+        ClearSelections();
+        _formError = null;
+        _createOpen = true;
+    }
+
+    private void CloseCreate() => _createOpen = false;
+
+    private async Task CreateAsync()
+    {
+        _formError = null;
+
+        var passwordPolicyOk = _createForm.Password.Length >= 12;
+
+        if (string.IsNullOrWhiteSpace(_createForm.Email) ||
+            !passwordPolicyOk ||
+            SelectedRoles.Count == 0)
+        {
+            _formError = Session.T(
+                "Provide an email, a 12+ character password and at least one role.",
+                "أدخل بريداً إلكترونياً وكلمة مرور من 12 حرفاً على الأقل ودوراً واحداً على الأقل.");
+            return;
+        }
+
+        _createForm.Roles = SelectedRoles;
+        _saving = true;
+
+        try
+        {
+            await Api.CreateStaffUserAsync(_createForm);
+            Notifier.Success(Session.T("Account created", "تم إنشاء الحساب"));
+            CloseCreate();
+            await LoadAsync();
+        }
+        catch (ApiException ex)
+        {
+            _formError = ex.Message;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private void OpenRoles(StaffUserDto account)
+    {
+        _editing = account;
+        SelectRoles(account.Roles);
+        _formError = null;
+        _rolesOpen = true;
+    }
+
+    private void CloseRoles() => _rolesOpen = false;
+
+    private async Task SaveRolesAsync()
+    {
+        if (_editing is null)
+        {
+            return;
+        }
+
+        _formError = null;
+
+        if (SelectedRoles.Count == 0)
+        {
+            _formError = Session.T("Select at least one role.", "اختر دوراً واحداً على الأقل.");
+            return;
+        }
+
+        _saving = true;
+
+        try
+        {
+            await Api.UpdateStaffUserRolesAsync(_editing.UserId, SelectedRoles);
+            Notifier.Success(Session.T("Roles updated", "تم تحديث الأدوار"));
+            CloseRoles();
+            await LoadAsync();
+        }
+        catch (ApiException ex)
+        {
+            _formError = ex.Message;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private void OpenPassword(StaffUserDto account)
+    {
+        _editing = account;
+        _newPassword = string.Empty;
+        _formError = null;
+        _passwordOpen = true;
+    }
+
+    private void ClosePassword() => _passwordOpen = false;
+
+    private async Task SavePasswordAsync()
+    {
+        if (_editing is null)
+        {
+            return;
+        }
+
+        _formError = null;
+
+        if (_newPassword.Length < 12)
+        {
+            _formError = Session.T("The password must be at least 12 characters.", "يجب ألا تقل كلمة المرور عن 12 حرفاً.");
+            return;
+        }
+
+        _saving = true;
+
+        try
+        {
+            await Api.ResetStaffUserPasswordAsync(_editing.UserId, new StaffUserPasswordRequest { NewPassword = _newPassword });
+            Notifier.Success(Session.T("Password updated", "تم تحديث كلمة المرور"));
+            ClosePassword();
+        }
+        catch (ApiException ex)
+        {
+            _formError = ex.Message;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private void OpenLink(StaffUserDto account)
+    {
+        _editing = account;
+        _linkDoctorId = account.LinkedDoctorId?.ToString();
+        _formError = null;
+        _linkOpen = true;
+    }
+
+    private void CloseLink() => _linkOpen = false;
+
+    private async Task SaveLinkAsync()
+    {
+        if (_editing is null)
+        {
+            return;
+        }
+
+        _formError = null;
+
+        var previousDoctorId = _editing.LinkedDoctorId;
+
+        _saving = true;
+
+        try
+        {
+            if (Guid.TryParse(_linkDoctorId, out var doctorId))
+            {
+                await Api.LinkDoctorUserAsync(doctorId, _editing.UserId);
+            }
+            else if (previousDoctorId is { } existingId)
+            {
+                await Api.UnlinkDoctorUserAsync(existingId);
+            }
+
+            Notifier.Success(Session.T("Link saved", "تم حفظ الربط"));
+            CloseLink();
+            await LoadAsync();
+        }
+        catch (ApiException ex)
+        {
+            _formError = ex.Message;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private void AskDeactivate(StaffUserDto account)
+    {
+        _deactivateTarget = account;
+        _deactivateTargetEmail = account.Email;
+        _confirmOpen = true;
+    }
+
+    private async Task DeactivateAsync()
+    {
+        _confirmOpen = false;
+
+        if (_deactivateTarget is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await Api.SetStaffUserActiveAsync(_deactivateTarget.UserId, false);
+            Notifier.Success(Session.T("Account deactivated", "تم تعطيل الحساب"));
+            await LoadAsync();
+        }
+        catch (ApiException ex)
+        {
+            Notifier.Error(Session.T("Deactivate failed", "فشل التعطيل"), ex.Message);
+        }
+        finally
+        {
+            _deactivateTarget = null;
+        }
+    }
+
+    private async Task ToggleActive(StaffUserDto account)
+    {
+        try
+        {
+            await Api.SetStaffUserActiveAsync(account.UserId, true);
+            Notifier.Success(Session.T("Account reactivated", "تمت إعادة تنشيط الحساب"));
+            await LoadAsync();
+        }
+        catch (ApiException ex)
+        {
+            Notifier.Error(Session.T("Action failed", "فشل الإجراء"), ex.Message);
+        }
+    }
+
+    private string RoleLabel(string role) => role switch
+    {
+        AdminRole => Session.T("Admin", "مسؤول"),
+        DoctorRole => Session.T("Doctor", "طبيب"),
+        ReceptionistRole => Session.T("Receptionist", "موظف استقبال"),
+        _ => role,
+    };
+
+    private string RoleBadgeClass(string role) => role switch
+    {
+        AdminRole => "info",
+        DoctorRole => "success",
+        ReceptionistRole => "warning",
+        _ => "muted",
+    };
+
+    private sealed record RoleChip(string Name, Func<string> Label)
+    {
+        public bool Selected { get; set; }
+    }
+}

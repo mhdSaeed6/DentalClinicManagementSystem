@@ -1,6 +1,7 @@
 using System.Reflection;
 
 using DentalClinic.Application.Common.Behaviours;
+using DentalClinic.Application.Features.Imports.Patients;
 
 using FluentValidation;
 
@@ -10,6 +11,12 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddApplication(this IServiceCollection services)
     {
+        // The parser and template builder are stateless; the processor holds a
+        // scoped DbContext for the duplicate-phone check.
+        services.AddSingleton<PatientImportParser>();
+        services.AddSingleton<PatientImportTemplateBuilder>();
+        services.AddScoped<PatientImportProcessor>();
+
         services.AddValidatorsFromAssembly(Assembly.GetExecutingAssembly());
 
         services.AddMediatR(cfg =>

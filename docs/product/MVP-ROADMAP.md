@@ -59,7 +59,7 @@ Effort assumptions: **small senior team (1–2 devs) already fluent with the sta
 | 6 | Draft → issue workflow | WFL-001…005, INV-003…007, INV-008(void) | workflow tests green |
 | 7 | Payments hardening | PAY-001…005 | concurrency/idempotency tests green |
 | 8 | Dashboard, settings, audit | DASH-001, SET-001/003, TEN-006 | metrics/audit tests green |
-| 9 | Operations | REL-001, D-13, D-14, health | runbook + restore rehearsal green |
+| 9 | Operations | REL-001, D-13, D-14, health | runbook ✅; backup job ✅; restore rehearsal **pending** |
 | 10 | Pilot onboarding | TEN-005, launch checklist | go/no-go recorded |
 
 Phases 0–7 are the **critical path** for a functioning pilot. Phases 8–10 complete trust, operability and onboarding. Tenant (1) and Authorization (2) must precede any multi-user or multi-clinic operation.
@@ -391,7 +391,7 @@ Phases 0–7 are the **critical path** for a functioning pilot. Phases 8–10 co
 - Docker/compose — add the **Web** container (D-13); parameterize config.
 - `src/DentalClinic.Web/Components/ClinicSessionState.cs` — persist session across refresh (D-14).
 - API — `/health` (live/ready), DB connectivity probe; fix Seq endpoint; error-rate alerting in Prometheus/Grafana.
-- Ops — automated SQL Server backups + documented, rehearsed restore.
+- Ops — automated SQL Server backups + documented, rehearsed restore. **Status:** backup job ✅ (`containers/sqlserver/01-backup-job.sql` + `sql-backup-init` sidecar), runbook ✅ [`../operations/BACKUP-RESTORE.md`](../operations/BACKUP-RESTORE.md); rehearsal/off-box copy/staleness alert still **open**.
 
 **DB changes.** None (unless adding a health/ops table — not expected).
 

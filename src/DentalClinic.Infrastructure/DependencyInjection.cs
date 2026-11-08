@@ -1,10 +1,12 @@
 using System.Text;
 using DentalClinic.Application.Common.Interfaces;
+using DentalClinic.Application.Common.Storage;
 using DentalClinic.Infrastructure.Data;
 using DentalClinic.Infrastructure.Data.Interceptors;
 using DentalClinic.Infrastructure.Identity;
 using DentalClinic.Infrastructure.Invoices;
 using DentalClinic.Infrastructure.Settings;
+using DentalClinic.Infrastructure.Storage;
 
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
@@ -142,6 +144,13 @@ public static class DependencyInjection
             Expiration = TimeSpan.FromMinutes(10),
             LocalCacheExpiration = TimeSpan.FromSeconds(30),
         });
+
+        // 8. Clinical image storage. Bound lazily so a test host's late
+        //    configuration sources are observed; swap the implementation for
+        //    object storage without touching the application layer.
+        services.Configure<ImageStorageSettings>(
+            configuration.GetSection(ImageStorageSettings.SectionName));
+        services.AddSingleton<IImageStorage, LocalImageStorage>();
 
         return services;
     }

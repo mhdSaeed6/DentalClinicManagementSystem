@@ -1,7 +1,9 @@
 using Asp.Versioning;
 
 using DentalClinic.Application.Features.Doctors.Commands.CreateDoctor;
+using DentalClinic.Application.Features.Doctors.Commands.LinkDoctorUser;
 using DentalClinic.Application.Features.Doctors.Commands.RemoveDoctor;
+using DentalClinic.Application.Features.Doctors.Commands.UnlinkDoctorUser;
 using DentalClinic.Application.Features.Doctors.Commands.UpdateDoctor;
 using DentalClinic.Application.Features.Doctors.Dtos;
 using DentalClinic.Application.Features.Doctors.Queries.GetDoctorById;
@@ -157,5 +159,47 @@ public class DoctorController(ISender sender) : ApiController
         return result.Match(
         response => Ok(response),
         Problem);
+    }
+
+    // --- Doctor <-> user account linking -------------------------------------
+
+    [HttpPut("{id:guid}/user-link")]
+    [Authorize(Policy = "AdminOnly")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
+    [EndpointSummary("Links a doctor profile to a user account.")]
+    [EndpointDescription("Assigns the identity user that doctor-facing JWT doctor_id claims are derived from; one account can drive one profile only.")]
+    [EndpointName("LinkDoctorUser")]
+    [MapToApiVersion("1.0")]
+    [ProducesDefaultResponseType]
+    public async Task<IActionResult> LinkDoctorUser(Guid id, [FromBody] LinkDoctorUserRequest request, CancellationToken ct)
+    {
+        var result = await sender.Send(new LinkDoctorUserCommand(id, request.UserId), ct);
+
+        return result.Match(
+            _ => NoContent(),
+            Problem);
+    }
+
+    [HttpDelete("{id:guid}/user-link")]
+    [Authorize(Policy = "AdminOnly")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
+    [EndpointSummary("Removes the doctor profile's user link.")]
+    [EndpointName("UnlinkDoctorUser")]
+    [MapToApiVersion("1.0")]
+    [ProducesDefaultResponseType]
+    public async Task<IActionResult> UnlinkDoctorUser(Guid id, CancellationToken ct)
+    {
+        var result = await sender.Send(new UnlinkDoctorUserCommand(id), ct);
+
+        return result.Match(
+            _ => NoContent(),
+            Problem);
     }
 }

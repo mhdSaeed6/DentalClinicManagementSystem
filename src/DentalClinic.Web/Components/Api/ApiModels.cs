@@ -940,3 +940,279 @@ public sealed class DoctorProductivityDto
 
     public decimal PaidAmount { get; set; }
 }
+
+// ---------------------------------------------------------------------------
+// Staff management
+// ---------------------------------------------------------------------------
+
+/// <summary>Mirror of the admin-only staff-account read-back.</summary>
+public sealed class StaffUserDto
+{
+    public string UserId { get; set; } = string.Empty;
+
+    public string Email { get; set; } = string.Empty;
+
+    public string? UserName { get; set; }
+
+    public List<string> Roles { get; set; } = [];
+
+    /// <summary>True when the account is locked out (deactivated or site lockout).</summary>
+    public bool IsLockedOut { get; set; }
+
+    public Guid? LinkedDoctorId { get; set; }
+
+    public string? LinkedDoctorName { get; set; }
+}
+
+public sealed class StaffUserFormRequest
+{
+    public string Email { get; set; } = string.Empty;
+
+    public string Password { get; set; } = string.Empty;
+
+    public List<string> Roles { get; set; } = [];
+}
+
+public sealed class StaffUserRolesRequest
+{
+    public List<string> Roles { get; set; } = [];
+}
+
+public sealed class StaffUserStatusRequest
+{
+    public bool IsActive { get; set; }
+}
+
+public sealed class StaffUserPasswordRequest
+{
+    public string NewPassword { get; set; } = string.Empty;
+}
+
+public sealed class DoctorUserLinkRequest
+{
+    public string UserId { get; set; } = string.Empty;
+}
+
+// ---------------------------------------------------------------------------
+// Dental lab tracking
+// ---------------------------------------------------------------------------
+
+public enum LabCaseStatus
+{
+    Sent = 0,
+    AtLab = 1,
+    Trial = 2,
+    TriedIn = 3,
+    Returned = 4,
+    Failed = 5
+}
+
+public sealed class LabCaseDto
+{
+    public Guid Id { get; set; }
+
+    public Guid PatientId { get; set; }
+
+    public string? PatientName { get; set; }
+
+    public Guid DoctorId { get; set; }
+
+    public string? DoctorName { get; set; }
+
+    public Guid? TreatmentRecordId { get; set; }
+
+    public int? ToothNumber { get; set; }
+
+    public string LabName { get; set; } = string.Empty;
+
+    public string CaseType { get; set; } = string.Empty;
+
+    public LabCaseStatus Status { get; set; }
+
+    public DateTimeOffset SentAtUtc { get; set; }
+
+    public DateTimeOffset ExpectedReturnAtUtc { get; set; }
+
+    public DateTimeOffset? ReturnedAtUtc { get; set; }
+
+    public decimal Cost { get; set; }
+
+    public string? Notes { get; set; }
+
+    /// <summary>Derived by the API from the expected return date and the status.</summary>
+    public bool IsOverdue { get; set; }
+}
+
+public sealed class LabCaseFormRequest
+{
+    public Guid PatientId { get; set; }
+
+    public Guid DoctorId { get; set; }
+
+    public Guid? TreatmentRecordId { get; set; }
+
+    public int? ToothNumber { get; set; }
+
+    public string LabName { get; set; } = string.Empty;
+
+    public string CaseType { get; set; } = string.Empty;
+
+    public DateTimeOffset SentAtUtc { get; set; } = DateTimeOffset.UtcNow;
+
+    public DateTimeOffset ExpectedReturnAtUtc { get; set; } = DateTimeOffset.UtcNow.AddDays(7);
+
+    public decimal Cost { get; set; }
+
+    public string? Notes { get; set; }
+}
+
+public sealed class LabCaseStatusRequest
+{
+    public int Status { get; set; }
+
+    public DateTimeOffset? OccurredAtUtc { get; set; }
+}
+
+// ---------------------------------------------------------------------------
+// Clinical images
+// ---------------------------------------------------------------------------
+
+public enum PatientImageKind
+{
+    Xray = 0,
+    Before = 1,
+    After = 2,
+    Other = 3
+}
+
+public sealed class PatientImageDto
+{
+    public Guid Id { get; set; }
+
+    public Guid PatientId { get; set; }
+
+    public Guid? TreatmentRecordId { get; set; }
+
+    public int? ToothNumber { get; set; }
+
+    public PatientImageKind Kind { get; set; }
+
+    public string FileName { get; set; } = string.Empty;
+
+    public string ContentType { get; set; } = string.Empty;
+
+    public long SizeBytes { get; set; }
+
+    public DateTimeOffset CapturedAtUtc { get; set; }
+
+    public string UploadedBy { get; set; } = string.Empty;
+
+    public DateTimeOffset CreatedAtUtc { get; set; }
+}
+
+/// <summary>Raw binary plus the MIME type the API served it with.</summary>
+public sealed record DownloadedFile(byte[] Content, string ContentType);
+
+// ---------------------------------------------------------------------------
+// Patient import
+// ---------------------------------------------------------------------------
+
+public enum ImportJobStatus
+{
+    Completed = 0,
+    Failed = 1
+}
+
+public sealed class PatientImportColumnDto
+{
+    public string Key { get; set; } = string.Empty;
+
+    public string Label { get; set; } = string.Empty;
+
+    public bool IsRequired { get; set; }
+
+    public string? SourceHeader { get; set; }
+}
+
+public sealed class ImportRowErrorDto
+{
+    public int RowNumber { get; set; }
+
+    public string Column { get; set; } = string.Empty;
+
+    public string Message { get; set; } = string.Empty;
+
+    public string? Value { get; set; }
+}
+
+public sealed class PatientImportPreviewRowDto
+{
+    public int RowNumber { get; set; }
+
+    public bool IsValid { get; set; }
+
+    public string DisplayName { get; set; } = string.Empty;
+
+    public string PrimaryPhone { get; set; } = string.Empty;
+
+    public string DateOfBirth { get; set; } = string.Empty;
+
+    public string Gender { get; set; } = string.Empty;
+
+    public List<ImportRowErrorDto> Errors { get; set; } = [];
+}
+
+public sealed class PatientImportPreviewDto
+{
+    public List<PatientImportColumnDto> Columns { get; set; } = [];
+
+    public List<string> AvailableHeaders { get; set; } = [];
+
+    public List<PatientImportPreviewRowDto> Rows { get; set; } = [];
+
+    public int TotalRows { get; set; }
+
+    public int ValidRows { get; set; }
+
+    public int InvalidRows { get; set; }
+
+    public int PreviewRowLimit { get; set; }
+}
+
+public sealed class PatientImportReportDto
+{
+    public Guid JobId { get; set; }
+
+    public ImportJobStatus Status { get; set; }
+
+    public string FileName { get; set; } = string.Empty;
+
+    public int TotalRows { get; set; }
+
+    public int ImportedRows { get; set; }
+
+    public int RejectedRows { get; set; }
+
+    public DateTimeOffset CreatedAtUtc { get; set; }
+
+    public List<ImportRowErrorDto> Errors { get; set; } = [];
+}
+
+public sealed class ImportJobDto
+{
+    public Guid Id { get; set; }
+
+    public string FileName { get; set; } = string.Empty;
+
+    public ImportJobStatus Status { get; set; }
+
+    public int TotalRows { get; set; }
+
+    public int ImportedRows { get; set; }
+
+    public int RejectedRows { get; set; }
+
+    public string ImportedBy { get; set; } = string.Empty;
+
+    public DateTimeOffset CreatedAtUtc { get; set; }
+}
