@@ -497,3 +497,4 @@ containers/sqlserver-backups/
 # Local execution plans kept out of git (working copies for the current phase).
 # Tracked plans: plan.md and ODONTOGRAM_PLAN.md.
 # NEXT_PHASE_PLAN.md
+opencode.json
