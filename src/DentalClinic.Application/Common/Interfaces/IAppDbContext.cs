@@ -4,6 +4,7 @@ using DentalClinic.Domain.Appointments;
 using DentalClinic.Domain.Clinics;
 using DentalClinic.Domain.Doctors;
 using DentalClinic.Domain.Identity;
+using DentalClinic.Domain.Imports;
 using DentalClinic.Domain.Invoices;
 using DentalClinic.Domain.Labs;
 using DentalClinic.Domain.Odontograms;
@@ -34,6 +35,8 @@ public interface IAppDbContext
     public DbSet<ClinicSetting> ClinicSettings { get; }
     public DbSet<ExchangeRate> ExchangeRates { get; }
     public DbSet<LabCase> LabCases { get; }
+    public DbSet<ImportJob> ImportJobs { get; }
+    public DbSet<ImportRowError> ImportRowErrors { get; }
     Task<int> SaveChangesAsync(CancellationToken cancellationToken);
     Task<IAppTransaction> BeginTransactionAsync(IsolationLevel isolationLevel, CancellationToken cancellationToken);
 

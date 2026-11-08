@@ -540,6 +540,39 @@ public sealed class ApiClient : IClinicSettingsSource
         DeleteAsync($"patients/{patientId}/images/{imageId}", ct);
 
     // -----------------------------------------------------------------------
+    // Patient import (administrators only)
+    // -----------------------------------------------------------------------
+
+    public Task<DownloadedFile> GetPatientImportTemplateAsync(CancellationToken ct = default) =>
+        GetFileAsync("imports/patients/template", ct);
+
+    public Task<PatientImportPreviewDto> PreviewPatientImportAsync(
+        byte[] content,
+        string fileName,
+        string? mappingJson = null,
+        CancellationToken ct = default) =>
+        PostMultipartAsync<PatientImportPreviewDto>(
+            "imports/patients/preview",
+            () => BuildImportForm(content, fileName, mappingJson),
+            ct);
+
+    public Task<PatientImportReportDto> CommitPatientImportAsync(
+        byte[] content,
+        string fileName,
+        string? mappingJson = null,
+        CancellationToken ct = default) =>
+        PostMultipartAsync<PatientImportReportDto>(
+            "imports/patients",
+            () => BuildImportForm(content, fileName, mappingJson),
+            ct);
+
+    public Task<ImportJobDto> GetImportJobAsync(Guid id, CancellationToken ct = default) =>
+        GetAsync<ImportJobDto>($"imports/{id}", ct);
+
+    public Task<DownloadedFile> GetImportJobErrorsAsync(Guid id, CancellationToken ct = default) =>
+        GetFileAsync($"imports/{id}/errors", ct);
+
+    // -----------------------------------------------------------------------
     // Core request pipeline
     // -----------------------------------------------------------------------
 
@@ -673,6 +706,25 @@ public sealed class ApiClient : IClinicSettingsSource
         if (capturedAtUtc.HasValue)
         {
             form.Add(new StringContent(capturedAtUtc.Value.ToString("O", CultureInfo.InvariantCulture)), "capturedAtUtc");
+        }
+
+        return form;
+    }
+
+    private static MultipartFormDataContent BuildImportForm(
+        byte[] content,
+        string fileName,
+        string? mappingJson)
+    {
+        var form = new MultipartFormDataContent();
+        var file = new ByteArrayContent(content);
+        file.Headers.ContentType = new MediaTypeHeaderValue(
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        form.Add(file, "file", fileName);
+
+        if (!string.IsNullOrWhiteSpace(mappingJson))
+        {
+            form.Add(new StringContent(mappingJson, System.Text.Encoding.UTF8, "application/json"), "mapping");
         }
 
         return form;

@@ -1112,3 +1112,107 @@ public sealed class PatientImageDto
 
 /// <summary>Raw binary plus the MIME type the API served it with.</summary>
 public sealed record DownloadedFile(byte[] Content, string ContentType);
+
+// ---------------------------------------------------------------------------
+// Patient import
+// ---------------------------------------------------------------------------
+
+public enum ImportJobStatus
+{
+    Completed = 0,
+    Failed = 1
+}
+
+public sealed class PatientImportColumnDto
+{
+    public string Key { get; set; } = string.Empty;
+
+    public string Label { get; set; } = string.Empty;
+
+    public bool IsRequired { get; set; }
+
+    public string? SourceHeader { get; set; }
+}
+
+public sealed class ImportRowErrorDto
+{
+    public int RowNumber { get; set; }
+
+    public string Column { get; set; } = string.Empty;
+
+    public string Message { get; set; } = string.Empty;
+
+    public string? Value { get; set; }
+}
+
+public sealed class PatientImportPreviewRowDto
+{
+    public int RowNumber { get; set; }
+
+    public bool IsValid { get; set; }
+
+    public string DisplayName { get; set; } = string.Empty;
+
+    public string PrimaryPhone { get; set; } = string.Empty;
+
+    public string DateOfBirth { get; set; } = string.Empty;
+
+    public string Gender { get; set; } = string.Empty;
+
+    public List<ImportRowErrorDto> Errors { get; set; } = [];
+}
+
+public sealed class PatientImportPreviewDto
+{
+    public List<PatientImportColumnDto> Columns { get; set; } = [];
+
+    public List<string> AvailableHeaders { get; set; } = [];
+
+    public List<PatientImportPreviewRowDto> Rows { get; set; } = [];
+
+    public int TotalRows { get; set; }
+
+    public int ValidRows { get; set; }
+
+    public int InvalidRows { get; set; }
+
+    public int PreviewRowLimit { get; set; }
+}
+
+public sealed class PatientImportReportDto
+{
+    public Guid JobId { get; set; }
+
+    public ImportJobStatus Status { get; set; }
+
+    public string FileName { get; set; } = string.Empty;
+
+    public int TotalRows { get; set; }
+
+    public int ImportedRows { get; set; }
+
+    public int RejectedRows { get; set; }
+
+    public DateTimeOffset CreatedAtUtc { get; set; }
+
+    public List<ImportRowErrorDto> Errors { get; set; } = [];
+}
+
+public sealed class ImportJobDto
+{
+    public Guid Id { get; set; }
+
+    public string FileName { get; set; } = string.Empty;
+
+    public ImportJobStatus Status { get; set; }
+
+    public int TotalRows { get; set; }
+
+    public int ImportedRows { get; set; }
+
+    public int RejectedRows { get; set; }
+
+    public string ImportedBy { get; set; } = string.Empty;
+
+    public DateTimeOffset CreatedAtUtc { get; set; }
+}

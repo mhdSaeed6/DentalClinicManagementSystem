@@ -6,6 +6,7 @@ using DentalClinic.Domain.Appointments;
 using DentalClinic.Domain.Clinics;
 using DentalClinic.Domain.Doctors;
 using DentalClinic.Domain.Identity;
+using DentalClinic.Domain.Imports;
 using DentalClinic.Domain.Invoices;
 using DentalClinic.Domain.Labs;
 using DentalClinic.Domain.Odontograms;
@@ -55,6 +56,10 @@ public class AppDbContext(DbContextOptions<AppDbContext> contextOptions) : Ident
     public DbSet<InvoiceNumberCounter> InvoiceNumberCounters => Set<InvoiceNumberCounter>();
 
     public DbSet<LabCase> LabCases => Set<LabCase>();
+
+    public DbSet<ImportJob> ImportJobs => Set<ImportJob>();
+
+    public DbSet<ImportRowError> ImportRowErrors => Set<ImportRowError>();
 
     public bool HasActiveTransaction => Database.CurrentTransaction is not null;
 
