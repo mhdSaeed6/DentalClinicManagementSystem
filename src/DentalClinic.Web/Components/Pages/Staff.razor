@@ -117,12 +117,15 @@ else
         </div>
         <div class="field">
             <label class="label">@Session.T("Roles", "الأدوار")</label>
-            <div class="flex gap-2 flex-wrap">
+            <div class="role-options">
                 @foreach (var role in KnownRoles)
                 {
-                    <label class="chip-check">
+                    <label class="check">
                         <input type="checkbox" @bind="role.Selected" />
-                        @role.Label
+                        <span class="check-copy">
+                            <strong>@RoleLabel(role.Name)</strong>
+                            <span class="fs-xs text-muted">@RoleHint(role.Name)</span>
+                        </span>
                     </label>
                 }
             </div>
@@ -142,12 +145,15 @@ else
         }
         <p class="fs-sm text-muted mb-2">@_editing?.Email</p>
         <div class="field">
-            <div class="flex gap-2 flex-wrap">
+            <div class="role-options">
                 @foreach (var role in KnownRoles)
                 {
-                    <label class="chip-check">
+                    <label class="check">
                         <input type="checkbox" @bind="role.Selected" />
-                        @role.Label
+                        <span class="check-copy">
+                            <strong>@RoleLabel(role.Name)</strong>
+                            <span class="fs-xs text-muted">@RoleHint(role.Name)</span>
+                        </span>
                     </label>
                 }
             </div>
@@ -235,9 +241,9 @@ else
     {
         KnownRoles.AddRange(
         [
-            new("Admin", () => Session.T("Admin", "مسؤول")),
-            new("Doctor", () => Session.T("Doctor", "طبيب")),
-            new("Receptionist", () => Session.T("Receptionist", "موظف استقبال")),
+            new(AdminRole),
+            new(DoctorRole),
+            new(ReceptionistRole),
         ]);
 
         await LoadAsync();
@@ -529,10 +535,24 @@ else
 
     private string RoleLabel(string role) => role switch
     {
-        AdminRole => Session.T("Admin", "مسؤول"),
-        DoctorRole => Session.T("Doctor", "طبيب"),
-        ReceptionistRole => Session.T("Receptionist", "موظف استقبال"),
+        AdminRole => Session.T("Owner (Administrator)", "المالك (مسؤول)"),
+        DoctorRole => Session.T("Dentist", "طبيب أسنان"),
+        ReceptionistRole => Session.T("Front desk", "موظف الاستقبال"),
         _ => role,
+    };
+
+    private string RoleHint(string role) => role switch
+    {
+        AdminRole => Session.T(
+            "Full access: staff accounts, settings, reports and billing.",
+            "صلاحية كاملة: حسابات الموظفين والإعدادات والتقارير والفواتير."),
+        DoctorRole => Session.T(
+            "Clinical records, own patients and own appointments.",
+            "السجلات السريرية ومرضاه ومواعيده."),
+        ReceptionistRole => Session.T(
+            "Patients, scheduling, invoices and payments; no clinical writes.",
+            "المرضى والمواعيد والفواتير والمدفوعات؛ دون كتابة سريرية."),
+        _ => string.Empty,
     };
 
     private string RoleBadgeClass(string role) => role switch
@@ -543,7 +563,7 @@ else
         _ => "muted",
     };
 
-    private sealed record RoleChip(string Name, Func<string> Label)
+    private sealed record RoleChip(string Name)
     {
         public bool Selected { get; set; }
     }

@@ -637,6 +637,14 @@ button { font-family: inherit; }
 
 .check input { accent-color: var(--brand); width: 16px; height: 16px; }
 
+/* Role picker rows: checkbox + label + one-line explanation. */
+.role-options { display: grid; gap: 8px; }
+.role-options .check { align-items: flex-start; }
+.role-options .check input { margin-top: 2px; }
+.check-copy { display: block; line-height: 1.35; }
+.check-copy strong { display: block; font-weight: 600; }
+.check-copy span { display: block; margin-top: 2px; font-weight: 400; }
+
 .validation-message {
     display: block;
     color: var(--danger);
