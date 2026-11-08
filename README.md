@@ -12,10 +12,15 @@ A production-ready, highly scalable, and fully tested RESTful API built for mana
 ## 🌟 Key Features
 
 - **🔒 Authentication & Authorization:** Secure JWT-based authentication with fine-grained role & permission access control.
-- **👨‍⚕️ Patient & Doctor Management:** Complete lifecycle management for patients, doctors, and clinic staff.
+- **👨‍⚕️ Patient & Doctor Management:** Complete lifecycle management for patients, doctors, and clinic staff, including administrator-managed accounts and doctor↔account linking.
 - **📅 Appointment Scheduling:** Advanced scheduling system with collision checks and status tracking.
 - **🦷 FDI Tooth Treatment Records:** Comprehensive treatment recording system adhering to standard international tooth numbering systems.
-- **🧾 Billing & Invoicing:** Automated invoice generation, payment handling, and clinic financial summaries.
+- **🪥 Odontogram & Treatment Plans:** Per-tooth condition tracking, multi-session treatment plans with performed/estimated totals, and printable plan sheets.
+- **🧾 Billing & Invoicing:** Automated invoice generation, payment handling, clinic financial summaries, and outstanding-debt reporting.
+- **🧪 Dental Lab Tracking:** Lab-case workflow (sent → at lab → trial → tried-in → returned/failed) with overdue detection.
+- **🖼 Clinical Images:** X-ray and before/after uploads linked to a patient, tooth, or treatment record, stored behind an `IImageStorage` abstraction.
+- **📥 Excel Patient Import:** Administrator-only, all-or-nothing workbook import with dry-run preview, column mapping, and a downloadable rejection report.
+- **🛟 Operations:** Nightly SQL Server backups through a SQL Agent job (see `docs/operations/BACKUP-RESTORE.md`) and health endpoints.
 - **📚 OpenApi / Scalar Documentation:** Interactive API documentation using Scalar & Swagger UI.
 - **📈 Observability & Metrics:** Integrated **OpenTelemetry** and **Prometheus** metrics collection alongside structured logging with **Serilog**.
 
@@ -32,7 +37,8 @@ DentalClinicManagementSystem/
 │   ├── DentalClinic.Application/             # CQRS Handlers, DTOs, Behaviors, & FluentValidation
 │   ├── DentalClinic.Contracts/               # Public Request/Response DTOs & Contracts
 │   ├── DentalClinic.Domain/                  # Core Entities, Enums, Value Objects, & Business Rules
-│   └── DentalClinic.Infrastructure/          # EF Core Persistence, Migrations, & External Services
+│   ├── DentalClinic.Infrastructure/          # EF Core Persistence, Migrations, & External Services
+│   └── DentalClinic.Web/                     # Blazor Server UI (interactive server components)
 └── tests/
     ├── DentalClinic.Api.IntegrationTests/            # Full HTTP Pipeline Integration Tests
     ├── DentalClinic.Application.SubcutaneousTests/   # Subcutaneous Testing without HTTP Overhead
@@ -46,8 +52,9 @@ DentalClinicManagementSystem/
 
 * **CQRS Pattern:** Complete separation of Read (Queries) and Write (Commands) paths using `MediatR`.
 * **Validation Pipeline:** Pre-request validation using `FluentValidation` via MediatR Pipeline Behaviors.
-* **Global Exception Handling:** Centralized custom middleware handling business exceptions cleanly without leaking stack traces.
-* **Repository & Unit of Work:** Managed cleanly through Entity Framework Core.
+* **Result Flow:** Expected failures return `Result<T>` and map to RFC 7807 responses; exceptions are reserved for genuinely unexpected faults.
+* **Persistence:** EF Core `DbContext` behind the `IAppDbContext` interface (no repository/unit-of-work layer), with soft-delete filters, auditable entities, and migrations applied on startup only in Development.
+* **Caching:** `HybridCache` for read queries, with the caller scope baked into every restricted cache key and tag-based invalidation on mutation.
 
 ---
 
@@ -56,6 +63,7 @@ DentalClinicManagementSystem/
 Quality is at the heart of this project. The system includes an extensive suite of automated tests covering all domain rules, application logic, and full HTTP API execution paths.
 
 * **Test Suites:** Domain (entities/value objects), Application (handlers, behaviours, mappers), Web (components), Subcutaneous (in-process HTTP pipeline), and full-stack Integration (Testcontainers SQL Server). Run them all with `dotnet test DentalClinic.slnx`; the last two need Docker.
+* **Current suite:** Domain **292**, Application **105**, Web **69**, Subcutaneous **341**, Integration **258** (1,065 tests). Counts are a snapshot; the badge above only claims that the suites pass.
 * **Unit Testing:** Comprehensive test coverage for Domain entities, Value Objects, Mappers, and Application Handlers.
 * **Subcutaneous & Integration Testing:** Full end-to-end HTTP pipeline tests using `WebApplicationFactory` and real SQL Database side-effect assertions for all Controllers.
 
@@ -64,13 +72,16 @@ Quality is at the heart of this project. The system includes an extensive suite 
 ## 🛠 Tech Stack
 
 * **Framework:** .NET 10.0 (ASP.NET Core Web API)
+* **UI:** Blazor Server (interactive server rendering) in `src/DentalClinic.Web`
 * **ORM:** Entity Framework Core
 * **Database:** Microsoft SQL Server
+* **Excel:** ClosedXML (patient import + template)
+* **Caching:** `HybridCache` (in-memory + optional distributed)
 * **Containerization:** Docker, Docker Compose
 * **Design Patterns:** CQRS, Clean Architecture, MediatR
 * **Validation:** FluentValidation
 * **Observability:** OpenTelemetry, Prometheus, Serilog, Seq
-* **Testing Frameworks:** xUnit, WebApplicationFactory
+* **Testing Frameworks:** xUnit, WebApplicationFactory, Testcontainers
 * **Documentation:** Scalar API Reference, Swagger UI
 
 ---
@@ -92,7 +103,7 @@ cd DentalClinicManagementSystem
 ```
 
 
-2. **Spin up the full infrastructure (API, SQL Server, Seq, Prometheus):**
+2. **Spin up the full infrastructure (API, Web, SQL Server, Seq, Prometheus, Grafana):**
 ```bash
 docker compose up -d --build
 
@@ -100,10 +111,13 @@ docker compose up -d --build
 
 
 3. **Access Services:**
-* **Scalar UI:** `http://localhost:5002/scalar/v1`
-* **Swagger UI:** `http://localhost:5002/swagger`
+* **Web UI:** `http://localhost:7204`
+* **Scalar UI:** `http://localhost:5004/scalar/v1`
+* **Swagger UI:** `http://localhost:5004/swagger`
 * **Seq Logs:** `http://localhost:8081`
 * **Prometheus Metrics:** `http://localhost:9090`
+* **Grafana:** `http://localhost:3000`
+* **SQL Server:** `localhost,1434`
 
 
 
@@ -145,6 +159,15 @@ dotnet run --project src/DentalClinic.Web
 > ranges currently reserved on your machine.
 
 
+
+---
+
+## 🛟 Operations
+
+* **Backups:** Compose enables SQL Agent and the `sql-backup-init` sidecar registers a nightly full backup at 02:00 with 7-day retention under `containers/sqlserver-backups/`. Restore steps, retention, and the still-open off-box-copy requirement are documented in [`docs/operations/BACKUP-RESTORE.md`](docs/operations/BACKUP-RESTORE.md).
+* **Clinical images:** Stored outside `wwwroot` at `Images__StoragePath` (default `App_Data/images`), backed by the `dentalclinic-images` compose volume.
+* **Patient import:** Admin-only `/import` page; the workbook template and rejection report are generated on demand, and no row is written unless the whole file validates.
+* **Health:** `/health` (liveness) and `/health/ready` (database probe) are mapped in every environment.
 
 ---
 

@@ -253,11 +253,13 @@ original snapshot (baseline `33ce043`). Since then:
 | 3 | Patient balance & debt | **Complete** — `GET /invoices/summary` + `/outstanding-debts`, `InvoiceSummaryDto`. No aging buckets. | invoice-numbering slice |
 | 4 | WhatsApp reminders | **Complete** — `WhatsAppMessageBuilder` + `WhatsAppButton` (wa.me, prefilled message) in `Appointments.razor`. | invoice-numbering slice |
 | 8 | Medical alerts | **Complete** — `MedicalAlertEvaluator` derives severity server-side (incl. pregnancy + BP reading); badge shown on `Patients.razor`, `PatientDetails.razor`, the appointments drawer, and a dashboard count. Allergies remain free text. | prior slices |
-| 9 | Role-based permissions | (a) fixed — `InvoiceController` is `StaffOnly` with handler-level ownership. (b)/(c)/(d) still open. | prior slices |
+| 7 | X-ray / before-after images | **Complete** — `PatientImage` aggregate + `IImageStorage` (local disk at `Images__StoragePath`, outside `wwwroot`), `PatientImageController` (`StaffOnly`; list/upload/content/delete), declared-MIME + magic-byte agreement, 10 MB cap, server-generated names, gallery on the patient file. | `922c97e` |
+| 9 | Role-based permissions | (a) fixed — `InvoiceController` is `StaffOnly` with handler-level ownership. (b)/(c)/(d) closed — Admin-only `StaffUserController` (list/create/roles/status/password), `PUT`/`DELETE /doctors/{id}/user-link`, and a Web `Staff` page. Enforcement remains explicit roles + ownership checks rather than a `ClinicPermission` enum. | `2f8bb5c` |
+| 10 | Dental lab tracking | **Complete** — `LabCase` aggregate with an explicit transition map, `LabCaseController` (`StaffOnly`; status writes behind `ClinicalWrite`), overdue computed at query time, `LabCases.razor`. Lab cost is **not** auto-added to invoices (still a manual line). | `2d100f2` |
+| 11 | Automatic backups + Excel import | **Backups:** SQL Agent job + `sql-backup-init` sidecar (nightly 02:00, 7-day retention), runbook in `docs/operations/BACKUP-RESTORE.md`; off-box copy and a rehearsed restore remain open ops tasks. **Import:** ClosedXML, Admin-only, all-or-nothing patient import with preview/mapping/template/CSV report. | backup slice, `b6f23dc` |
 
-**Current summary: 5 Complete · 1 Partial · 5 Missing** — remaining: 5 financial
-dashboard, 6 dual currency, 7 image upload, 9 permission management UX, 10 lab
-tracking, 11 backups/import. Items 5 and 6 are the subject of the next-phase plan.
+**Current summary: 9 Complete · 2 Missing** — remaining: 5 financial
+dashboard, 6 dual currency. Items 5 and 6 are the subject of the next-phase plan.
 
 ---
 
@@ -387,7 +389,20 @@ Effort scale: **S** ≤ 3 days · **M** ≈ 1 week · **L** > 1 week.
 
 ---
 
-### 6.7 X-ray / before-after images — **Missing (M)**
+### 6.7 X-ray / before-after images — **Complete** (`922c97e`)
+
+**Implemented on `feature/backlog-completion` (`922c97e`).** `PatientImage` (+ `PatientImageKind` `Xray`/`Before`/`After`/`Other`)
+is append-only and soft-deleted; `IImageStorage` stores bytes on local disk **outside**
+`wwwroot` at `Images__StoragePath` (compose volume `dentalclinic-images`), so it can be
+swapped for object storage without touching handlers. `PatientImageController` exposes
+`GET`/`POST /patients/{id}/images`, `GET .../{imageId}/content` and `DELETE`, all
+`StaffOnly`; uploads are capped at 10 MB, filenames are server-generated, and the declared
+content type must agree with the magic-byte sniff. The Web gallery lives on the patient
+file (with an optional tooth number); it is **not** yet launched from the odontogram.
+Deviations from the plan below: no malware scanner (size/type limits only), no
+`ImageUpload.razor` shared component (the gallery and modal are inline in
+`PatientDetails.razor`), and images are served inline through an authenticated endpoint
+rather than as public static URLs.
 
 **Extend/reuse**
 - `Patient`, `TreatmentRecord` (→ `ToothNumber`), `AppDbContext`, the migration/audit interceptor pattern.
@@ -423,7 +438,18 @@ Effort scale: **S** ≤ 3 days · **M** ≈ 1 week · **L** > 1 week.
 
 ---
 
-### 6.9 Role-based permissions (secretary / doctor / owner) — **Partial → complete (M)**
+### 6.9 Role-based permissions (secretary / doctor / owner) — **Complete** (`2f8bb5c`)
+
+**Implemented on `feature/backlog-completion` (`2f8bb5c`).** Accounts are managed through an Admin-only
+`StaffUserController` (list, get, create, replace roles, activate/deactivate, reset
+password) behind an extended `IIdentityService`. Guards: role whitelist, no
+self-modification or self-deactivation, a last-admin defence, and deactivation as
+permanent lockout. `PUT`/`DELETE /doctors/{id}/user-link` closes the "UI-created doctor
+sees nothing" gap, and the Web `Staff` page drives both. Two deviations from the plan
+below: the explicit `ClinicPermission` matrix was **not** introduced — authorization stays
+"role policies on the controller + ownership/scope checks in every handler" — and
+`DoctorOnly` is still registered but unused, because doctor data is scoped by ownership
+rather than by policy alone.
 
 **Extend/reuse**
 - `Infrastructure/DependencyInjection.cs:122-126` — policies already exist; `DoctorOnly` just needs to be applied.
@@ -443,7 +469,18 @@ Effort scale: **S** ≤ 3 days · **M** ≈ 1 week · **L** > 1 week.
 
 ---
 
-### 6.10 Dental lab tracking — **Missing (M)**
+### 6.10 Dental lab tracking — **Complete** (`2d100f2`)
+
+**Implemented on `feature/backlog-completion`.** `LabCase` carries the planned fields and
+an explicit `Sent → AtLab → Trial → TriedIn → Returned` transition map (with `Failed` as a
+terminal-ish remake path back to `Sent`); invalid transitions return a `Result` conflict,
+not an exception. `LabCaseController` is `StaffOnly` with status changes behind
+`ClinicalWrite`, so reception can see and create cases but cannot advance clinical state.
+Overdue is computed at query time from `ExpectedReturnAtUtc` (`GET /lab-cases?overdue=true`)
+instead of the planned background service — no scheduler, no multi-replica problem, and the
+answer is always current. `LabCases.razor` is a status-grouped board with overdue
+highlighting. Deviation: lab cost is **not** auto-added to invoice lines; it stays on the
+case for reporting, so existing invoice totals are unchanged.
 
 **Extend/reuse**
 - `Patient`, `Doctor`, `TreatmentRecord` (a crown/implant record *is* the lab case), `Invoice` (lab cost is a billable line), `Appointment`.
@@ -461,7 +498,30 @@ Effort scale: **S** ≤ 3 days · **M** ≈ 1 week · **L** > 1 week.
 
 ---
 
-### 6.11 Automatic backups + Excel import — **Missing (S + M, independent)**
+### 6.11 Automatic backups + Excel import — **Complete** (backup slice, `b6f23dc`)
+
+**Backups — implemented as an ops job, not app code.** `docker-compose.yml` enables SQL
+Agent on `sqlserver` and runs a one-shot `sql-backup-init` sidecar that applies
+`containers/sqlserver/01-backup-job.sql`: a nightly 02:00 full backup with `CHECKSUM,
+COMPRESSION`, 7-day `xp_delete_file` retention, written to the host bind mount
+`containers/sqlserver-backups/`. Verification, force-run and restore-rehearsal steps are
+in `docs/operations/BACKUP-RESTORE.md`. **Still open (ops, not code):** copy backups
+off-host, alert when the newest `.bak` is older than ~26 hours, run and record the restore
+rehearsal (`REL-001`/`TEST-010`), and back up the `dentalclinic-images` volume.
+
+**Patient import — implemented.** `ClosedXML` 0.105.1 (centralized `PackageVersion`) backs
+a parser that builds every row through `Patient.Create`/`ContactInfo.Create`, so import
+applies exactly the same rules as the single-patient form. `ImportJob` +
+relationally stored `ImportRowError`; `ImportController` is `AdminOnly` (handler re-checks
+the role) and exposes `POST /imports/patients/preview`, `POST /imports/patients`,
+`GET /imports/patients/template`, `GET /imports/{id}` and `GET /imports/{id}/errors`.
+Commit is **all-or-nothing**: any rejected row persists a `Failed` job and returns its
+report (HTTP 200) while writing zero patients; an unreadable workbook or missing required
+header is a 400. Deviations from the plan: preview is a `POST` dry-run rather than
+`GET .../preview`; the rejection report is rendered to CSV on demand from the persisted
+rows (`ErrorReportPath` stays null) rather than stored as a file; header auto-detection has
+aliases and an explicit mapping override; only the `patient` cache tag is invalidated
+because no other entity is written.
 
 **Automatic backups (S–M, ops not code)**
 - No code changes required in the application. Prefer SQL Server native `BACKUP DATABASE` scheduled via **SQL Agent** in the `sqlserver` container (add a job via an init script mounted from `containers/`), or an external tool (`sqlbackup`/`minio`) — **not** an app-level `BackgroundService`, which would put backups in the web process's failure domain and produce no off-host copy.
@@ -549,7 +609,7 @@ Everything else floats.
 
 10. **`PatientScope()` exposes the whole registry to every staff role** (`ClinicAuthorization.cs:51-54`), including full medical history, to receptionists. Documented as intentional (`AuthorizationIntegrationTests.cs:266`) but it means there is **no confidentiality tier**.
 
-11. **No endpoint links a Doctor to an `AppUser`.** `AssignUser`/`UnassignUser` exist in the domain but are only called by the seeder. A doctor created through the UI gets **no `doctor_id` claim** → `CurrentUser.DoctorId` is null → `DoctorScope()` falls back to `Guid.Empty` (`ClinicAuthorization.cs:43`) → the doctor sees **zero** rows everywhere. Silent, confusing failure with no error message.
+11. ~~**No endpoint links a Doctor to an `AppUser`.**~~ **Resolved** (`2f8bb5c`) — `PUT/DELETE /api/v1/doctors/{id}/user-link` plus the Admin `Staff` page set/clear `Doctor.UserId`, and the handler refuses to link one account to two profiles. A doctor created through the UI can now be given a `doctor_id` claim instead of silently seeing zero rows.
 
 12. **Invoices with `AppointmentId == null` are invisible to restricted doctors.** `GetInvoicesQueryHandler:21-27` scopes via `i.AppointmentId != null && Appointments.Any(...)`. A doctor's own standalone invoices simply don't appear.
 
