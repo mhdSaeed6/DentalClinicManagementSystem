@@ -26,22 +26,38 @@ RUN dotnet publish "src/DentalClinic.Web/DentalClinic.Web.csproj" -c Release -o 
 # ----- Final Stage (API) -----
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
 
-# Install timezone data for TimeZoneInfo support. The timezone is applied at
-# runtime via the TZ environment variable rather than baked into the image, so
-# the same image can be deployed to a clinic in any region.
-RUN apt-get update && apt-get install -y tzdata && \
+# tzdata: TimeZoneInfo support for the clinic timezone. curl: container
+# healthchecks (the runtime image ships neither).
+# The timezone is applied at runtime via the TZ environment variable rather
+# than baked into the image, so the same image can be deployed to a clinic in
+# any region. The default matches the clinic's operating zone.
+RUN apt-get update && apt-get install -y --no-install-recommends tzdata curl && \
     dpkg-reconfigure -f noninteractive tzdata && \
     rm -rf /var/lib/apt/lists/*
 
-ENV TZ=America/Montreal
+ENV TZ=Asia/Damascus
+ENV ASPNETCORE_URLS=http://+:80
 
 WORKDIR /app
 COPY --from=build /app .
+
+# Clinical images live outside wwwroot (Images__StoragePath). Create the
+# directory and hand it to the image's non-root "app" user (UID 1654) so the
+# volume works unchanged when the container is switched to USER app.
+RUN mkdir -p /app/App_Data/images && chown -R app:app /app/App_Data
+
 EXPOSE 80
 ENTRYPOINT ["dotnet", "DentalClinic.Api.dll"]
 
 # ----- Web Stage -----
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS web
+
+RUN apt-get update && apt-get install -y --no-install-recommends tzdata curl && \
+    dpkg-reconfigure -f noninteractive tzdata && \
+    rm -rf /var/lib/apt/lists/*
+
+ENV TZ=Asia/Damascus
+ENV ASPNETCORE_URLS=http://+:80
 
 WORKDIR /app
 COPY --from=build /web .
