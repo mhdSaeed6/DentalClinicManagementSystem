@@ -12,6 +12,7 @@ using DentalClinic.Application.Common.Interfaces;
 using DentalClinic.Infrastructure.Data;
 using DentalClinic.Infrastructure.Settings;
 
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
@@ -37,6 +38,7 @@ public static class DependencyInjection
                 .AddControllerWithJsonConfiguration()
                 .AddValidation()
                 .AddConfiguredCors(configuration)
+                .AddConfiguredForwardedHeaders()
                 .AddIdentityInfrastructure()
                 .AddAppRateLimiting(configuration)
                 .AddAppOutputCaching()
@@ -211,6 +213,26 @@ public static class DependencyInjection
                 .AllowAnyHeader()
                 .AllowAnyMethod()
                 .AllowCredentials()));
+
+        return services;
+    }
+
+    /// <summary>
+    /// Trusts <c>X-Forwarded-For</c>/<c>X-Forwarded-Proto</c> from the reverse
+    /// proxy. The proxy address is not known at build time (it changes per
+    /// deployment), so the allow-lists are cleared, which trusts the immediate
+    /// peer. That is only safe because the API is reachable exclusively through
+    /// the proxy on the private compose network — never publish the container
+    /// port directly to the internet.
+    /// </summary>
+    public static IServiceCollection AddConfiguredForwardedHeaders(this IServiceCollection services)
+    {
+        services.Configure<ForwardedHeadersOptions>(options =>
+        {
+            options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+            options.KnownIPNetworks.Clear();
+            options.KnownProxies.Clear();
+        });
 
         return services;
     }

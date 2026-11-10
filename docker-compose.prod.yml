@@ -1,0 +1,241 @@
+# =============================================================================
+# DentalClinic — production stack
+#
+#   docker compose -f docker-compose.prod.yml --env-file .env up -d --build
+#
+# Unlike docker-compose.yml (the local/demo stack) this file:
+#   * runs every application container with ASPNETCORE_ENVIRONMENT=Production,
+#     so migrations and demo data are NOT seeded by the web host;
+#   * takes every secret from the environment (`${VAR:?}` fails fast when a
+#     required value is missing) instead of hard-coding it;
+#   * applies EF migrations in a one-shot `migrate` service before the API
+#     starts;
+#   * never publishes SQL Server, Seq, Prometheus or Grafana on 0.0.0.0 — the
+#     ops UIs bind to 127.0.0.1 only (reach them through an SSH tunnel);
+#   * puts the API and Web ports on 127.0.0.1 as well: a TLS-terminating
+#     reverse proxy (Caddy/Nginx/Traefik) on the host forwards 80/443 to them
+#     and sets X-Forwarded-For / X-Forwarded-Proto.
+#
+# First deployment:
+#   1. cp .env.example .env and fill in every value.
+#   2. docker compose -f docker-compose.prod.yml up -d --build
+#   3. The `migrate` service applies migrations + system data (roles, clinic
+#      profile) and exits; the API waits for it.
+#   4. Run the one-shot first-admin bootstrap (reads BOOTSTRAP_ADMIN_* from
+#      .env, see `.env.example`):
+#        docker compose -f docker-compose.prod.yml run --rm migrate --bootstrap-admin
+#   5. Remove BOOTSTRAP_ADMIN_EMAIL / BOOTSTRAP_ADMIN_PASSWORD from .env after
+#      the first successful run.
+# =============================================================================
+
+name: dentalclinic-prod
+
+services:
+  sqlserver:
+    container_name: dentalclinic-sql
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: ${SA_PASSWORD:?SA_PASSWORD must be set in .env}
+      # Required by the nightly backup job registered by sql-backup-init.
+      MSSQL_AGENT_ENABLED: "true"
+    volumes:
+      - sqlserver-data:/var/opt/mssql
+      # Host-visible folder for nightly .bak files. Copy them off-box (see
+      # docs/operations/BACKUP-RESTORE.md); a same-host backup is not a backup.
+      - ./containers/sqlserver-backups:/var/opt/mssql/backups
+    networks:
+      - dentalclinic-net
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >
+          /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$$MSSQL_SA_PASSWORD" -C -Q "SELECT 1" -b -o /dev/null ||
+          /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P "$$MSSQL_SA_PASSWORD" -Q "SELECT 1" -b -o /dev/null
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
+
+  # One-shot migration runner. Uses the API image because the runtime image has
+  # no SDK, so `dotnet ef` cannot run inside it — the app itself applies the
+  # migration chain (`--migrate`) and seeds roles + the clinic profile.
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: final
+    container_name: dentalclinic-migrate
+    command: ["--migrate"]
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      TZ: Asia/Damascus
+      ASPNETCORE_URLS: http://+:80
+      ConnectionStrings__DefaultConnection: "Server=sqlserver,1433;Database=DentalClinic;User Id=sa;Password=${SA_PASSWORD:?SA_PASSWORD must be set in .env};Encrypt=True;TrustServerCertificate=True;"
+      Bootstrap__ClinicName: ${BOOTSTRAP_CLINIC_NAME:-}
+      Bootstrap__ClinicNameArabic: ${BOOTSTRAP_CLINIC_NAME_ARABIC:-}
+      Bootstrap__TimeZoneId: ${BOOTSTRAP_TIMEZONE_ID:-Asia/Damascus}
+      Bootstrap__BaseCurrency: ${BOOTSTRAP_BASE_CURRENCY:-USD}
+      Bootstrap__DefaultCountryCode: ${BOOTSTRAP_DEFAULT_COUNTRY_CODE:-963}
+      # Only consumed by the one-shot `--bootstrap-admin` run; present so the
+      # command below needs no extra -e flags:
+      #   docker compose -f docker-compose.prod.yml run --rm migrate --bootstrap-admin
+      Bootstrap__AdminEmail: ${BOOTSTRAP_ADMIN_EMAIL:-}
+      Bootstrap__AdminPassword: ${BOOTSTRAP_ADMIN_PASSWORD:-}
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    networks:
+      - dentalclinic-net
+    restart: "no"
+
+  dentalclinic-api:
+    container_name: dentalclinic-api
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: final
+    ports:
+      # Loopback only: the host reverse proxy is the public entry point.
+      - "127.0.0.1:5004:80"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      TZ: Asia/Damascus
+      ASPNETCORE_URLS: http://+:80
+      ConnectionStrings__DefaultConnection: "Server=sqlserver,1433;Database=DentalClinic;User Id=sa;Password=${SA_PASSWORD:?SA_PASSWORD must be set in .env};Encrypt=True;TrustServerCertificate=True;"
+      # Long-lived secret: rotating it invalidates every refresh token.
+      JwtSettings__Secret: ${JWT_SECRET:?JWT_SECRET must be set in .env}
+      # Issuer/Audience must match the public origin; when the reverse proxy
+      # serves API and Web from one hostname, the CORS origin is that origin.
+      JwtSettings__Issuer: ${CORS_ALLOWED_ORIGIN:?CORS_ALLOWED_ORIGIN must be set in .env}
+      JwtSettings__Audience: ${CORS_ALLOWED_ORIGIN:?CORS_ALLOWED_ORIGIN must be set in .env}
+      AppSettings__AllowedOrigins__0: ${CORS_ALLOWED_ORIGIN:?CORS_ALLOWED_ORIGIN must be set in .env}
+      # Seq runs inside the private network; set SEQ_API_KEY after creating a
+      # key in the Seq UI so log ingestion is authenticated.
+      Serilog__WriteTo__1__Args__serverUrl: http://seq:5341
+      Serilog__WriteTo__1__Args__apiKey: ${SEQ_API_KEY:-}
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://seq:5341/ingest/otlp/v1/traces
+      OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+      # Clinical images are written outside the web root; the named volume
+      # survives container recreation. Back this volume up separately.
+      Images__StoragePath: /app/App_Data/images
+    volumes:
+      - dentalclinic-images:/app/App_Data/images
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      seq:
+        condition: service_started
+    networks:
+      - dentalclinic-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost/health/ready || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  # Blazor Server UI. Same Dockerfile, second target. It reaches the API over
+  # the compose network (service name), not over localhost.
+  dentalclinic-web:
+    container_name: dentalclinic-web
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: web
+    ports:
+      - "127.0.0.1:7204:80"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      TZ: Asia/Damascus
+      ASPNETCORE_URLS: http://+:80
+      ApiBaseUrl: http://dentalclinic-api
+    depends_on:
+      dentalclinic-api:
+        condition: service_healthy
+    networks:
+      - dentalclinic-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  # One-shot sidecar: registers the SQL Agent nightly backup job after SQL
+  # Server is healthy. Exits when done; idempotent on re-run.
+  sql-backup-init:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: dentalclinic-sql-init
+    environment:
+      SQLSERVER_HOST: sqlserver
+      SQLSERVER_USER: sa
+      SQLSERVER_PASSWORD: ${SA_PASSWORD:?SA_PASSWORD must be set in .env}
+    volumes:
+      - ./containers/sqlserver:/scripts:ro
+    entrypoint: ["/bin/sh", "/scripts/wait-for-sql-and-install.sh"]
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    networks:
+      - dentalclinic-net
+    restart: "no"
+
+  seq:
+    image: datalust/seq:latest
+    container_name: seq
+    environment:
+      ACCEPT_EULA: "Y"
+      SEQ_FIRSTRUN_ADMINUSERNAME: admin
+      SEQ_FIRSTRUN_ADMINPASSWORD: ${SEQ_ADMIN_PASSWORD:?SEQ_ADMIN_PASSWORD must be set in .env}
+    ports:
+      # Ops UI on loopback only; reach it with an SSH tunnel.
+      - "127.0.0.1:8081:80"
+    volumes:
+      - seq-data:/data
+    networks:
+      - dentalclinic-net
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    volumes:
+      - ./containers/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "127.0.0.1:9090:9090"
+    networks:
+      - dentalclinic-net
+    depends_on:
+      dentalclinic-api:
+        condition: service_started
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD must be set in .env}
+    ports:
+      - "127.0.0.1:3000:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+    networks:
+      - dentalclinic-net
+    depends_on:
+      prometheus:
+        condition: service_started
+    restart: unless-stopped
+
+volumes:
+  sqlserver-data: {}
+  grafana-data: {}
+  dentalclinic-images: {}
+  seq-data: {}
+
+networks:
+  dentalclinic-net:
+    driver: bridge

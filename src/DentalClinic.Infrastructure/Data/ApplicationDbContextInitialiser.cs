@@ -14,7 +14,9 @@ using DentalClinic.Infrastructure.Settings;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -25,12 +27,15 @@ public class ApplicationDbContextInitialiser(
     AppDbContext context,
     UserManager<AppUser> userManager,
     RoleManager<IdentityRole> roleManager,
-    IOptions<AppSettings> appSettingsOptions)
+    IOptions<AppSettings> appSettingsOptions,
+    IConfiguration configuration,
+    IHostEnvironment environment)
 {
     // Development-only demo credentials. They satisfy the Identity password
     // policy and must stay in sync with Tests.Common/Security/TestUsers.cs.
-    // Production must never reach this code path — see Program.cs, where
-    // InitialiseDatabaseAsync() only runs under the Development environment.
+    // Production must never reach this code path — see SeedDemoDataAsync, which
+    // refuses to run outside Development, and Program.cs, where only the system
+    // seed is invoked by --migrate.
     private const string SeededAdminPassword = "Admin!Pass123";
     private const string SeededDoctorPassword = "Doctor!Pass123";
     private const string SeededReceptionistPassword = "Receptionist!Pass123";
@@ -40,6 +45,14 @@ public class ApplicationDbContextInitialiser(
     private readonly UserManager<AppUser> _userManager = userManager;
     private readonly RoleManager<IdentityRole> _roleManager = roleManager;
     private readonly AppSettings _appSettings = appSettingsOptions.Value;
+    private readonly IConfiguration _configuration = configuration;
+    private readonly IHostEnvironment _environment = environment;
+
+    /// <summary>
+    /// The canonical role names. Seeded in every environment because every
+    /// authorization policy in the API is written against them.
+    /// </summary>
+    public static IReadOnlyList<string> SystemRoles { get; } = ["Admin", "Doctor", "Receptionist"];
 
     public async Task InitialiseAsync()
     {
@@ -62,293 +75,456 @@ public class ApplicationDbContextInitialiser(
         }
     }
 
-    public async Task SeedAsync()
+    /// <summary>
+    /// Seeds what every environment needs to function: the clinic profile
+    /// (singleton) and the canonical roles. Idempotent, contains no demo data
+    /// and no accounts, so it is safe to run against a real database.
+    /// </summary>
+    public async Task SeedSystemDataAsync()
     {
         try
         {
-            await TrySeedAsync();
+            await SeedClinicProfileAsync();
+            await SeedSystemRolesAsync();
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "An error occurred while seeding the database.");
+            _logger.LogError(ex, "An error occurred while seeding system data.");
             throw;
         }
     }
 
-    public async Task TrySeedAsync()
+    /// <summary>
+    /// Seeds the demo dataset (accounts, doctors, services, patients,
+    /// appointments and odontogram rows). Refuses to run outside Development:
+    /// a production database must never contain these known-password accounts.
+    /// </summary>
+    public async Task SeedDemoDataAsync()
     {
-        // 0. Clinic profile (singleton). The host timezone is a safe default:
-        // it always resolves, and the admin is expected to set the real clinic
-        // timezone from Settings once the app is running.
-        if (!await _context.ClinicSettings.AnyAsync())
+        if (!_environment.IsDevelopment())
         {
-            var clinicResult = ClinicSetting.Create(
-                name: "Al Noor Dental Clinic",
-                nameArabic: "عيادة النور لطب الأسنان",
+            _logger.LogInformation(
+                "Demo data seeding is skipped outside Development (current environment: {Environment}).",
+                _environment.EnvironmentName);
+
+            return;
+        }
+
+        try
+        {
+            // 1. Default Admin Account
+            var adminUser = await EnsureDemoAccountAsync(
+                new AppUser
+                {
+                    Id = "19a59129-6c20-417a-834d-11a208d32d96",
+                    Email = "admin@dentalclinic.com",
+                    UserName = "admin@dentalclinic.com",
+                    EmailConfirmed = true
+                },
+                SeededAdminPassword,
+                "Admin");
+
+            // 2. Doctors Accounts & Profiles
+            var doctor01User = await EnsureDemoAccountAsync(
+                new AppUser
+                {
+                    Id = "b6327240-0aea-46fc-863a-777fc4e42560",
+                    Email = "dr.smith@dentalclinic.com",
+                    UserName = "dr.smith@dentalclinic.com",
+                    EmailConfirmed = true
+                },
+                SeededDoctorPassword,
+                "Doctor");
+
+            var doctor02User = await EnsureDemoAccountAsync(
+                new AppUser
+                {
+                    Id = "8104ab20-26c2-4651-b1de-c0baf04dbbd9",
+                    Email = "dr.sara@dentalclinic.com",
+                    UserName = "dr.sara@dentalclinic.com",
+                    EmailConfirmed = true
+                },
+                SeededDoctorPassword,
+                "Doctor");
+
+            // 2b. Receptionist Account
+            var receptionistUser = await EnsureDemoAccountAsync(
+                new AppUser
+                {
+                    Id = "2f9c4a51-7b3e-4d0a-9c1e-5a6b7c8d9e0f",
+                    Email = "reception@dentalclinic.com",
+                    UserName = "reception@dentalclinic.com",
+                    EmailConfirmed = true
+                },
+                SeededReceptionistPassword,
+                "Receptionist");
+
+            // 3. Seed Doctors
+            if (!await _context.Doctors.AnyAsync())
+            {
+                var contact1Res = ContactInfo.Create("+963911111111");
+                var contact2Res = ContactInfo.Create("+963922222222");
+
+                if (contact1Res.IsError || contact2Res.IsError)
+                {
+                    throw new Exception("ContactInfo Seeding Failed.");
+                }
+
+                var doc1Res = Doctor.Create("John", "Smith", "Orthodontics", contact1Res.Value, Gender.Male);
+                var doc2Res = Doctor.Create("Sara", "Johnson", "Endodontics", contact2Res.Value, Gender.Female);
+
+                if (doc1Res.IsError || doc2Res.IsError)
+                {
+                    throw new Exception("Doctor Seeding Failed.");
+                }
+
+                // ربط ملفات الطبيب بحسابات Identity الخاصة بهم
+                doc1Res.Value.AssignUser(doctor01User.Id);
+                doc2Res.Value.AssignUser(doctor02User.Id);
+
+                _context.Doctors.AddRange([doc1Res.Value, doc2Res.Value]);
+            }
+
+            // 4. Seed Dental Services
+            if (!_context.DentalServices.Any())
+            {
+                _context.DentalServices.AddRange([
+                    DentalService.Create("Teeth Cleaning", "Routine cleaning and polishing", 50.00m).Value,
+                    DentalService.Create("Composite Filling", "Tooth-colored restoration", 120.00m).Value,
+                    DentalService.Create("Root Canal Treatment", "Endodontic therapy", 350.00m).Value,
+                    DentalService.Create("Tooth Extraction", "Simple tooth removal", 100.00m).Value,
+                    DentalService.Create("Teeth Whitening", "Professional bleaching procedure", 200.00m).Value
+                ]);
+            }
+
+            // 5. Patients Seed
+            if (!_context.Patients.Any())
+            { // 1. إنشاء ContactInfo
+                var contact1Res = ContactInfo.Create("+963911111222");
+                var contact2Res = ContactInfo.Create("+963922222333");
+
+                if (contact1Res.IsError || contact2Res.IsError)
+                {
+                    throw new Exception($"ContactInfo Seeding Failed: {contact1Res.Errors} | {contact2Res.Errors}");
+                }
+
+                // Demo medical alerts so the alert badges and the dashboard count
+                // are not always zero on a fresh database.
+                var michaelHistory = new MedicalHistory
+                {
+                    HasDiabetes = true,
+                    BloodPressureReading = "148/92"
+                };
+
+                var emmaHistory = new MedicalHistory
+                {
+                    HasAsthma = true,
+                    IsPregnant = true,
+                    PregnancyWeeks = 32,
+                    BloodPressureReading = "118/76"
+                };
+
+                _context.Patients.AddRange([
+                    Patient.Create("Michael", "Brown", contact1Res.Value, DateTime.UtcNow.AddYears(-30), Gender.Male, michaelHistory).Value,
+                    Patient.Create("Emma", "Wilson", contact2Res.Value, DateTime.UtcNow.AddYears(-25), Gender.Female, emmaHistory).Value
+                ]);
+            }
+
+            await _context.SaveChangesAsync();
+
+            // 5b. Ensure existing (previously unlinked) seeded doctor profiles are
+            //     linked to their identity accounts. Idempotent so re-running is safe.
+            var doctorProfiles = await _context.Doctors.ToListAsync();
+            var smithProfile = doctorProfiles.FirstOrDefault(d => d.FirstName == "John" && d.LastName == "Smith");
+            if (smithProfile is not null && string.IsNullOrEmpty(smithProfile.UserId))
+            {
+                smithProfile.AssignUser(doctor01User.Id);
+            }
+
+            var saraProfile = doctorProfiles.FirstOrDefault(d => d.FirstName == "Sara" && d.LastName == "Johnson");
+            if (saraProfile is not null && string.IsNullOrEmpty(saraProfile.UserId))
+            {
+                saraProfile.AssignUser(doctor02User.Id);
+            }
+
+            // Persist the back-filled doctor/account links before moving on; on an
+            // existing database the appointment seed below is skipped, so without
+            // this call the links would never be committed.
+            await _context.SaveChangesAsync();
+
+            // 6. Sample Appointments Seed
+            if (!_context.Appointments.Any())
+            {
+                var doctors = await _context.Doctors.ToListAsync();
+                var patients = await _context.Patients.ToListAsync();
+                var services = await _context.DentalServices.ToListAsync();
+
+                if (doctors.Count > 0 && patients.Count > 0 && services.Count > 0)
+                {
+                    var now = DateTimeOffset.UtcNow;
+                    var startAt = now.AddHours(2);
+
+                    var duration = _appSettings.MinimumAppointmentDurationInMinutes > 0
+                        ? _appSettings.MinimumAppointmentDurationInMinutes
+                        : 30;
+
+                    var sampleAppointment = Appointment.Create(
+                        patients[0].Id,
+                        doctors[0].Id,
+                        services[0].Id,
+                        startAt.DateTime,
+                        duration).Value; // <--- الاعتماد على _appSettings الحقل المحقون
+
+                    _context.Appointments.Add(sampleAppointment);
+                    await _context.SaveChangesAsync();
+                }
+            }
+
+            // 7. Demo Odontogram Seed (S6) — بيانات عرض لحالات الأسنان (التطوير فقط مثل بقية المهيأ).
+            // Demo per-tooth conditions for the seeded patients, built through the
+            // PatientTooth.Create factory like every other seeded domain object.
+            var demoPatients = await _context.Patients.ToListAsync();
+            var demoPatientIds = demoPatients
+                .Select(p => p.Id)
+                .ToList();
+
+            // الصفوف المحذوفة ناعماً تعد أيضاً "موجودة" (IgnoreQueryFilters): كي لا يعيد المهيأ إضافة سن مسحه المستخدم
+            // ولن يمس الفهرس الفريد المصفى على (PatientId, ToothNumber) عند إعادة تشغيل الحاوية — مثالي التكرارية.
+            // Soft-deleted rows count as "already exists" too: a restart never hits the
+            // filtered unique index and never resurrects a condition the clinician cleared.
+            var seededTeeth = await _context.PatientTeeth
+                .IgnoreQueryFilters()
+                .Where(pt => demoPatientIds.Contains(pt.PatientId))
+                .Select(pt => new { pt.PatientId, pt.ToothNumber })
+                .ToListAsync();
+
+            var seededPairs = new HashSet<(Guid PatientId, int ToothNumber)>();
+
+            foreach (var seededTooth in seededTeeth)
+            {
+                seededPairs.Add((seededTooth.PatientId, seededTooth.ToothNumber));
+            }
+
+            var michaelPatient = demoPatients.FirstOrDefault(p => p.FirstName == "Michael" && p.LastName == "Brown");
+            var emmaPatient = demoPatients.FirstOrDefault(p => p.FirstName == "Emma" && p.LastName == "Wilson");
+
+            // نصوص عامة للعرض فقط — لا بيانات حقيقية. Generic demo notes only — no real data.
+            var demoTeeth = new (Patient? Patient, int ToothNumber, ToothCondition Condition, ToothSurface? Surface, string? Notes)[]
+            {
+                (michaelPatient, 16, ToothCondition.Caries, ToothSurface.Occlusal, "Demo row — occlusal caries flagged at the last check-up."),
+                (michaelPatient, 26, ToothCondition.Filled, ToothSurface.Mesial, "Demo row — old composite filling, intact margins."),
+                (michaelPatient, 36, ToothCondition.Crown, null, null),
+                (emmaPatient, 11, ToothCondition.Missing, null, null),
+                (emmaPatient, 21, ToothCondition.Healthy, ToothSurface.Incisal, "Demo row — routine review, no findings.")
+            };
+
+            var addedTeeth = 0;
+
+            foreach (var demo in demoTeeth)
+            {
+                if (demo.Patient is null || seededPairs.Contains((demo.Patient.Id, demo.ToothNumber)))
+                {
+                    continue;
+                }
+
+                var toothRes = PatientTooth.Create(demo.Patient.Id, demo.ToothNumber, demo.Condition, demo.Surface, demo.Notes);
+
+                if (toothRes.IsError)
+                {
+                    throw new Exception($"PatientTooth Seeding Failed: {toothRes.Errors}");
+                }
+
+                _context.PatientTeeth.Add(toothRes.Value);
+                addedTeeth++;
+            }
+
+            if (addedTeeth > 0)
+            {
+                await _context.SaveChangesAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "An error occurred while seeding demo data.");
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Seeds system data and then idempotently creates/ensures the first
+    /// administrator. This is the only supported way to obtain an Admin account
+    /// in Production, where <c>StaffUserController</c> is Admin-only and the
+    /// demo seeder never runs.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when the e-mail or password is missing/invalid, or when Identity
+    /// rejects the password (the message names the policy so the operator can
+    /// fix the environment variable and retry).
+    /// </exception>
+    public async Task BootstrapAdminAsync(BootstrapOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+
+        var email = options.AdminEmail?.Trim();
+
+        if (string.IsNullOrWhiteSpace(email))
+        {
+            throw new InvalidOperationException(
+                "Bootstrap:AdminEmail is required when running with --bootstrap-admin. " +
+                "Set the Bootstrap__AdminEmail environment variable to the first administrator's e-mail address.");
+        }
+
+        if (!System.Net.Mail.MailAddress.TryCreate(email, out _))
+        {
+            throw new InvalidOperationException(
+                $"Bootstrap:AdminEmail '{email}' is not a valid e-mail address.");
+        }
+
+        var password = options.AdminPassword;
+
+        if (string.IsNullOrWhiteSpace(password))
+        {
+            throw new InvalidOperationException(
+                "Bootstrap:AdminPassword is required when running with --bootstrap-admin. " +
+                "Set the Bootstrap__AdminPassword environment variable to a strong password (12+ characters, mixed case, digit and symbol).");
+        }
+
+        // Validate the inputs before touching the database, so a mistyped
+        // environment variable does not leave a half-applied bootstrap behind.
+        await SeedSystemDataAsync();
+
+        var user = await _userManager.FindByEmailAsync(email);
+
+        if (user is null)
+        {
+            user = new AppUser
+            {
+                Email = email,
+                UserName = email,
+                EmailConfirmed = true
+            };
+
+            var created = await _userManager.CreateAsync(user, password);
+
+            if (!created.Succeeded)
+            {
+                throw new InvalidOperationException(
+                    $"Could not create the bootstrap administrator '{email}': {DescribeIdentityErrors(created)}. " +
+                    "The password must be at least 12 characters and contain an upper-case letter, a lower-case letter, a digit and a non-alphanumeric character.");
+            }
+        }
+        else if (!await _userManager.CheckPasswordAsync(user, password))
+        {
+            // Never silently rotate an existing administrator's password: the
+            // credential may have been changed deliberately after the first
+            // bootstrap. Re-running the command only repairs the role/state.
+            _logger.LogWarning(
+                "Bootstrap administrator {Email} already exists with a different password. " +
+                "The existing credential is preserved; only the Admin role and account state are ensured.",
+                email);
+        }
+
+        if (!user.EmailConfirmed || user.LockoutEnd is not null || user.AccessFailedCount > 0)
+        {
+            user.EmailConfirmed = true;
+            user.LockoutEnd = null;
+            user.AccessFailedCount = 0;
+
+            await _userManager.UpdateAsync(user);
+        }
+
+        if (!await _userManager.IsInRoleAsync(user, "Admin"))
+        {
+            var added = await _userManager.AddToRoleAsync(user, "Admin");
+
+            if (!added.Succeeded)
+            {
+                throw new InvalidOperationException(
+                    $"Could not assign the Admin role to the bootstrap administrator '{email}': {DescribeIdentityErrors(added)}.");
+            }
+        }
+
+        _logger.LogInformation("Bootstrap administrator {Email} is ready.", email);
+    }
+
+    /// <summary>
+    /// Ensures the singleton clinic profile exists. Values come from the
+    /// <c>Bootstrap:*</c> configuration section so a fresh production database
+    /// gets the real clinic name, timezone and currency instead of demo
+    /// defaults. An invalid configured timezone falls back to the built-in
+    /// default rather than leaving the row unseeded.
+    /// </summary>
+    private async Task SeedClinicProfileAsync()
+    {
+        if (await _context.ClinicSettings.AnyAsync())
+        {
+            return;
+        }
+
+        var bootstrap = BootstrapOptions.FromConfiguration(_configuration);
+
+        var clinicResult = ClinicSetting.Create(
+            name: bootstrap.ResolvedClinicName,
+            nameArabic: bootstrap.ResolvedClinicNameArabic,
+            logoUrl: null,
+            phone: null,
+            address: null,
+            email: null,
+            timeZoneId: bootstrap.ResolvedTimeZoneId,
+            baseCurrency: bootstrap.ResolvedBaseCurrency,
+            secondaryCurrency: null,
+            defaultCountryCode: bootstrap.ResolvedDefaultCountryCode);
+
+        if (clinicResult.IsError)
+        {
+            _logger.LogWarning(
+                "Configured clinic profile was rejected: {@Errors}. Falling back to the built-in defaults.",
+                clinicResult.Errors);
+
+            clinicResult = ClinicSetting.Create(
+                name: BootstrapOptions.DefaultClinicName,
+                nameArabic: BootstrapOptions.DefaultClinicNameArabic,
                 logoUrl: null,
                 phone: null,
                 address: null,
                 email: null,
-                timeZoneId: TimeZoneInfo.Local.Id,
-                baseCurrency: "USD",
+                timeZoneId: BootstrapOptions.DefaultTimeZoneId,
+                baseCurrency: BootstrapOptions.DefaultBaseCurrency,
                 secondaryCurrency: null,
-                defaultCountryCode: null);
-
-            if (clinicResult.IsError)
-            {
-                _logger.LogWarning(
-                    "Clinic profile seed was rejected: {@Errors}",
-                    clinicResult.Errors);
-            }
-            else
-            {
-                _context.ClinicSettings.Add(clinicResult.Value);
-                await _context.SaveChangesAsync(default);
-            }
+                defaultCountryCode: BootstrapOptions.DefaultDefaultCountryCode);
         }
 
-        // 1. Roles Definition
-        string[] roles = ["Admin", "Doctor", "Receptionist"];
-        foreach (var roleName in roles)
+        if (clinicResult.IsError)
         {
-            if (_roleManager.Roles.All(r => r.Name != roleName))
-            {
-                await _roleManager.CreateAsync(new IdentityRole(roleName));
-            }
+            throw new InvalidOperationException(
+                $"Could not seed the clinic profile: {string.Join("; ", clinicResult.Errors.Select(e => e.Description))}");
         }
 
-        // 2. Default Admin Account
-        var adminUser = await EnsureDemoAccountAsync(
-            new AppUser
-            {
-                Id = "19a59129-6c20-417a-834d-11a208d32d96",
-                Email = "admin@dentalclinic.com",
-                UserName = "admin@dentalclinic.com",
-                EmailConfirmed = true
-            },
-            SeededAdminPassword,
-            "Admin");
+        _context.ClinicSettings.Add(clinicResult.Value);
+        await _context.SaveChangesAsync(default);
+    }
 
-        // 3. Doctors Accounts & Profiles
-        var doctor01User = await EnsureDemoAccountAsync(
-            new AppUser
-            {
-                Id = "b6327240-0aea-46fc-863a-777fc4e42560",
-                Email = "dr.smith@dentalclinic.com",
-                UserName = "dr.smith@dentalclinic.com",
-                EmailConfirmed = true
-            },
-            SeededDoctorPassword,
-            "Doctor");
-
-        var doctor02User = await EnsureDemoAccountAsync(
-            new AppUser
-            {
-                Id = "8104ab20-26c2-4651-b1de-c0baf04dbbd9",
-                Email = "dr.sara@dentalclinic.com",
-                UserName = "dr.sara@dentalclinic.com",
-                EmailConfirmed = true
-            },
-            SeededDoctorPassword,
-            "Doctor");
-
-        // 3b. Receptionist Account
-        var receptionistUser = await EnsureDemoAccountAsync(
-            new AppUser
-            {
-                Id = "2f9c4a51-7b3e-4d0a-9c1e-5a6b7c8d9e0f",
-                Email = "reception@dentalclinic.com",
-                UserName = "reception@dentalclinic.com",
-                EmailConfirmed = true
-            },
-            SeededReceptionistPassword,
-            "Receptionist");
-
-        // 4. Seed Doctors
-        if (!await _context.Doctors.AnyAsync())
+    private async Task SeedSystemRolesAsync()
+    {
+        foreach (var roleName in SystemRoles)
         {
-            var contact1Res = ContactInfo.Create("+963911111111");
-            var contact2Res = ContactInfo.Create("+963922222222");
-
-            if (contact1Res.IsError || contact2Res.IsError)
-            {
-                throw new Exception("ContactInfo Seeding Failed.");
-            }
-
-            var doc1Res = Doctor.Create("John", "Smith", "Orthodontics", contact1Res.Value, Gender.Male);
-            var doc2Res = Doctor.Create("Sara", "Johnson", "Endodontics", contact2Res.Value, Gender.Female);
-
-            if (doc1Res.IsError || doc2Res.IsError)
-            {
-                throw new Exception("Doctor Seeding Failed.");
-            }
-
-            // ربط ملفات الطبيب بحسابات Identity الخاصة بهم
-            doc1Res.Value.AssignUser(doctor01User.Id);
-            doc2Res.Value.AssignUser(doctor02User.Id);
-
-            // <-- هذا السطر كان مفقوداً لديكم
-            _context.Doctors.AddRange([doc1Res.Value, doc2Res.Value]);
-        }
-
-        // 5. Seed Dental Services
-        if (!_context.DentalServices.Any())
-        {
-            _context.DentalServices.AddRange([
-                DentalService.Create("Teeth Cleaning", "Routine cleaning and polishing", 50.00m).Value,
-                DentalService.Create("Composite Filling", "Tooth-colored restoration", 120.00m).Value,
-                DentalService.Create("Root Canal Treatment", "Endodontic therapy", 350.00m).Value,
-                DentalService.Create("Tooth Extraction", "Simple tooth removal", 100.00m).Value,
-                DentalService.Create("Teeth Whitening", "Professional bleaching procedure", 200.00m).Value
-            ]);
-        }
-
-        // 6. Patients Seed
-        if (!_context.Patients.Any())
-        { // 1. إنشاء ContactInfo
-            var contact1Res = ContactInfo.Create("+963911111222");
-            var contact2Res = ContactInfo.Create("+963922222333");
-
-            if (contact1Res.IsError || contact2Res.IsError)
-            {
-                throw new Exception($"ContactInfo Seeding Failed: {contact1Res.Errors} | {contact2Res.Errors}");
-            }
-
-            // Demo medical alerts so the alert badges and the dashboard count
-            // are not always zero on a fresh database.
-            var michaelHistory = new MedicalHistory
-            {
-                HasDiabetes = true,
-                BloodPressureReading = "148/92"
-            };
-
-            var emmaHistory = new MedicalHistory
-            {
-                HasAsthma = true,
-                IsPregnant = true,
-                PregnancyWeeks = 32,
-                BloodPressureReading = "118/76"
-            };
-
-            _context.Patients.AddRange([
-                Patient.Create("Michael", "Brown", contact1Res.Value, DateTime.UtcNow.AddYears(-30), Gender.Male, michaelHistory).Value,
-                Patient.Create("Emma", "Wilson", contact2Res.Value, DateTime.UtcNow.AddYears(-25), Gender.Female, emmaHistory).Value
-            ]);
-        }
-
-        await _context.SaveChangesAsync();
-
-        // 4b. Ensure existing (previously unlinked) seeded doctor profiles are linked
-        //     to their identity accounts. Idempotent so re-running is safe.
-        var doctorProfiles = await _context.Doctors.ToListAsync();
-        var smithProfile = doctorProfiles.FirstOrDefault(d => d.FirstName == "John" && d.LastName == "Smith");
-        if (smithProfile is not null && string.IsNullOrEmpty(smithProfile.UserId))
-        {
-            smithProfile.AssignUser(doctor01User.Id);
-        }
-
-        var saraProfile = doctorProfiles.FirstOrDefault(d => d.FirstName == "Sara" && d.LastName == "Johnson");
-        if (saraProfile is not null && string.IsNullOrEmpty(saraProfile.UserId))
-        {
-            saraProfile.AssignUser(doctor02User.Id);
-        }
-
-        // Persist the back-filled doctor/account links before moving on; on an
-        // existing database the appointment seed below is skipped, so without
-        // this call the links would never be committed.
-        await _context.SaveChangesAsync();
-
-        // 7. Sample Appointments Seed
-        if (!_context.Appointments.Any())
-        {
-            var doctors = await _context.Doctors.ToListAsync();
-            var patients = await _context.Patients.ToListAsync();
-            var services = await _context.DentalServices.ToListAsync();
-
-            if (doctors.Count > 0 && patients.Count > 0 && services.Count > 0)
-            {
-                var now = DateTimeOffset.UtcNow;
-                var startAt = now.AddHours(2);
-
-                var duration = _appSettings.MinimumAppointmentDurationInMinutes > 0
-                    ? _appSettings.MinimumAppointmentDurationInMinutes
-                    : 30;
-
-                var sampleAppointment = Appointment.Create(
-                    patients[0].Id,
-                    doctors[0].Id,
-                    services[0].Id,
-                    startAt.DateTime,
-                    duration).Value; // <--- الاعتماد على _appSettings الحقل المحقون
-
-                _context.Appointments.Add(sampleAppointment);
-                await _context.SaveChangesAsync();
-            }
-        }
-
-        // 8. Demo Odontogram Seed (S6) — بيانات عرض لحالات الأسنان (التطوير فقط مثل بقية المهيأ).
-        // Demo per-tooth conditions for the seeded patients, built through the
-        // PatientTooth.Create factory like every other seeded domain object.
-        var demoPatients = await _context.Patients.ToListAsync();
-        var demoPatientIds = demoPatients
-            .Select(p => p.Id)
-            .ToList();
-
-        // الصفوف المحذوفة ناعماً تعد أيضاً "موجودة" (IgnoreQueryFilters): كي لا يعيد المهيأ إضافة سن مسحه المستخدم
-        // ولن يمس الفهرس الفريد المصفى على (PatientId, ToothNumber) عند إعادة تشغيل الحاوية — مثالي التكرارية.
-        // Soft-deleted rows count as "already exists" too: a restart never hits the
-        // filtered unique index and never resurrects a condition the clinician cleared.
-        var seededTeeth = await _context.PatientTeeth
-            .IgnoreQueryFilters()
-            .Where(pt => demoPatientIds.Contains(pt.PatientId))
-            .Select(pt => new { pt.PatientId, pt.ToothNumber })
-            .ToListAsync();
-
-        var seededPairs = new HashSet<(Guid PatientId, int ToothNumber)>();
-
-        foreach (var seededTooth in seededTeeth)
-        {
-            seededPairs.Add((seededTooth.PatientId, seededTooth.ToothNumber));
-        }
-
-        var michaelPatient = demoPatients.FirstOrDefault(p => p.FirstName == "Michael" && p.LastName == "Brown");
-        var emmaPatient = demoPatients.FirstOrDefault(p => p.FirstName == "Emma" && p.LastName == "Wilson");
-
-        // نصوص عامة للعرض فقط — لا بيانات حقيقية. Generic demo notes only — no real data.
-        var demoTeeth = new (Patient? Patient, int ToothNumber, ToothCondition Condition, ToothSurface? Surface, string? Notes)[]
-        {
-            (michaelPatient, 16, ToothCondition.Caries, ToothSurface.Occlusal, "Demo row — occlusal caries flagged at the last check-up."),
-            (michaelPatient, 26, ToothCondition.Filled, ToothSurface.Mesial, "Demo row — old composite filling, intact margins."),
-            (michaelPatient, 36, ToothCondition.Crown, null, null),
-            (emmaPatient, 11, ToothCondition.Missing, null, null),
-            (emmaPatient, 21, ToothCondition.Healthy, ToothSurface.Incisal, "Demo row — routine review, no findings.")
-        };
-
-        var addedTeeth = 0;
-
-        foreach (var demo in demoTeeth)
-        {
-            if (demo.Patient is null || seededPairs.Contains((demo.Patient.Id, demo.ToothNumber)))
+            if (await _roleManager.RoleExistsAsync(roleName))
             {
                 continue;
             }
 
-            var toothRes = PatientTooth.Create(demo.Patient.Id, demo.ToothNumber, demo.Condition, demo.Surface, demo.Notes);
+            var created = await _roleManager.CreateAsync(new IdentityRole(roleName));
 
-            if (toothRes.IsError)
+            if (!created.Succeeded)
             {
-                throw new Exception($"PatientTooth Seeding Failed: {toothRes.Errors}");
+                throw new InvalidOperationException(
+                    $"Could not create the '{roleName}' role: {DescribeIdentityErrors(created)}");
             }
-
-            _context.PatientTeeth.Add(toothRes.Value);
-            addedTeeth++;
-        }
-
-        if (addedTeeth > 0)
-        {
-            await _context.SaveChangesAsync();
         }
     }
+
+    private static string DescribeIdentityErrors(IdentityResult result)
+        => string.Join("; ", result.Errors.Select(e => e.Description));
 
     /// <summary>
     /// Creates a demo account when it is missing and otherwise repairs it.
@@ -363,8 +539,8 @@ public class ApplicationDbContextInitialiser(
     /// distinguished from a wrong password.
     /// </para>
     /// <para>
-    /// This only ever runs for the Development demo data (the whole seeder is
-    /// gated on the environment in Program.cs), never in production.
+    /// This only ever runs for the Development demo data (see
+    /// <see cref="SeedDemoDataAsync"/>), never in production.
     /// </para>
     /// </summary>
     /// <returns>The persisted account, so the caller can link profiles to its real identifier.</returns>
@@ -447,6 +623,12 @@ public class ApplicationDbContextInitialiser(
 
 public static class InitialiserExtensions
 {
+    /// <summary>
+    /// Development startup path: migrate, seed the system data, then seed the
+    /// demo dataset. Demo seeding is additionally guarded inside
+    /// <see cref="ApplicationDbContextInitialiser.SeedDemoDataAsync"/>, so an
+    /// accidental call in another environment is a no-op.
+    /// </summary>
     public static async Task InitialiseDatabaseAsync(this WebApplication app)
     {
         using var scope = app.Services.CreateScope();
@@ -454,6 +636,11 @@ public static class InitialiserExtensions
         var initialiser = scope.ServiceProvider.GetRequiredService<ApplicationDbContextInitialiser>();
 
         await initialiser.InitialiseAsync();
-        await initialiser.SeedAsync();
+        await initialiser.SeedSystemDataAsync();
+
+        if (app.Environment.IsDevelopment())
+        {
+            await initialiser.SeedDemoDataAsync();
+        }
     }
 }
