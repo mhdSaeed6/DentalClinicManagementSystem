@@ -41,10 +41,12 @@ ENV ASPNETCORE_URLS=http://+:80
 WORKDIR /app
 COPY --from=build /app .
 
-# Clinical images live outside wwwroot (Images__StoragePath). Create the
-# directory and hand it to the image's non-root "app" user (UID 1654) so the
-# volume works unchanged when the container is switched to USER app.
-RUN mkdir -p /app/App_Data/images && chown -R app:app /app/App_Data
+# Clinical images live outside wwwroot (Images__StoragePath) and the Data
+# Protection key ring is persisted on a volume so antiforgery tokens survive a
+# container restart (DataProtection:KeysPath). Create both directories and hand
+# them to the image's non-root "app" user (UID 1654) so the volumes work
+# unchanged when the container is switched to USER app.
+RUN mkdir -p /app/App_Data/images /app/App_Data/keys && chown -R app:app /app/App_Data
 
 EXPOSE 80
 ENTRYPOINT ["dotnet", "DentalClinic.Api.dll"]
@@ -61,5 +63,10 @@ ENV ASPNETCORE_URLS=http://+:80
 
 WORKDIR /app
 COPY --from=build /web .
+
+# Same volume layout as the API stage: the Data Protection key ring must be
+# writable by the app user so antiforgery tokens survive container recreation.
+RUN mkdir -p /app/App_Data/keys && chown -R app:app /app/App_Data
+
 EXPOSE 80
 ENTRYPOINT ["dotnet", "DentalClinic.Web.dll"]

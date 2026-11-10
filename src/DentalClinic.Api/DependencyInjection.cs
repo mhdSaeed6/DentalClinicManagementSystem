@@ -56,9 +56,14 @@ public static class DependencyInjection
         services.AddOutputCache(options =>
         {
             options.SizeLimit = 100 * 1024 * 1024; // 100 mb
+
+            // The base policy applies to every endpoint. Prometheus scrapes
+            // /metrics every 5s, and caching that exposition body would freeze
+            // every counter for the policy lifetime, so keep it out.
             options.AddBasePolicy(policy =>
                 policy
-                    .With(context => !context.HttpContext.Request.Headers.ContainsKey("Authorization"))
+                    .With(context => !context.HttpContext.Request.Headers.ContainsKey("Authorization")
+                        && !context.HttpContext.Request.Path.StartsWithSegments("/metrics"))
                     .Expire(TimeSpan.FromSeconds(60)));
         });
 

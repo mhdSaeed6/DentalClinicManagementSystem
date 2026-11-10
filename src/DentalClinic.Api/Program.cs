@@ -2,8 +2,11 @@ using System.Text.Json;
 
 using DentalClinic.Infrastructure.Data;
 
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
+
+using OpenTelemetry.Exporter.Prometheus;
 
 using Scalar.AspNetCore;
 
@@ -31,6 +34,26 @@ var builder = WebApplication.CreateBuilder(hostArgs);
 builder.Services.AddPresentation(builder.Configuration)
                 .AddApplication()
                 .AddInfrastructure(builder.Configuration);
+
+// Data Protection keys (antiforgery tokens on the Web side, any protected
+// payload held by the API) live only in memory by default, so every container
+// restart invalidated them and logged everyone out. Persist the key ring on the
+// shared volume the compose files mount. Inside the image the content root is
+// /app, which resolves to the /app/App_Data/keys directory the Dockerfile
+// creates; `dotnet run` and the test hosts instead get their own project-local
+// folder rather than a container path.
+var dataProtectionKeysPath = builder.Configuration["DataProtection:KeysPath"];
+
+if (string.IsNullOrWhiteSpace(dataProtectionKeysPath))
+{
+    dataProtectionKeysPath = Path.Combine(builder.Environment.ContentRootPath, "App_Data", "keys");
+}
+
+// The same application name is used by DentalClinic.Web so both apps read one
+// key ring from the shared volume.
+builder.Services.AddDataProtection()
+                .SetApplicationName("DentalClinic")
+                .PersistKeysToFileSystem(new DirectoryInfo(dataProtectionKeysPath));
 
 builder.Host.UseSerilog((context, loggerConfig) =>
     loggerConfig.ReadFrom.Configuration(context.Configuration));
@@ -73,6 +96,12 @@ else
 app.UseCoreMiddlewares(builder.Configuration);
 
 app.MapControllers();
+
+// Prometheus scrapes http://dentalclinic-api:80/metrics (see
+// containers/prometheus/prometheus.yml). The exporter is registered in
+// AddAppOpenTelememrty, but the meter provider alone serves nothing: without
+// this mapping the scrape target answers 404 and every dashboard stays empty.
+app.MapPrometheusScrapingEndpoint();
 
 // Health endpoints are mapped in every environment (unlike OpenAPI/Scalar) so
 // orchestrators and load balancers can probe liveness and DB readiness in prod.
