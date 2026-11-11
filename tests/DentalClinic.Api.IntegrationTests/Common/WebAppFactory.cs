@@ -104,6 +104,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
@@ -260,7 +261,12 @@ public class WebAppFactory : WebApplicationFactory<IAssemblyMarker>, IAsyncLifet
         {
             services.RemoveAll<IHostedService>();
 
+            // AddDbContext accumulates one IDbContextOptionsConfiguration per
+            // call, and those are what invoke options.AddInterceptors(...). The
+            // registrations from AddInfrastructure must go too, otherwise every
+            // interceptor is attached twice and fires twice per save.
             services.RemoveAll<DbContextOptions<AppDbContext>>();
+            services.RemoveAll<IDbContextOptionsConfiguration<AppDbContext>>();
 
             services.AddDbContext<AppDbContext>((sp, options) =>
             {

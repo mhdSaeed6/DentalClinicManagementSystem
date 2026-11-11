@@ -31,6 +31,12 @@ public static class DependencyInjection
         // 1. Interceptors & DbContext Setup
         services.AddScoped<ISaveChangesInterceptor, AuditableEntityInterceptor>();
         services.AddScoped<ISaveChangesInterceptor, SoftDeleteInterceptor>();
+
+        // Registered after the soft-delete interceptor on purpose: by then a
+        // delete has already been rewritten into a Modified entry with the
+        // IsDeleted flag set, which is how the audit trail recognizes it.
+        services.AddScoped<ISaveChangesInterceptor, AuditChangesInterceptor>();
+
         services.AddScoped<ISaveChangesInterceptor, DispatchDomainEventsInterceptor>();
 
         services.AddDbContext<AppDbContext>((sp, options) =>

@@ -1,6 +1,7 @@
 using System.Data;
 
 using DentalClinic.Domain.Appointments;
+using DentalClinic.Domain.Auditing;
 using DentalClinic.Domain.Clinics;
 using DentalClinic.Domain.Doctors;
 using DentalClinic.Domain.Identity;
@@ -37,6 +38,7 @@ public interface IAppDbContext
     public DbSet<LabCase> LabCases { get; }
     public DbSet<ImportJob> ImportJobs { get; }
     public DbSet<ImportRowError> ImportRowErrors { get; }
+    public DbSet<AuditLogEntry> AuditLogEntries { get; }
     Task<int> SaveChangesAsync(CancellationToken cancellationToken);
     Task<IAppTransaction> BeginTransactionAsync(IsolationLevel isolationLevel, CancellationToken cancellationToken);
 

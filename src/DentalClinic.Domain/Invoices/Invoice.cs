@@ -1,9 +1,10 @@
+using DentalClinic.Domain.Common.Interfaces;
 using DentalClinic.Domain.Common.Results;
 using DentalClinic.Domain.Invoices.Enums;
 
 namespace DentalClinic.Domain.Invoices;
 
-public class Invoice : AuditableEntity
+public class Invoice : AuditableEntity, IRequireAuditTrail
 {
     /// <summary>Upper bound for <see cref="InvoiceNumber"/>, mirrored by the EF configuration.</summary>
     public const int MaxInvoiceNumberLength = 32;

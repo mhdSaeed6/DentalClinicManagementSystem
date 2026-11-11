@@ -1,4 +1,5 @@
 using DentalClinic.Domain.Appointments;
+using DentalClinic.Domain.Common.Interfaces;
 using DentalClinic.Domain.Common.Results;
 using DentalClinic.Domain.Common.ValueObjects;
 using DentalClinic.Domain.Doctors;
@@ -7,7 +8,7 @@ using DentalClinic.Domain.TreatmentPlans;
 
 namespace DentalClinic.Domain.TreatmentRecords;
 
-public class TreatmentRecord : AuditableEntity
+public class TreatmentRecord : AuditableEntity, IRequireAuditTrail
 {
     public Guid PatientId { get; private set; }
     public Guid DoctorId { get; private set; }

@@ -74,6 +74,10 @@ else if (_patient is not null)
         <button type="button" class="tab @(_tab == "plans" ? "active" : "")" @onclick='() => _tab = "plans"'>@Session.T("Treatment plans", "خطط العلاج") (@_plans.Count)</button>
         <button type="button" class="tab @(_tab == "odontogram" ? "active" : "")" @onclick='() => _tab = "odontogram"'>@Session.T("Odontogram", "مخطط الأسنان")</button>
         <button type="button" class="tab @(_tab == "images" ? "active" : "")" @onclick="OpenImagesAsync">@Session.T("X-rays & photos", "الأشعة والصور") (@_images.Count)</button>
+        @if (Session.IsAdmin)
+        {
+            <button type="button" class="tab @(_tab == "audit" ? "active" : "")" @onclick='() => _tab = "audit"'>@Session.T("Audit history", "سجل التدقيق")</button>
+        }
     </div>
 
     @if (_tab == "overview")
@@ -376,6 +380,14 @@ else if (_patient is not null)
                         }
                     </div>
                 }
+            </div>
+        </div>
+    }
+    else if (_tab == "audit" && Session.IsAdmin)
+    {
+        <div class="card">
+            <div class="card-body">
+                <AuditTrailViewer EntityName="Patient" EntityId="Id" />
             </div>
         </div>
     }

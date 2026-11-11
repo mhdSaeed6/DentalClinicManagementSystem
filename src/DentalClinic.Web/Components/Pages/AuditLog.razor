@@ -1,0 +1,588 @@
+@page "/audit-log"
+@using System.Globalization
+@using System.Text
+@inject ApiClient Api
+@inject ClinicSessionState Session
+@inject ClinicBranding Branding
+@inject NavigationManager Nav
+
+<PageTitle>@Session.T("Audit log", "سجل التدقيق") · @Branding.DisplayName(Session.IsRtl)</PageTitle>
+
+<PageHeader Title="@Session.T("Audit log", "سجل التدقيق")"
+            Subtitle="@Session.T("Who changed which patient, appointment, invoice or treatment record - and what the values were before and after. Entries are written by the server and cannot be edited.", "من غيّر أي مريض أو موعد أو فاتورة أو سجل علاج - وما كانت القيم قبل التغيير وبعده. تُكتب السجلات على الخادم ولا يمكن تعديلها.")">
+    <Actions>
+        <button type="button" class="btn btn-outline" @onclick="LoadAsync" disabled="@_loading">
+            <ClinicIcon Name="refresh" Class="sm" />
+            <span>@Session.T("Refresh", "تحديث")</span>
+        </button>
+        @if (_exportHref is not null)
+        {
+            <a class="btn btn-primary" href="@_exportHref" download="@_exportFileName">
+                <ClinicIcon Name="download" Class="sm" />
+                <span>@Session.T("Export page (CSV)", "تصدير الصفحة (CSV)")</span>
+            </a>
+        }
+    </Actions>
+</PageHeader>
+
+@if (!Session.IsAdmin)
+{
+    <div class="card">
+        <div class="card-body tight">
+            <EmptyState Icon="shield"
+                        Title="@Session.T("Administrators only", "للمسؤولين فقط")"
+                        Message="@Session.T("The audit trail names staff accounts and exposes before/after values, so only the clinic owner can read it.", "سجل التدقيق يذكر حسابات الموظفين ويكشف القيم قبل وبعد التغيير، لذا يمكن لمالك العيادة فقط الاطلاع عليه.")" />
+        </div>
+    </div>
+}
+else
+{
+    <div class="card mb-3">
+        <div class="card-body">
+            <div class="flex gap-2 flex-wrap" style="align-items:flex-end">
+                <div class="field" style="margin:0;min-width:190px">
+                    <label class="label">@Session.T("Record type", "نوع السجل")</label>
+                    <select class="select" @bind="_entityFilter" @bind:after="OnEntityFilterChangedAsync">
+                        <option value="">@Session.T("All types", "كل الأنواع")</option>
+                        @foreach (var entityName in EntityNames)
+                        {
+                            <option value="@entityName">@ClinicFormatting.AuditEntityLabel(entityName, Session.IsRtl)</option>
+                        }
+                    </select>
+                </div>
+
+                <div class="field" style="margin:0;min-width:160px">
+                    <label class="label">@Session.T("Change", "نوع التغيير")</label>
+                    <select class="select" @bind="_actionFilter" @bind:after="ApplyFiltersAsync">
+                        <option value="">@Session.T("All changes", "كل التغييرات")</option>
+                        @foreach (var action in Actions)
+                        {
+                            <option value="@action">@ClinicFormatting.AuditActionLabel(action, Session.IsRtl)</option>
+                        }
+                    </select>
+                </div>
+
+                <div class="field" style="margin:0;min-width:200px">
+                    <label class="label">@Session.T("Staff account", "حساب الموظف")</label>
+                    <select class="select" @bind="_actorFilter" @bind:after="ApplyFiltersAsync">
+                        <option value="">@Session.T("All accounts", "كل الحسابات")</option>
+                        @foreach (var actor in _actors)
+                        {
+                            <option value="@actor.UserId">@actor.Email</option>
+                        }
+                    </select>
+                </div>
+
+                <div class="field" style="margin:0">
+                    <label class="label">@Session.T("From", "من")</label>
+                    <input type="date" class="input" value="@(_from?.ToString("yyyy-MM-dd") ?? string.Empty)"
+                           @onchange="OnFromChangedAsync" />
+                </div>
+
+                <div class="field" style="margin:0">
+                    <label class="label">@Session.T("To", "إلى")</label>
+                    <input type="date" class="input" value="@(_to?.ToString("yyyy-MM-dd") ?? string.Empty)"
+                           @onchange="OnToChangedAsync" />
+                </div>
+
+                <button type="button" class="btn btn-ghost" @onclick="ResetFiltersAsync" disabled="@_loading">
+                    <ClinicIcon Name="x" Class="sm" />
+                    <span>@Session.T("Clear filters", "مسح عوامل التصفية")</span>
+                </button>
+            </div>
+
+            @if (_recordId is { } recordId)
+            {
+                <div class="flex gap-2 flex-wrap mt-2" style="align-items:center">
+                    <span class="badge brand no-dot">
+                        <ClinicIcon Name="filter" Class="sm" />
+                        @Session.T("One record only", "سجل واحد فقط") · <span class="mono">@ShortId(recordId.ToString())</span>
+                    </span>
+                    <button type="button" class="btn btn-ghost btn-sm" @onclick="ClearRecordFilterAsync">
+                        @Session.T("Show all records", "إظهار كل السجلات")
+                    </button>
+                </div>
+            }
+
+            @if (_filterError is not null)
+            {
+                <div class="fs-sm mt-2" style="color:var(--danger)">@_filterError</div>
+            }
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <div>
+                <div class="card-title">@Session.T("Recorded changes", "التغييرات المسجلة")</div>
+                <div class="card-subtitle">@Session.T("Newest first. Click a row to see the exact fields that changed.", "الأحدث أولاً. اضغط على أي سجل لعرض الحقول التي تغيّرت.")</div>
+            </div>
+            <div class="spacer"></div>
+            <span class="badge muted no-dot">@_total @Session.T("entries", "سجل")</span>
+        </div>
+
+        @if (_loading)
+        {
+            <div class="card-body">
+                @for (var i = 0; i < 8; i++)
+                {
+                    <div class="skeleton row"></div>
+                }
+            </div>
+        }
+        else if (_error is not null)
+        {
+            <EmptyState Icon="alert"
+                       Title="@Session.T("Could not load the audit log", "تعذّر تحميل سجل التدقيق")"
+                       Message="@_error">
+                <ActionContent>
+                    <button type="button" class="btn btn-primary" @onclick="LoadAsync">
+                        <ClinicIcon Name="refresh" Class="sm" />
+                        <span>@Session.T("Try again", "إعادة المحاولة")</span>
+                    </button>
+                </ActionContent>
+            </EmptyState>
+        }
+        else if (_entries.Count == 0)
+        {
+            <EmptyState Icon="clock"
+                        Title="@Session.T("No changes match these filters", "لا توجد تغييرات مطابقة")"
+                        Message="@Session.T("Widen the date range, or clear the filters to see the whole trail.", "وسّع الفترة الزمنية أو امسح عوامل التصفية لعرض السجل كاملاً.")">
+                <ActionContent>
+                    <button type="button" class="btn btn-outline" @onclick="ResetFiltersAsync">
+                        @Session.T("Clear filters", "مسح عوامل التصفية")
+                    </button>
+                </ActionContent>
+            </EmptyState>
+        }
+        else
+        {
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>@Session.T("When", "الوقت")</th>
+                            <th>@Session.T("Change", "التغيير")</th>
+                            <th>@Session.T("Record", "السجل")</th>
+                            <th>@Session.T("Staff account", "حساب الموظف")</th>
+                            <th style="text-align:end">@Session.T("Details", "التفاصيل")</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var entry in _entries)
+                        {
+                            <tr @key="entry.Id" style="cursor:pointer" @onclick="() => OpenDetail(entry)">
+                                <td>
+                                    <div class="cell-main">@ClinicFormatting.DateTimeLabel(entry.TimestampLocal)</div>
+                                    <div class="cell-sub mono">@entry.TimestampUtc.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture) UTC</div>
+                                </td>
+                                <td><AuditActionBadge Value="entry.Action" /></td>
+                                <td>
+                                    <div class="cell-main">@ClinicFormatting.AuditEntityLabel(entry.EntityName, Session.IsRtl)</div>
+                                    <div class="cell-sub mono" title="@entry.EntityId">@ShortId(entry.EntityId.ToString())</div>
+                                </td>
+                                <td>
+                                    <div class="cell-main">@ActorLabel(entry.UserId)</div>
+                                    <div class="cell-sub">@ActorRole(entry.UserId)</div>
+                                </td>
+                                <td style="text-align:end">
+                                    <button type="button" class="btn btn-ghost btn-sm" @onclick:stopPropagation="true"
+                                            @onclick="() => OpenDetail(entry)">
+                                        @Session.T("Details", "التفاصيل")
+                                        <ClinicIcon Name="chevron-right" Class="sm" />
+                                    </button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            <Pager PageNumber="_page" PageSize="_pageSize" TotalCount="_total" TotalPages="_totalPages"
+                   OnPageChange="GoToPageAsync" />
+        }
+    </div>
+}
+
+<Drawer IsOpen="_detail is not null"
+        Icon="shield"
+        Title="@DetailTitle"
+        Subtitle="@DetailSubtitle"
+        OnClose="CloseDetail">
+    <ChildContent>
+        @if (_detail is not null)
+        {
+            <dl class="kv mb-3">
+                <dt>@Session.T("When", "الوقت")</dt>
+                <dd>@ClinicFormatting.DateTimeLabel(_detail.TimestampLocal)</dd>
+                <dt>@Session.T("Change", "التغيير")</dt>
+                <dd><AuditActionBadge Value="_detail.Action" /></dd>
+                <dt>@Session.T("Record", "السجل")</dt>
+                <dd>
+                    @ClinicFormatting.AuditEntityLabel(_detail.EntityName, Session.IsRtl)
+                    <span class="fs-xs text-soft mono">@_detail.EntityId</span>
+                </dd>
+                <dt>@Session.T("Staff account", "حساب الموظف")</dt>
+                <dd>@ActorLabel(_detail.UserId)</dd>
+            </dl>
+
+            <div class="card-title mb-2">@Session.T("What changed", "ما الذي تغيّر")</div>
+            <AuditChangeTable OldValues="_detail.OldValues" NewValues="_detail.NewValues" />
+        }
+    </ChildContent>
+    <Footer>
+        @if (_detail is not null)
+        {
+            <div class="flex gap-2 flex-wrap">
+                @if (_detail.EntityName == "Patient")
+                {
+                    <button type="button" class="btn btn-outline btn-sm" @onclick="OpenPatientRecord">
+                        <ClinicIcon Name="user" Class="sm" />
+                        <span>@Session.T("Open patient", "فتح ملف المريض")</span>
+                    </button>
+                }
+                <button type="button" class="btn btn-outline btn-sm" @onclick="FilterToDetailRecordAsync">
+                    <ClinicIcon Name="filter" Class="sm" />
+                    <span>@Session.T("This record only", "هذا السجل فقط")</span>
+                </button>
+                <button type="button" class="btn btn-ghost btn-sm" @onclick="CloseDetail">
+                    @Session.T("Close", "إغلاق")
+                </button>
+            </div>
+        }
+    </Footer>
+</Drawer>
+
+@code {
+    private static readonly string[] EntityNames = ["Patient", "Appointment", "Invoice", "TreatmentRecord"];
+
+    private static readonly string[] Actions = ["Create", "Update", "Delete"];
+
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "entity")]
+    public string? EntityParam { get; set; }
+
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "id")]
+    public Guid? RecordIdParam { get; set; }
+
+    private int _page = 1;
+    private int _pageSize = 20;
+    private int _total;
+    private int _totalPages;
+    private bool _loading = true;
+    private string? _error;
+    private string? _filterError;
+    private List<AuditLogEntryDto> _entries = [];
+
+    private string? _entityFilter;
+    private string? _actionFilter;
+    private string? _actorFilter;
+    private Guid? _recordId;
+    private DateOnly? _from;
+    private DateOnly? _to;
+
+    private List<StaffUserDto> _actors = [];
+    private readonly Dictionary<string, StaffUserDto> _actorsById = new(StringComparer.Ordinal);
+
+    private AuditLogEntryDto? _detail;
+    private string? _exportHref;
+    private string _exportFileName = "audit-log.csv";
+
+    private string DetailTitle => _detail is null
+        ? string.Empty
+        : ClinicFormatting.AuditEntityLabel(_detail.EntityName, Session.IsRtl);
+
+    private string DetailSubtitle => _detail is null
+        ? string.Empty
+        : $"{ClinicFormatting.AuditActionLabel(_detail.Action, Session.IsRtl)} · {ClinicFormatting.DateTimeLabel(_detail.TimestampLocal)}";
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!Session.IsAdmin)
+        {
+            _loading = false;
+            return;
+        }
+
+        // Deep link from the per-record viewer: ?entity=Patient&id=...
+        if (!string.IsNullOrWhiteSpace(EntityParam))
+        {
+            _entityFilter = EntityNames.FirstOrDefault(name =>
+                string.Equals(name, EntityParam, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(name + "s", EntityParam, StringComparison.OrdinalIgnoreCase));
+        }
+
+        _recordId = RecordIdParam is { } recordId && recordId != Guid.Empty ? recordId : null;
+
+        await LoadActorsAsync();
+        await LoadAsync();
+    }
+
+    /// <summary>
+    /// Actor names come from the staff directory rather than the trail itself,
+    /// so the trail keeps storing only the identity id. A failure here must not
+    /// block the audit view - rows fall back to the short id.
+    /// </summary>
+    private async Task LoadActorsAsync()
+    {
+        try
+        {
+            var staff = await Api.GetStaffUsersAsync(1, 100, null);
+            _actors = staff.Items ?? [];
+
+            foreach (var actor in _actors)
+            {
+                _actorsById[actor.UserId] = actor;
+            }
+        }
+        catch (Exception)
+        {
+            _actors = [];
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        if (!Session.IsAdmin)
+        {
+            return;
+        }
+
+        _filterError = null;
+
+        if (_from is { } from && _to is { } to && from > to)
+        {
+            _filterError = Session.T(
+                "The start date must be on or before the end date.",
+                "يجب أن يكون تاريخ البداية قبل تاريخ النهاية أو مساوياً له.");
+            return;
+        }
+
+        _loading = true;
+        _error = null;
+        _exportHref = null;
+        StateHasChanged();
+
+        try
+        {
+            var result = await Api.GetAuditLogsPageAsync(
+                _page,
+                _pageSize,
+                _entityFilter,
+                _recordId,
+                _actionFilter,
+                _actorFilter,
+                _from,
+                _to);
+
+            _entries = result.Items ?? [];
+            _total = result.TotalCount;
+            _totalPages = result.TotalPages;
+
+            BuildExport();
+        }
+        catch (ApiException ex)
+        {
+            _entries = [];
+            _total = 0;
+            _totalPages = 0;
+            _exportHref = null;
+            _error = ex.StatusCode == 403
+                ? Session.T("Only an administrator can read the audit log.", "قراءة سجل التدقيق متاحة للمدير فقط.")
+                : ex.Message;
+        }
+        catch (Exception)
+        {
+            _entries = [];
+            _total = 0;
+            _totalPages = 0;
+            _exportHref = null;
+            _error = Session.T("Unable to load the audit log. Is the API running?", "تعذّر تحميل سجل التدقيق. هل الخدمة تعمل؟");
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private Task ApplyFiltersAsync()
+    {
+        _page = 1;
+        return LoadAsync();
+    }
+
+    private Task OnEntityFilterChangedAsync()
+    {
+        // A pinned record belongs to one aggregate; keeping it while the type
+        // changes would silently return an empty page.
+        _recordId = null;
+        ClearDeepLink();
+        return ApplyFiltersAsync();
+    }
+
+    private Task ClearRecordFilterAsync()
+    {
+        _recordId = null;
+        ClearDeepLink();
+        return ApplyFiltersAsync();
+    }
+
+    private Task ResetFiltersAsync()
+    {
+        _entityFilter = null;
+        _actionFilter = null;
+        _actorFilter = null;
+        _recordId = null;
+        _from = null;
+        _to = null;
+        ClearDeepLink();
+
+        return ApplyFiltersAsync();
+    }
+
+    /// <summary>
+    /// The per-record viewer deep-links in with <c>?entity=&amp;id=</c>. Once the
+    /// administrator clears that filter the URL must stop asking for it, or a
+    /// refresh would silently bring the filter back.
+    /// </summary>
+    private void ClearDeepLink()
+    {
+        if (string.IsNullOrWhiteSpace(EntityParam) && RecordIdParam is null)
+        {
+            return;
+        }
+
+        EntityParam = null;
+        RecordIdParam = null;
+        Nav.NavigateTo("/audit-log", replace: true);
+    }
+
+    private Task OnFromChangedAsync(ChangeEventArgs args)
+    {
+        _from = ParseDate(args);
+        return ApplyFiltersAsync();
+    }
+
+    private Task OnToChangedAsync(ChangeEventArgs args)
+    {
+        _to = ParseDate(args);
+        return ApplyFiltersAsync();
+    }
+
+    private async Task GoToPageAsync(int page)
+    {
+        _page = page;
+        await LoadAsync();
+    }
+
+    private void OpenDetail(AuditLogEntryDto entry) => _detail = entry;
+
+    private void CloseDetail() => _detail = null;
+
+    private void OpenPatientRecord()
+    {
+        if (_detail is not null)
+        {
+            Nav.NavigateTo($"patients/{_detail.EntityId}");
+        }
+    }
+
+    private Task FilterToDetailRecordAsync()
+    {
+        if (_detail is null)
+        {
+            return Task.CompletedTask;
+        }
+
+        _entityFilter = _detail.EntityName;
+        _recordId = _detail.EntityId;
+        _detail = null;
+        ClearDeepLink();
+
+        return ApplyFiltersAsync();
+    }
+
+    private static DateOnly? ParseDate(ChangeEventArgs args) =>
+        DateOnly.TryParse(
+            args.Value?.ToString(),
+            CultureInfo.InvariantCulture,
+            DateTimeStyles.None,
+            out var value)
+            ? value
+            : null;
+
+    private static string ShortId(string? id) => string.IsNullOrWhiteSpace(id)
+        ? "—"
+        : id.Length <= 8 ? id : id[..8];
+
+    private string ActorLabel(string? userId)
+    {
+        if (string.IsNullOrWhiteSpace(userId))
+        {
+            return Session.T("System", "النظام");
+        }
+
+        return _actorsById.TryGetValue(userId, out var actor) ? actor.Email : ShortId(userId);
+    }
+
+    private string ActorRole(string? userId)
+    {
+        if (string.IsNullOrWhiteSpace(userId))
+        {
+            return Session.T("Seeding or background job", "تهيئة أو مهمة خلفية");
+        }
+
+        if (!_actorsById.TryGetValue(userId, out var actor) || actor.Roles.Count == 0)
+        {
+            return Session.T("Former account", "حساب سابق");
+        }
+
+        return actor.Roles[0] switch
+        {
+            "Admin" => Session.T("Administrator", "مدير"),
+            "Doctor" => Session.T("Doctor", "طبيب"),
+            "Receptionist" => Session.T("Receptionist", "موظف استقبال"),
+            _ => actor.Roles[0],
+        };
+    }
+
+    /// <summary>
+    /// Exports exactly what is on screen - the current page under the current
+    /// filters. A UTF-8 BOM keeps Excel from mangling the Arabic values.
+    /// </summary>
+    private void BuildExport()
+    {
+        if (_entries.Count == 0)
+        {
+            _exportHref = null;
+            return;
+        }
+
+        var builder = new StringBuilder();
+        builder.AppendLine("Timestamp,Action,Entity,EntityId,UserId,OldValues,NewValues");
+
+        foreach (var entry in _entries)
+        {
+            builder
+                .Append(Csv(entry.TimestampLocal.ToString("O", CultureInfo.InvariantCulture))).Append(',')
+                .Append(Csv(entry.Action)).Append(',')
+                .Append(Csv(entry.EntityName)).Append(',')
+                .Append(Csv(entry.EntityId.ToString())).Append(',')
+                .Append(Csv(entry.UserId)).Append(',')
+                .Append(Csv(entry.OldValues)).Append(',')
+                .Append(Csv(entry.NewValues))
+                .AppendLine();
+        }
+
+        var bytes = Encoding.UTF8.GetPreamble()
+            .Concat(Encoding.UTF8.GetBytes(builder.ToString()))
+            .ToArray();
+
+        _exportHref = $"data:text/csv;base64,{Convert.ToBase64String(bytes)}";
+        _exportFileName = $"audit-log-{DateTime.Now:yyyyMMdd-HHmm}.csv";
+    }
+
+    private static string Csv(string? value) =>
+        $"\"{(value ?? string.Empty).Replace("\"", "\"\"")}\"";
+}

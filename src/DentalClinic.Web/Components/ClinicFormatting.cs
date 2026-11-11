@@ -136,6 +136,37 @@ public static class ClinicFormatting
         _ => "success",
     };
 
+    // --------------------------------------------------------- Audit labels
+
+    /// <summary>
+    /// The audit trail stores the enum name (<c>Create</c>); the UI speaks in
+    /// past tense because a row is a record of something that already happened.
+    /// </summary>
+    public static string AuditActionLabel(string? action, bool arabic) => action switch
+    {
+        "Create" => arabic ? "إنشاء" : "Created",
+        "Update" => arabic ? "تعديل" : "Updated",
+        "Delete" => arabic ? "حذف" : "Deleted",
+        _ => action ?? string.Empty,
+    };
+
+    public static string AuditActionCss(string? action) => action switch
+    {
+        "Create" => "success",
+        "Delete" => "danger",
+        _ => "brand",
+    };
+
+    /// <summary>Aggregate name stored in the audit row, as a human label.</summary>
+    public static string AuditEntityLabel(string? entityName, bool arabic) => entityName switch
+    {
+        "Patient" => arabic ? "مريض" : "Patient",
+        "Appointment" => arabic ? "موعد" : "Appointment",
+        "Invoice" => arabic ? "فاتورة" : "Invoice",
+        "TreatmentRecord" => arabic ? "سجل علاج" : "Treatment record",
+        _ => entityName ?? string.Empty,
+    };
+
     /// <summary>
     /// One-line summary of the flags that drive the alert (empty string when
     /// there are none) — used by list rows and the appointment drawer so the

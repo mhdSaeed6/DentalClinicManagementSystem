@@ -573,6 +573,48 @@ public sealed class ApiClient : IClinicSettingsSource
         GetFileAsync($"imports/{id}/errors", ct);
 
     // -----------------------------------------------------------------------
+    // Audit trail (administrators only)
+    // -----------------------------------------------------------------------
+
+    /// <summary>
+    /// Returns the create/update/delete history of one record, newest first.
+    /// The API is AdminOnly, so this must only be called for an administrator.
+    /// </summary>
+    public Task<List<AuditLogEntryDto>> GetAuditLogsAsync(
+        string entityName,
+        Guid entityId,
+        CancellationToken ct = default) =>
+        GetAsync<List<AuditLogEntryDto>>(
+            $"audit-logs/{Uri.EscapeDataString(entityName)}/{entityId}",
+            ct);
+
+    /// <summary>
+    /// Paged clinic-wide audit log for the administrator screen. Every filter
+    /// is optional and the server sorts newest first.
+    /// </summary>
+    public Task<PaginatedList<AuditLogEntryDto>> GetAuditLogsPageAsync(
+        int page,
+        int pageSize,
+        string? entityName = null,
+        Guid? entityId = null,
+        string? action = null,
+        string? userId = null,
+        DateOnly? from = null,
+        DateOnly? to = null,
+        CancellationToken ct = default) =>
+        GetAsync<PaginatedList<AuditLogEntryDto>>(
+            "audit-logs?" + Query(
+                ("PageNumber", page),
+                ("PageSize", pageSize),
+                ("EntityName", entityName),
+                ("EntityId", entityId),
+                ("Action", action),
+                ("UserId", userId),
+                ("From", from),
+                ("To", to)),
+            ct);
+
+    // -----------------------------------------------------------------------
     // Core request pipeline
     // -----------------------------------------------------------------------
 

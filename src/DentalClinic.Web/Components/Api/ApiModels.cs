@@ -1216,3 +1216,35 @@ public sealed class ImportJobDto
 
     public DateTimeOffset CreatedAtUtc { get; set; }
 }
+
+// ---------------------------------------------------------------------------
+// Audit trail
+// ---------------------------------------------------------------------------
+
+/// <summary>
+/// One row of a record's change history. <see cref="OldValues"/> and
+/// <see cref="NewValues"/> are JSON objects of property name to value; the
+/// viewer renders the diff between them.
+/// </summary>
+public sealed class AuditLogEntryDto
+{
+    public Guid Id { get; set; }
+
+    public string EntityName { get; set; } = string.Empty;
+
+    public Guid EntityId { get; set; }
+
+    /// <summary>"Create", "Update" or "Delete".</summary>
+    public string Action { get; set; } = string.Empty;
+
+    public string? UserId { get; set; }
+
+    public DateTimeOffset TimestampUtc { get; set; }
+
+    /// <summary>The same instant already converted to the clinic's timezone.</summary>
+    public DateTime TimestampLocal { get; set; }
+
+    public string? OldValues { get; set; }
+
+    public string? NewValues { get; set; }
+}
