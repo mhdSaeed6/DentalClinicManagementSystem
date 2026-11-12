@@ -120,8 +120,12 @@ services:
       # Clinical images are written outside the web root; the named volume
       # survives container recreation. Back this volume up separately.
       Images__StoragePath: /app/App_Data/images
+      # Data Protection key ring, shared with the Web container so antiforgery
+      # tokens and sessions survive restarts.
+      DataProtection__KeysPath: /app/App_Data/keys
     volumes:
       - dentalclinic-images:/app/App_Data/images
+      - dentalclinic-keys:/app/App_Data/keys
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -152,6 +156,11 @@ services:
       TZ: Asia/Damascus
       ASPNETCORE_URLS: http://+:80
       ApiBaseUrl: http://dentalclinic-api
+      # Same key ring as the API (mounted below); without it every restart
+      # invalidated the antiforgery tokens and logged the user out.
+      DataProtection__KeysPath: /app/App_Data/keys
+    volumes:
+      - dentalclinic-keys:/app/App_Data/keys
     depends_on:
       dentalclinic-api:
         condition: service_healthy
@@ -211,8 +220,17 @@ services:
       - dentalclinic-net
     depends_on:
       dentalclinic-api:
-        condition: service_started
+        # service_healthy (not service_started): the scrape target /metrics is
+        # mapped by the API, and starting Prometheus before the API is actually
+        # ready only produces failed scrapes and "down" targets in Grafana.
+        condition: service_healthy
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider -q http://localhost:9090/-/healthy || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
 
   grafana:
     image: grafana/grafana:latest
@@ -227,13 +245,18 @@ services:
       - dentalclinic-net
     depends_on:
       prometheus:
-        condition: service_started
+        condition: service_healthy
     restart: unless-stopped
 
 volumes:
   sqlserver-data: {}
   grafana-data: {}
   dentalclinic-images: {}
+  # Shared Data Protection key ring (same volume on API and Web). The XML keys
+  # are not encrypted by default, so back this volume up with the same care as
+  # the database secrets. Losing it logs every user out and invalidates
+  # outstanding antiforgery tokens.
+  dentalclinic-keys: {}
   seq-data: {}
 
 networks:

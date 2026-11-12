@@ -1,0 +1,9 @@
+@namespace DentalClinic.Web.Components.Shared
+@inject ClinicSessionState Session
+
+<span class="badge @ClinicFormatting.AuditActionCss(Value) no-dot">@ClinicFormatting.AuditActionLabel(Value, Session.IsRtl)</span>
+
+@code {
+    /// <summary>"Create", "Update" or "Delete", as returned by the API.</summary>
+    [Parameter] public string Value { get; set; } = string.Empty;
+}

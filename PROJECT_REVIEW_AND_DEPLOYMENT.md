@@ -361,3 +361,28 @@ dotnet ef migrations add <Name> --project src/DentalClinic.Infrastructure --star
 - No configuration read during service registration.
 - No `Version=` on `PackageReference`; use `Directory.Packages.props`.
 - CRLF, 4-space indent, file-scoped namespaces, `_camelCase` private fields.
+
+### 7.4 Phase D1 implementation log (2026-11-10)
+
+The D1 hardening slices that need no ops action are implemented. The findings above are left as written (they are the review snapshot); this section records what changed.
+
+| Slice | Change | Files |
+|---|---|---|
+| 1. `/metrics` | `app.MapPrometheusScrapingEndpoint()` added next to the health endpoints. `AddPrometheusExporter()` alone registers a meter provider but serves no route, which is why the scrape target returned 404. The endpoint is also excluded from the output-cache base policy, so a 5s scrape is not served from a 60s cache entry. | `src/DentalClinic.Api/Program.cs`, `src/DentalClinic.Api/DependencyInjection.cs` |
+| 2. Data Protection | `AddDataProtection().SetApplicationName("DentalClinic").PersistKeysToFileSystem(...)`, path from `DataProtection:KeysPath` with a `<content root>/App_Data/keys` fallback so `dotnet run` and the test hosts do not write to a container path. `Dockerfile` creates `/app/App_Data/keys` and chowns `App_Data` to `app` in both targets. `docker-compose.prod.yml` mounts the new shared `dentalclinic-keys` volume on API **and** Web. | `src/DentalClinic.Api/Program.cs`, `src/DentalClinic.Web/Program.cs`, `Dockerfile`, `docker-compose.prod.yml`, `.gitignore`, `.dockerignore` |
+| 3. Rate limits | Already explicit in `appsettings.Production.json` (`GeneralPermitLimit` 100 / `AuthPermitLimit` 10, both 1-minute windows). No change needed; values verified against `RateLimitSettings`. | `src/DentalClinic.Api/appsettings.Production.json` |
+| 4. Compose health | `dentalclinic-web` depends on `dentalclinic-api` with `service_healthy`; `prometheus` upgraded from `service_started` to `service_healthy` for the API; `prometheus` gained a `/-/healthy` healthcheck and `grafana` now waits for it with `service_healthy`. | `docker-compose.prod.yml` |
+| 5. Build | `dotnet build DentalClinic.slnx` - **0 errors**, no new warnings. | - |
+
+Verification evidence for D1:
+
+- `GET /metrics` returns **200** with `text/plain; version=0.0.4` and real `http_server_request_duration_seconds_*` / `http_client_*` families, with `ASPNETCORE_ENVIRONMENT=Production` and `--no-launch-profile` (no `Age` header on repeat scrapes, i.e. not cached).
+- `/health` returns 200; `/scalar/v1` returns 404 in Production, confirming the environment was genuine.
+- The key ring is written to `DataProtection:KeysPath` for both the API and the Web app, and the Web app still answers `/health` 200 and renders `/login`.
+- `docker compose -f docker-compose.prod.yml --env-file .env config --quiet` resolves with no hardcoded secret.
+
+Still open from §5.2 (needs ops/decision, not code in this PR): non-root `USER app` (#3), real CORS origins / `AllowedHosts` (#5, #10), session persistence - `D-14` (#7), Seq/Grafana authentication (#9), SQL login with `Encrypt=True` (#11), image publishing/CD (#12). Also recommended: a reverse-proxy rule that does **not** expose `/metrics` publicly, since Prometheus scrapes it anonymously over the private network.
+
+Note for the `USER app` switch (#3): containers still run as root, so the key ring files they create are `root:root 0600` even though the directory in the image belongs to `app`. Before adding `USER app`, `chown -R 1654:1654` the `dentalclinic-keys` and `dentalclinic-images` volumes, or the app will be unable to read its own keys and any pre-existing image subdirectory.
+
+Key-ring storage: without `ProtectKeysWith*` the XML key files sit unencrypted on the volume (Linux default; ASP.NET Core logs a "No XML encryptor configured" warning). They are protected only by file permissions, so the `dentalclinic-keys` volume belongs in the same backup/encryption scope as the database secrets.

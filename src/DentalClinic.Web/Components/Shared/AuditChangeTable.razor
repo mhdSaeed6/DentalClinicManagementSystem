@@ -1,0 +1,148 @@
+@namespace DentalClinic.Web.Components.Shared
+@using System.Text
+@using System.Text.Json
+@inject ClinicSessionState Session
+
+@if (_rows.Count == 0)
+{
+    <div class="fs-sm text-soft">@EmptyText</div>
+}
+else
+{
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>@Session.T("Field", "الحقل")</th>
+                    <th>@Session.T("Before", "قبل")</th>
+                    <th>@Session.T("After", "بعد")</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var row in _rows)
+                {
+                    <tr>
+                        <td class="fs-sm">@FieldLabel(row.Field)</td>
+                        <td class="fs-sm mono">@Display(row.Before)</td>
+                        <td class="fs-sm mono">@Display(row.After)</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@code {
+    private static readonly JsonSerializerOptions s_jsonOptions = new(JsonSerializerDefaults.Web);
+
+    [Parameter] public string? OldValues { get; set; }
+
+    [Parameter] public string? NewValues { get; set; }
+
+    /// <summary>Shown when the two snapshots are identical (or both missing).</summary>
+    [Parameter] public string? EmptyMessage { get; set; }
+
+    private List<ChangeRow> _rows = [];
+
+    private string EmptyText => EmptyMessage
+        ?? Session.T("No field-level changes were recorded.", "لم تُسجَّل تغييرات على الحقول.");
+
+    protected override void OnParametersSet() => _rows = ChangedRows(OldValues, NewValues);
+
+    private static string Display(string? value) => string.IsNullOrWhiteSpace(value) ? "—" : value;
+
+    /// <summary>
+    /// Only the fields that actually changed are worth showing: a full
+    /// before/after snapshot would repeat every unchanged column on every row.
+    /// </summary>
+    private static List<ChangeRow> ChangedRows(string? oldValues, string? newValues)
+    {
+        var before = Parse(oldValues);
+        var after = Parse(newValues);
+
+        var rows = new List<ChangeRow>();
+
+        foreach (var field in before.Keys.Union(after.Keys, StringComparer.Ordinal).OrderBy(key => key, StringComparer.Ordinal))
+        {
+            before.TryGetValue(field, out var oldValue);
+            after.TryGetValue(field, out var newValue);
+
+            if (string.Equals(oldValue, newValue, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            rows.Add(new ChangeRow(field, oldValue, newValue));
+        }
+
+        return rows;
+    }
+
+    private static Dictionary<string, string?> Parse(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return new Dictionary<string, string?>(StringComparer.Ordinal);
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<Dictionary<string, string?>>(json, s_jsonOptions)
+                   ?? new Dictionary<string, string?>(StringComparer.Ordinal);
+        }
+        catch (JsonException)
+        {
+            // A malformed snapshot must not break the whole viewer.
+            return new Dictionary<string, string?>(StringComparer.Ordinal);
+        }
+    }
+
+    /// <summary>
+    /// "ContactInfo.PrimaryPhone" reads like code. The two owned value objects
+    /// get a translated root label; the leaf keeps its property name, because
+    /// that is the field name staff see nowhere else and renaming it here would
+    /// make the trail harder to match against the record.
+    /// </summary>
+    private string FieldLabel(string field)
+    {
+        var separator = field.IndexOf('.');
+
+        if (separator < 0)
+        {
+            return Humanize(field);
+        }
+
+        var root = field[..separator];
+        var leaf = Humanize(field[(separator + 1)..]);
+
+        var rootLabel = root switch
+        {
+            "ContactInfo" => Session.T("Contact", "التواصل"),
+            "MedicalHistory" => Session.T("Medical history", "التاريخ الطبي"),
+            _ => Humanize(root),
+        };
+
+        return $"{rootLabel} · {leaf}";
+    }
+
+    private static string Humanize(string name)
+    {
+        var builder = new StringBuilder(name.Length + 8);
+
+        for (var index = 0; index < name.Length; index++)
+        {
+            var character = name[index];
+
+            if (index > 0 && char.IsUpper(character) && !char.IsUpper(name[index - 1]))
+            {
+                builder.Append(' ');
+            }
+
+            builder.Append(character);
+        }
+
+        return builder.ToString();
+    }
+
+    private sealed record ChangeRow(string Field, string? Before, string? After);
+}

@@ -500,3 +500,7 @@ containers/sqlserver-backups/
 # Tracked plans: plan.md and ODONTOGRAM_PLAN.md.
 # NEXT_PHASE_PLAN.md
 opencode.json
+
+# Locally generated runtime state: the Data Protection key ring written by
+# `dotnet run` (src/*/App_Data/keys) and any local clinical images.
+**/App_Data/

@@ -390,6 +390,12 @@
                 <span>@Session.T("Add payment", "إضافة دفعة")</span>
             </button>
         }
+
+        @if (Session.IsAdmin)
+        {
+            <div class="divider"></div>
+            <AuditTrailViewer EntityName="Invoice" EntityId="_selected.Id" />
+        }
     }
 </Drawer>
 

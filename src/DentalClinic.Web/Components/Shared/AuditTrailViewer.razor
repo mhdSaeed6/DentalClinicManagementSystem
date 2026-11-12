@@ -1,0 +1,130 @@
+@namespace DentalClinic.Web.Components.Shared
+@inject ApiClient Api
+@inject ClinicSessionState Session
+@inject NavigationManager Nav
+
+<div class="audit-trail">
+    <div class="flex-between mb-2 flex-wrap gap-2">
+        <h3 style="margin:0">@Session.T("Audit history", "سجل التدقيق")</h3>
+        <div class="flex gap-1">
+            <button type="button" class="btn btn-outline btn-sm" @onclick="ReloadAsync" disabled="@_loading">
+                <ClinicIcon Name="refresh" Class="sm" />
+                <span>@Session.T("Refresh", "تحديث")</span>
+            </button>
+            <button type="button" class="btn btn-ghost btn-sm" @onclick="OpenFullLog">
+                <ClinicIcon Name="shield" Class="sm" />
+                <span>@Session.T("Full log", "السجل الكامل")</span>
+            </button>
+        </div>
+    </div>
+
+    @if (_loading)
+    {
+        <div class="skeleton row"></div>
+        <div class="skeleton row"></div>
+    }
+    else if (_error is not null)
+    {
+        <EmptyState Icon="alert"
+                   Title="@Session.T("Audit history unavailable", "سجل التدقيق غير متاح")"
+                   Message="@_error" />
+    }
+    else if (_entries.Count == 0)
+    {
+        <EmptyState Icon="clock"
+                   Title="@Session.T("No history yet", "لا يوجد سجل بعد")"
+                   Message="@Session.T("Changes to this record will appear here.", "ستظهر التغييرات على هذا السجل هنا.")" />
+    }
+    else
+    {
+        @foreach (var entry in _entries)
+        {
+            <div class="card mb-2" @key="entry.Id">
+                <div class="card-body" style="padding:14px">
+                    <div class="flex-between flex-wrap gap-2">
+                        <div class="flex gap-2" style="align-items:center">
+                            <AuditActionBadge Value="entry.Action" />
+                            <span class="fs-sm text-soft">@ClinicFormatting.DateTimeLabel(entry.TimestampLocal)</span>
+                        </div>
+                        <span class="fs-xs text-soft mono" title="@(entry.UserId ?? "")">@ActorLabel(entry.UserId)</span>
+                    </div>
+
+                    <AuditChangeTable OldValues="entry.OldValues" NewValues="entry.NewValues" />
+                </div>
+            </div>
+        }
+    }
+</div>
+
+@code {
+    [Parameter] public string EntityName { get; set; } = string.Empty;
+
+    [Parameter] public Guid EntityId { get; set; }
+
+    private bool _loading = true;
+    private string? _error;
+    private List<AuditLogEntryDto> _entries = [];
+    private string? _loadedKey;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (string.IsNullOrWhiteSpace(EntityName) || EntityId == Guid.Empty)
+        {
+            return;
+        }
+
+        var key = $"{EntityName}:{EntityId}";
+
+        // OnParametersSetAsync runs on every render; reloading on each one would
+        // hammer the API (and reset the list while the user is reading it).
+        if (string.Equals(_loadedKey, key, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _loadedKey = key;
+        await LoadAsync();
+    }
+
+    private async Task ReloadAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+        StateHasChanged();
+
+        try
+        {
+            _entries = await Api.GetAuditLogsAsync(EntityName, EntityId);
+        }
+        catch (ApiException ex)
+        {
+            _entries = [];
+            _error = ex.StatusCode == 403
+                ? Session.T("Only an administrator can view the audit history.", "عرض سجل التدقيق متاح للمدير فقط.")
+                : ex.Message;
+        }
+        catch (Exception)
+        {
+            _entries = [];
+            _error = Session.T("Unable to load the audit history.", "تعذّر تحميل سجل التدقيق.");
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    /// <summary>
+    /// Hands the record over to the clinic-wide screen, pre-filtered, so the
+    /// embedded list stays short while the full history (and its CSV) is one
+    /// click away.
+    /// </summary>
+    private void OpenFullLog() =>
+        Nav.NavigateTo($"audit-log?entity={Uri.EscapeDataString(EntityName)}&id={EntityId}");
+
+    private string ActorLabel(string? userId) => string.IsNullOrWhiteSpace(userId)
+        ? Session.T("System", "النظام")
+        : userId.Length <= 8 ? userId : userId[..8];
+}

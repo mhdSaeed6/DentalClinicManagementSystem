@@ -1,5 +1,6 @@
 using DentalClinic.Domain.Appointments.Enums;
 using DentalClinic.Domain.Appointments.Events;
+using DentalClinic.Domain.Common.Interfaces;
 using DentalClinic.Domain.Common.Results;
 using DentalClinic.Domain.Doctors;
 using DentalClinic.Domain.Patients;
@@ -7,7 +8,7 @@ using DentalClinic.Domain.Services;
 
 namespace DentalClinic.Domain.Appointments;
 
-public class Appointment : AuditableEntity
+public class Appointment : AuditableEntity, IRequireAuditTrail
 {
     public Guid PatientId { get; private set; }
     public Guid DoctorId { get; private set; }

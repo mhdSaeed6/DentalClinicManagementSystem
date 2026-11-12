@@ -1,6 +1,7 @@
 using DentalClinic.Web.Api;
 using DentalClinic.Web.Components;
 
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -8,6 +9,23 @@ var builder = WebApplication.CreateBuilder(args);
 // Add services to the container.
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
+
+// Data Protection keys back the antiforgery tokens used by every interactive
+// form. Holding them in memory meant a container restart invalidated all of
+// them. Persist the key ring on the volume the compose files mount, under the
+// same application name as the API so both apps share one ring. Inside the
+// image the content root is /app, i.e. /app/App_Data/keys; `dotnet run` gets a
+// project-local folder instead of a container path.
+var dataProtectionKeysPath = builder.Configuration["DataProtection:KeysPath"];
+
+if (string.IsNullOrWhiteSpace(dataProtectionKeysPath))
+{
+    dataProtectionKeysPath = Path.Combine(builder.Environment.ContentRootPath, "App_Data", "keys");
+}
+
+builder.Services.AddDataProtection()
+    .SetApplicationName("DentalClinic")
+    .PersistKeysToFileSystem(new DirectoryInfo(dataProtectionKeysPath));
 
 // Behind a reverse proxy that terminates TLS (Caddy/Nginx/Traefik), the request
 // scheme and client address arrive in X-Forwarded-Proto/X-Forwarded-For.

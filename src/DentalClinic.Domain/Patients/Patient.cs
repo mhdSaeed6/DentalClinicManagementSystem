@@ -7,7 +7,7 @@ using DentalClinic.Domain.Common.ValueObjects;
 
 namespace DentalClinic.Domain.Patients;
 
-public class Patient : AuditableEntity
+public class Patient : AuditableEntity, IRequireAuditTrail
 {
     public string FirstName { get; private set; } = default!;
     public string LastName { get; private set; } = default!;

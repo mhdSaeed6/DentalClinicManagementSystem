@@ -32,3 +32,7 @@ containers/
 **/*.db
 **/*.db-shm
 **/*.db-wal
+
+# Locally created runtime state: Data Protection key rings (and clinical images
+# when Images__StoragePath points here) written by `dotnet run`.
+**/App_Data/

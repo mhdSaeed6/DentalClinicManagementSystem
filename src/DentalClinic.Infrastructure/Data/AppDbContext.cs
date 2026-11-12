@@ -3,6 +3,7 @@ using System.Data;
 using DentalClinic.Application.Common.Exceptions;
 using DentalClinic.Application.Common.Interfaces;
 using DentalClinic.Domain.Appointments;
+using DentalClinic.Domain.Auditing;
 using DentalClinic.Domain.Clinics;
 using DentalClinic.Domain.Doctors;
 using DentalClinic.Domain.Identity;
@@ -60,6 +61,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> contextOptions) : Ident
     public DbSet<ImportJob> ImportJobs => Set<ImportJob>();
 
     public DbSet<ImportRowError> ImportRowErrors => Set<ImportRowError>();
+
+    public DbSet<AuditLogEntry> AuditLogEntries => Set<AuditLogEntry>();
 
     public bool HasActiveTransaction => Database.CurrentTransaction is not null;
 
