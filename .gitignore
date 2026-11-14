@@ -496,6 +496,14 @@ containers/*
 !containers/sqlserver/
 containers/sqlserver-backups/
 
+# Phase D2 ops tooling: the backup scripts and the Prometheus alert rules are
+# source, not runtime state, so re-include their directories. The restore
+# scratch folder holds .bak copies and stays ignored.
+!containers/backup/
+!containers/prometheus/
+containers/sqlserver-restore/
+*.bak
+
 # Local execution plans kept out of git (working copies for the current phase).
 # Tracked plans: plan.md and ODONTOGRAM_PLAN.md.
 # NEXT_PHASE_PLAN.md

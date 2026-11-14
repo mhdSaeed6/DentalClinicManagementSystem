@@ -1,0 +1,26 @@
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+
+# Backup staleness / missing alerts (Phase D2). Without Alertmanager they show
+# up in the Prometheus UI (/alerts) and in Grafana.
+rule_files:
+  - /etc/prometheus/alerts.yml
+
+scrape_configs:
+  - job_name: 'dentalclinic-api'
+    metrics_path: /metrics
+    static_configs:
+      # Service name from docker-compose.yml; the API listens on port 80 in-network.
+      - targets: ['dentalclinic-api:80']
+
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # node-exporter only carries the textfile collector here: it turns the newest
+  # .bak file into dentalclinic_backup_* metrics so a failed SQL Agent job is
+  # visible. It is not scraping host metrics.
+  - job_name: 'node'
+    static_configs:
+      - targets: ['node-exporter:9100']

@@ -63,6 +63,9 @@ services:
       - sqlserver-data:/var/opt/mssql
       # Host-visible folder for nightly .bak files (git-ignored).
       - ./containers/sqlserver-backups:/var/opt/mssql/backups
+      # Scratch folder used by scripts/backup/restore-rehearsal.ps1, which
+      # restores a backup here instead of touching the live database.
+      - ./containers/sqlserver-restore:/var/opt/mssql/restore
     networks:
       - dentalclinic-net
     restart: always
@@ -100,11 +103,46 @@ services:
       - "8081:80"
     restart: unless-stopped
 
+  # ---------------------------------------------------------------------------
+  # Backup observability (Phase D2). Included in the dev stack so the metric and
+  # the alert rule can be verified without a production .env or a restic bucket.
+  # ---------------------------------------------------------------------------
+  backup-metrics:
+    image: alpine:3.20
+    container_name: dentalclinic-backup-metrics
+    environment:
+      - BACKUP_DIR=/var/opt/mssql/backups
+      - TEXTFILE_PATH=/var/lib/node_exporter/textfile
+      - INTERVAL_SECONDS=60
+    volumes:
+      - ./containers/sqlserver-backups:/var/opt/mssql/backups:ro
+      - backup-textfile:/var/lib/node_exporter/textfile
+      - ./containers/backup/backup-metrics.sh:/scripts/backup-metrics.sh:ro
+    entrypoint: ["/bin/sh", "/scripts/backup-metrics.sh"]
+    networks:
+      - dentalclinic-net
+    restart: unless-stopped
+
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: dentalclinic-node-exporter
+    command: ["--collector.textfile.directory=/var/lib/node_exporter/textfile"]
+    volumes:
+      - backup-textfile:/var/lib/node_exporter/textfile:ro
+    ports:
+      - "9100:9100"
+    networks:
+      - dentalclinic-net
+    restart: unless-stopped
+
   prometheus:
     image: prom/prometheus:latest
     container_name: prometheus
     volumes:
       - ./containers/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      # prometheus.yml points rule_files at this path; a missing file makes
+      # Prometheus exit at startup, so it must be mounted in every stack.
+      - ./containers/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
     ports:
       - "9090:9090"
     networks:
@@ -132,6 +170,8 @@ volumes:
   sqlserver-data: {}
   grafana-data: {}
   dentalclinic-images: {}
+  # Textfile collector exchange between backup-metrics and node-exporter.
+  backup-textfile: {}
 
 networks:
   dentalclinic-net:

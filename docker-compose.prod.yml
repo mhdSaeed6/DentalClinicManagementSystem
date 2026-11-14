@@ -44,6 +44,9 @@ services:
       # Host-visible folder for nightly .bak files. Copy them off-box (see
       # docs/operations/BACKUP-RESTORE.md); a same-host backup is not a backup.
       - ./containers/sqlserver-backups:/var/opt/mssql/backups
+      # Scratch folder for restore rehearsals. The drill restores a .bak into
+      # DentalClinicRestoreTest from here, never over the live database.
+      - ./containers/sqlserver-restore:/var/opt/mssql/restore
     networks:
       - dentalclinic-net
     restart: unless-stopped
@@ -193,6 +196,73 @@ services:
       - dentalclinic-net
     restart: "no"
 
+  # ---------------------------------------------------------------------------
+  # Backup observability and off-box copy (Phase D2).
+  # ---------------------------------------------------------------------------
+
+  # Turns the newest .bak file into dentalclinic_backup_* metrics. Without it a
+  # failed SQL Agent job is completely silent.
+  backup-metrics:
+    image: alpine:3.20
+    container_name: dentalclinic-backup-metrics
+    environment:
+      BACKUP_DIR: /var/opt/mssql/backups
+      TEXTFILE_PATH: /var/lib/node_exporter/textfile
+      INTERVAL_SECONDS: "60"
+    volumes:
+      - ./containers/sqlserver-backups:/var/opt/mssql/backups:ro
+      - backup-textfile:/var/lib/node_exporter/textfile
+      - ./containers/backup/backup-metrics.sh:/scripts/backup-metrics.sh:ro
+    entrypoint: ["/bin/sh", "/scripts/backup-metrics.sh"]
+    networks:
+      - dentalclinic-net
+    restart: unless-stopped
+
+  # Serves the textfile collector. Loopback only, like the other ops ports.
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: dentalclinic-node-exporter
+    command: ["--collector.textfile.directory=/var/lib/node_exporter/textfile"]
+    volumes:
+      - backup-textfile:/var/lib/node_exporter/textfile:ro
+    ports:
+      - "127.0.0.1:9100:9100"
+    networks:
+      - dentalclinic-net
+    restart: unless-stopped
+
+  # Off-box copy: one restic snapshot per run covering the database dump, the
+  # clinical images and the Data Protection key ring. Long retention lives here
+  # (30 daily / 8 weekly / 12 monthly); the host keeps 7 days.
+  backup-offsite:
+    image: restic/restic:latest
+    container_name: dentalclinic-backup-offsite
+    environment:
+      RESTIC_REPOSITORY: ${RESTIC_REPOSITORY:?RESTIC_REPOSITORY must be set in .env}
+      RESTIC_PASSWORD: ${RESTIC_PASSWORD:?RESTIC_PASSWORD must be set in .env}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-us-east-1}
+      RESTIC_CACHE_DIR: /tmp/restic-cache
+      DB_DIR: /data/db
+      IMAGES_DIR: /data/images
+      KEYS_DIR: /data/keys
+      # 03:30 local: after the 02:00 SQL Agent job has produced its .bak.
+      SCHEDULE_HOUR: ${BACKUP_SCHEDULE_HOUR:-3}
+      SCHEDULE_MINUTE: ${BACKUP_SCHEDULE_MINUTE:-30}
+    volumes:
+      - ./containers/sqlserver-backups:/data/db:ro
+      - dentalclinic-images:/data/images:ro
+      - dentalclinic-keys:/data/keys:ro
+      - ./containers/backup:/scripts:ro
+    entrypoint: ["/bin/sh", "/scripts/scheduler.sh"]
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    networks:
+      - dentalclinic-net
+    restart: unless-stopped
+
   seq:
     image: datalust/seq:latest
     container_name: seq
@@ -214,6 +284,9 @@ services:
     container_name: prometheus
     volumes:
       - ./containers/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      # prometheus.yml points rule_files here; a missing file makes Prometheus
+      # exit at startup, which would take the backup alerts down with it.
+      - ./containers/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
     ports:
       - "127.0.0.1:9090:9090"
     networks:
@@ -224,6 +297,8 @@ services:
         # mapped by the API, and starting Prometheus before the API is actually
         # ready only produces failed scrapes and "down" targets in Grafana.
         condition: service_healthy
+      node-exporter:
+        condition: service_started
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "wget --spider -q http://localhost:9090/-/healthy || exit 1"]
@@ -255,9 +330,12 @@ volumes:
   # Shared Data Protection key ring (same volume on API and Web). The XML keys
   # are not encrypted by default, so back this volume up with the same care as
   # the database secrets. Losing it logs every user out and invalidates
-  # outstanding antiforgery tokens.
+  # outstanding antiforgery tokens. `backup-offsite` snapshots it for that reason.
   dentalclinic-keys: {}
   seq-data: {}
+  # Textfile collector exchange: backup-metrics writes dentalclinic_backup.prom,
+  # node-exporter reads it.
+  backup-textfile: {}
 
 networks:
   dentalclinic-net:

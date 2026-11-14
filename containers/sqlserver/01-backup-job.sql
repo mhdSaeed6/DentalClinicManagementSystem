@@ -72,8 +72,33 @@ BEGIN
         @active_start_date = 20260101,
         @active_start_time = 020000;    -- 02:00 nightly
 
-    EXECUTE msdb.dbo.sp_add_jobserver
-        @job_id = @jobId,
-        @server_name = N'(local)';
+    -- Attach the job to the local server. This call races SQL Server Agent's
+    -- startup: while the agent is still initialising it raises Msg 14258 and
+    -- the job is left with no job server, so the schedule never fires. Retry
+    -- instead of trusting one attempt, then assert the association exists —
+    -- a backup job that cannot run must fail the initialiser loudly.
+    DECLARE @attempt int = 0;
+    DECLARE @attached bit = 0;
+
+    WHILE @attached = 0
+    BEGIN
+        BEGIN TRY
+            EXECUTE msdb.dbo.sp_add_jobserver
+                @job_id = @jobId,
+                @server_name = N'(local)';
+            SET @attached = 1;
+        END TRY
+        BEGIN CATCH
+            SET @attempt += 1;
+            IF @attempt >= 30
+                THROW;
+            WAITFOR DELAY '00:00:05';
+        END CATCH
+    END
+
+    IF NOT EXISTS (SELECT 1 FROM msdb.dbo.sysjobservers WHERE job_id = @jobId)
+    BEGIN
+        THROW 50001, N'The backup job has no job server; the schedule would never run.', 1;
+    END
 END
 GO

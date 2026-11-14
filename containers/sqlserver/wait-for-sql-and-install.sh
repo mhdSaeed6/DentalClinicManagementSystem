@@ -34,6 +34,28 @@ do
 done
 echo "SQL Server is reachable."
 
+# The job registration below calls sp_add_jobserver, which fails with
+# "Cannot perform this operation while SQLServerAgent is starting" (Msg 14258)
+# when the agent is still coming up. That failure left the job registered but
+# with no job server, i.e. a nightly backup that never runs. Wait for the agent
+# first; if it is disabled we still apply the scripts and let the SQL raise.
+echo "Waiting for SQL Server Agent ..."
+agent_attempt=0
+agent_max_attempts=24
+while :; do
+    agent_running=$(sqlcmd_helper -h -1 -W -Q "SET NOCOUNT ON; SELECT COUNT(*) FROM sys.dm_server_services WHERE servicename LIKE N'SQL Server Agent%' AND status = 4;" 2>/dev/null | tr -d '[:space:]')
+    if [ "${agent_running:-0}" = "1" ]; then
+        echo "SQL Server Agent is running."
+        break
+    fi
+    agent_attempt=$((agent_attempt + 1))
+    if [ "$agent_attempt" -ge "$agent_max_attempts" ]; then
+        echo "WARNING: SQL Server Agent is not running after ${agent_max_attempts} attempts; applying scripts anyway." >&2
+        break
+    fi
+    sleep 5
+done
+
 found_scripts=0
 for script in /scripts/*.sql; do
     if [ -e "$script" ]; then
