@@ -164,7 +164,7 @@ dotnet run --project src/DentalClinic.Web
 
 ## 🛟 Operations
 
-* **Backups:** Compose enables SQL Agent and the `sql-backup-init` sidecar registers a nightly full backup at 02:00 with 7-day retention under `containers/sqlserver-backups/`. Restore steps, retention, and the still-open off-box-copy requirement are documented in [`docs/operations/BACKUP-RESTORE.md`](docs/operations/BACKUP-RESTORE.md).
+* **Backups:** Compose enables SQL Agent and the `sql-backup-init` sidecar registers a nightly full backup at 02:00 with 7-day local retention under `containers/sqlserver-backups/`. A `restic` sidecar copies the dump plus the images and Data Protection volumes off-box at 03:30, and backup age is exported as a Prometheus metric with missing/stale alert rules. `pwsh ./scripts/backup/restore-rehearsal.ps1` proves a restore and logs it; procedures, RPO/RTO and the remaining gaps are in [`docs/operations/BACKUP-RESTORE.md`](docs/operations/BACKUP-RESTORE.md).
 * **Clinical images:** Stored outside `wwwroot` at `Images__StoragePath` (default `App_Data/images`), backed by the `dentalclinic-images` compose volume.
 * **Patient import:** Admin-only `/import` page; the workbook template and rejection report are generated on demand, and no row is written unless the whole file validates.
 * **Health:** `/health` (liveness) and `/health/ready` (database probe) are mapped in every environment.

@@ -504,10 +504,16 @@ case for reporting, so existing invoice totals are unchanged.
 Agent on `sqlserver` and runs a one-shot `sql-backup-init` sidecar that applies
 `containers/sqlserver/01-backup-job.sql`: a nightly 02:00 full backup with `CHECKSUM,
 COMPRESSION`, 7-day `xp_delete_file` retention, written to the host bind mount
-`containers/sqlserver-backups/`. Verification, force-run and restore-rehearsal steps are
-in `docs/operations/BACKUP-RESTORE.md`. **Still open (ops, not code):** copy backups
-off-host, alert when the newest `.bak` is older than ~26 hours, run and record the restore
-rehearsal (`REL-001`/`TEST-010`), and back up the `dentalclinic-images` volume.
+`containers/sqlserver-backups/`. Phase D2 closed the three gaps this section originally
+listed: `backup-offsite` (restic) copies the dump **plus** `dentalclinic-images` and
+`dentalclinic-keys` to an S3-compatible repository at 03:30 with 30 daily / 8 weekly /
+12 monthly retention and a `restic check`; `backup-metrics` + `node-exporter` export
+backup age so `containers/prometheus/alerts.yml` raises `DentalClinicBackupMissing` /
+`DentalClinicBackupStale`; and `scripts/backup/restore-rehearsal.ps1` restores the newest
+backup (local or offsite) into `DentalClinicRestoreTest`, runs `DBCC CHECKDB`, compares
+counts and records the drill in `docs/operations/restore-rehearsal-log.md`. **Still open
+(ops, not code):** point-in-time recovery (no log backups, so RPO stays 24 h) and
+out-of-band paging (alerts surface in Prometheus/Grafana only, no Alertmanager).
 
 **Patient import — implemented.** `ClosedXML` 0.105.1 (centralized `PackageVersion`) backs
 a parser that builds every row through `Patient.Create`/`ContactInfo.Create`, so import

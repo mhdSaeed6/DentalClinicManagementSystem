@@ -1,0 +1,60 @@
+# =============================================================================
+# Alert rules for the DentalClinic stack (Phase D2).
+#
+# Loaded by containers/prometheus/prometheus.yml. Without Alertmanager these
+# alerts surface in the Prometheus UI (/alerts) and in Grafana; that is enough
+# while the ops UIs are loopback-only, and it keeps the stack free of another
+# container plus receiver secrets. Add Alertmanager when someone other than the
+# on-call operator needs to be paged.
+# =============================================================================
+
+groups:
+  - name: dentalclinic-backup
+    rules:
+      # The folder exists but is empty. Either the SQL Agent job has never run,
+      # or it is writing somewhere else (a container without the bind mount is
+      # the usual cause).
+      - alert: DentalClinicBackupMissing
+        expr: dentalclinic_backup_present == 0
+        for: 10m
+        labels:
+          severity: critical
+          component: backup
+        annotations:
+          summary: "No DentalClinic database backup exists on the host"
+          description: >-
+            The backup folder has contained no .bak file for 10 minutes. Check
+            that the "DentalClinic Daily Full Backup" SQL Agent job exists and
+            succeed (docker exec dentalclinic-sql sqlcmd ... sp_help_job), then
+            see docs/operations/BACKUP-RESTORE.md.
+
+      # The newest backup is older than 26 hours, i.e. a nightly run was missed.
+      - alert: DentalClinicBackupStale
+        expr: >-
+          dentalclinic_backup_present == 1
+          and (time() - dentalclinic_backup_last_success_timestamp_seconds) > 93600
+        for: 10m
+        labels:
+          severity: critical
+          component: backup
+        annotations:
+          summary: "DentalClinic database backup is stale"
+          description: >-
+            The newest .bak file is more than 26 hours old, so at least one
+            nightly 02:00 run did not produce a file. Treat the last good backup
+            as the recovery point until this clears.
+
+      # The exporter itself is down, so the two alerts above would be blind.
+      # This is the reason the textfile metrics are scraped at all.
+      - alert: DentalClinicBackupMetricsDown
+        expr: up{job="node"} == 0
+        for: 10m
+        labels:
+          severity: warning
+          component: backup
+        annotations:
+          summary: "Backup metrics exporter is down"
+          description: >-
+            Prometheus cannot scrape the node-exporter that publishes backup
+            age, so missing-backup and stale-backup alerts cannot fire. Check
+            the backup-metrics and node-exporter containers.
