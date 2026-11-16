@@ -1387,7 +1387,9 @@
             FullName(patient.FirstName, patient.LastName),
             appt.ScheduledDateTime,
             appt.DurationInMinutes,
-            doctorName);
+            doctorName,
+            Branding.Name,
+            Branding.NameArabic);
     }
 
     private string DoctorName(Guid id) =>

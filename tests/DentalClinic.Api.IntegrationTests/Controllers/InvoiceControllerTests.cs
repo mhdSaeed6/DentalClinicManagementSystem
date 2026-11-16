@@ -263,7 +263,9 @@ public class InvoiceControllerTests(WebAppFactory webAppFactory)
         var request = new AddInvoicePaymentRequest
         {
             Amount = 200.00m,
-            Notes = "Partial cash payment"
+            Notes = "Partial card payment",
+            Method = (int)PaymentMethod.Card,
+            Reference = "**** 4242"
         };
 
         // Act
@@ -275,6 +277,59 @@ public class InvoiceControllerTests(WebAppFactory webAppFactory)
         var updatedInvoice = await response.Content.ReadFromJsonAsync<InvoiceDto>();
         Assert.NotNull(updatedInvoice);
         Assert.Equal(invoice.Id, updatedInvoice!.Id);
+
+        // الحقول الوصفية تصل عبر الـ DTO…
+        var payment = Assert.Single(updatedInvoice.Payments);
+        Assert.Equal(PaymentMethod.Card, payment.Method);
+        Assert.Equal("**** 4242", payment.Reference);
+
+        // …ولا تغيّر أي حساب مالي.
+        Assert.Equal(200.00m, updatedInvoice.PaidAmount);
+        Assert.Equal(300.00m, updatedInvoice.RemainingAmount);
+    }
+
+    [Fact]
+    public async Task AddPayment_WithoutMethod_ShouldDefaultToCash()
+    {
+        // Arrange
+        await webAppFactory.ResetDatabaseAsync();
+        await EnsureUserExistsAsync();
+
+        var token = await _client.GenerateTokenAsync(TestUsers.Admin);
+        _client.SetAuthorizationHeader(token);
+
+        var patient = PatientTestDataBuilder.Create().Build();
+        var invoice = InvoiceTestDataBuilder.Create()
+            .ForPatient(patient.Id)
+            .WithAmount(500.00m)
+            .Build();
+
+        await webAppFactory.ExecuteDbContextAsync(async context =>
+        {
+            context.Patients.Add(patient);
+            context.Invoices.Add(invoice);
+            await context.SaveChangesAsync(default);
+        });
+
+        // Old clients simply omit Method/Reference; the JSON payload below has
+        // no such members, exactly like a pre-feature client.
+        var payload = """{"Amount":150.00,"Notes":"Legacy cash payment"}""";
+
+        // Act
+        var response = await _client.SendAsync(new HttpRequestMessage(
+            HttpMethod.Post,
+            $"/api/v1.0/invoices/{invoice.Id}/payments")
+        {
+            Content = new StringContent(payload, System.Text.Encoding.UTF8, "application/json")
+        });
+
+        // Assert
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var updatedInvoice = await response.Content.ReadFromJsonAsync<InvoiceDto>();
+        var payment = Assert.Single(updatedInvoice!.Payments);
+        Assert.Equal(PaymentMethod.Cash, payment.Method);
+        Assert.Null(payment.Reference);
     }
 
     [Fact]

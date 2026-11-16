@@ -1,5 +1,6 @@
 using DentalClinic.Application.Common.Interfaces;
 using DentalClinic.Application.Common.Models;
+using DentalClinic.Application.Common.Security;
 using DentalClinic.Application.Features.Invoices.Dtos;
 using DentalClinic.Application.Features.Invoices.Mappers;
 using DentalClinic.Domain.Common.Results;
@@ -14,17 +15,11 @@ public class GetInvoicesQueryHandler(IAppDbContext context) : IRequestHandler<Ge
 {
     public async Task<Result<PaginatedList<InvoiceDto>>> Handle(GetInvoicesQuery request, CancellationToken cancellationToken)
     {
-        var query = context.Invoices.AsNoTracking();
-
         // 0. Trusted, server-derived scope. Applied before any client-supplied
         //    filter so a doctor only sees invoices linked to their own visits.
-        if (request.Scope.IsRestricted)
-        {
-            var scopeDoctorId = request.Scope.DoctorId;
-            query = query.Where(i =>
-                i.AppointmentId != null &&
-                context.Appointments.Any(a => a.Id == i.AppointmentId && a.DoctorId == scopeDoctorId));
-        }
+        var query = context.Invoices
+            .AsNoTracking()
+            .ApplyScope(context, request.Scope);
 
         if (request.PatientId.HasValue)
         {

@@ -215,6 +215,18 @@ public enum InvoiceLifecycleStatus
     Issued = 2,
 }
 
+/// <summary>
+/// Mirrors <c>DentalClinic.Domain.Invoices.Enums.PaymentMethod</c>. The wire
+/// format is numeric, so the values must stay identical to the domain enum.
+/// </summary>
+public enum PaymentMethod
+{
+    Cash = 1,
+    Card = 2,
+    BankTransfer = 3,
+    Other = 4,
+}
+
 public sealed class PaymentDto
 {
     public Guid Id { get; set; }
@@ -226,6 +238,12 @@ public sealed class PaymentDto
     public DateTime PaidAtUtc { get; set; }
 
     public string? TransactionNotes { get; set; }
+
+    /// <summary>How the payment was made. Metadata only.</summary>
+    public PaymentMethod Method { get; set; } = PaymentMethod.Cash;
+
+    /// <summary>Optional card/transfer reference. Metadata only.</summary>
+    public string? Reference { get; set; }
 }
 
 public sealed class InvoiceDto
@@ -665,6 +683,12 @@ public sealed class InvoicePaymentRequest
     public decimal Amount { get; set; }
 
     public string? Notes { get; set; }
+
+    /// <summary>Defaults to cash, matching the API's and the database's default.</summary>
+    public PaymentMethod Method { get; set; } = PaymentMethod.Cash;
+
+    /// <summary>Card/transfer reference. Optional and never used in any money maths.</summary>
+    public string? Reference { get; set; }
 }
 
 public sealed class InvoiceLineFormRequest

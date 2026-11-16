@@ -796,7 +796,7 @@ else if (_patient is not null)
     };
 
     private string GeneralWhatsAppMessage =>
-        WhatsAppMessageBuilder.GeneralContactMessage(Session.IsRtl, FullName(_patient!));
+        WhatsAppMessageBuilder.GeneralContactMessage(Session.IsRtl, FullName(_patient!), Branding.Name, Branding.NameArabic);
 
     private string FullName(PatientDto patient) => ClinicFormatting.FullName(patient.FirstName, patient.LastName);
 

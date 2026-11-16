@@ -15,6 +15,7 @@ using DentalClinic.Application.Features.Invoices.Queries.GetInvoiceSummary;
 using DentalClinic.Application.Features.Invoices.Queries.GetInvoices;
 using DentalClinic.Application.Features.Invoices.Queries.GetOutstandingDebts;
 using DentalClinic.Contracts.Requests.Invoices;
+using DentalClinic.Domain.Invoices.Enums;
 
 using MediatR;
 
@@ -250,7 +251,7 @@ public class InvoiceController(ISender sender, IUser user) : ApiController
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
     [EndpointSummary("Adds a payment to an existing invoice.")]
-    [EndpointDescription("Records a new payment against the specified invoice and recalculates the remaining balance.")]
+    [EndpointDescription("Records a new payment against the specified invoice and recalculates the remaining balance. The payment method and reference are descriptive metadata only and never change the balance maths.")]
     [EndpointName("AddInvoicePayment")]
     [MapToApiVersion("1.0")]
     [ProducesDefaultResponseType]
@@ -262,7 +263,9 @@ public class InvoiceController(ISender sender, IUser user) : ApiController
         var command = new AddInvoicePaymentCommand(
             invoiceId,
             request.Amount,
-            request.Notes);
+            request.Notes,
+            (PaymentMethod)request.Method,
+            request.Reference);
 
         var result = await sender.Send(command, ct);
 

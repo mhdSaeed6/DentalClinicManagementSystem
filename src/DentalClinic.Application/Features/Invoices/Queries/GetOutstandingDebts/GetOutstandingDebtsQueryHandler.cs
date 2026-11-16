@@ -1,5 +1,6 @@
 using DentalClinic.Application.Common.Interfaces;
 using DentalClinic.Application.Common.Models;
+using DentalClinic.Application.Common.Security;
 using DentalClinic.Application.Features.Invoices.Dtos;
 using DentalClinic.Domain.Common.Results;
 using DentalClinic.Domain.Invoices.Enums;
@@ -29,13 +30,7 @@ public class GetOutstandingDebtsQueryHandler(IAppDbContext context)
 
         // Same trusted, server-derived scope as the invoice list, applied
         // before any client-supplied filter.
-        if (request.Scope.IsRestricted)
-        {
-            var scopeDoctorId = request.Scope.DoctorId;
-            query = query.Where(i =>
-                i.AppointmentId != null &&
-                context.Appointments.Any(a => a.Id == i.AppointmentId && a.DoctorId == scopeDoctorId));
-        }
+        query = query.ApplyScope(context, request.Scope);
 
         // The grouped set is at most one row per indebted patient — small for
         // a clinic — so the aggregation is materialised in full and ordered /

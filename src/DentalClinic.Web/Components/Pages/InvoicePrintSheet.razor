@@ -25,6 +25,10 @@
 
         <header class="print-sheet-header">
             <div>
+                @if (!string.IsNullOrWhiteSpace(Branding.LogoUrl))
+                {
+                    <img class="print-sheet-logo" src="@Branding.LogoUrl" alt="@Branding.DisplayName(Session.IsRtl)" />
+                }
                 <h1>@Branding.DisplayName(Session.IsRtl)</h1>
                 <p>@Session.T("Invoice", "فاتورة")</p>
                 @if (Branding.Address is not null || Branding.Phone is not null)
@@ -123,6 +127,7 @@
                     <thead>
                         <tr>
                             <th>@Session.T("Date", "التاريخ")</th>
+                            <th style="width:110px">@Session.T("Method", "الطريقة")</th>
                             <th>@Session.T("Notes", "ملاحظات")</th>
                             <th style="width:140px">@Session.T("Amount", "المبلغ")</th>
                         </tr>
@@ -132,7 +137,8 @@
                         {
                             <tr @key="payment.Id">
                                 <td>@ClinicFormatting.DateTimeLabel(payment.PaidAtUtc.ToLocalTime())</td>
-                                <td>@(string.IsNullOrWhiteSpace(payment.TransactionNotes) ? "—" : payment.TransactionNotes)</td>
+                                <td>@ClinicFormatting.PaymentMethodLabel(payment.Method, Session.IsRtl)</td>
+                                <td>@NoteText(payment)</td>
                                 <td class="mono">@Money(payment.Amount)</td>
                             </tr>
                         }
@@ -150,6 +156,24 @@
 
 @code {
     private string Money(decimal amount) => ClinicFormatting.Money(amount, Branding.BaseCurrency);
+
+    /// <summary>
+    /// ملاحظات الدفعة، مع إلحاق المرجع (آخر أرقام البطاقة أو رقم الحوالة) إن وُجد.
+    /// بيانات وصفية فقط ولا تدخل في أي حساب.
+    /// </summary>
+    private static string NoteText(PaymentDto payment)
+    {
+        var notes = string.IsNullOrWhiteSpace(payment.TransactionNotes) ? null : payment.TransactionNotes;
+        var reference = string.IsNullOrWhiteSpace(payment.Reference) ? null : payment.Reference;
+
+        return (notes, reference) switch
+        {
+            (null, null) => "—",
+            (null, _) => reference!,
+            (_, null) => notes!,
+            _ => notes + " · " + reference,
+        };
+    }
 
     [Parameter]
     public Guid InvoiceId { get; set; }

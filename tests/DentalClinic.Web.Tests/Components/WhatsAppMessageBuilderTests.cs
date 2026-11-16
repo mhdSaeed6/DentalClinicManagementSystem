@@ -24,6 +24,26 @@ public class WhatsAppMessageBuilderTests
     }
 
     [Theory]
+    [InlineData("0999 123 456", "963999123456")] // local form: drop the zero, add the clinic's code
+    [InlineData("+963 999 123 456", "963999123456")] // already international: left alone
+    [InlineData("00963 999 123 456", "963999123456")] // 00 prefix: left alone after stripping
+    [InlineData("0999123456", "963999123456")]
+    public void TryNormalize_WithTheClinicCountryCode_ResolvesLocalNumbers(string input, string expected)
+    {
+        Assert.Equal(expected, WhatsAppMessageBuilder.TryNormalize(input, "963"));
+    }
+
+    [Fact]
+    public void TryNormalize_WithAnInvalidCountryCode_LeavesTheNumberUntouched()
+    {
+        // A code that cannot be a country code must not be prefixed; the naive
+        // result is still the previous behaviour.
+        Assert.Equal("0999123456", WhatsAppMessageBuilder.TryNormalize("0999 123 456", "000"));
+        Assert.Equal("0999123456", WhatsAppMessageBuilder.TryNormalize("0999 123 456", " "));
+        Assert.Equal("0999123456", WhatsAppMessageBuilder.TryNormalize("0999 123 456", null));
+    }
+
+    [Theory]
     [InlineData(null)]
     [InlineData("")]
     [InlineData("   ")]
@@ -48,6 +68,12 @@ public class WhatsAppMessageBuilderTests
             WhatsAppMessageBuilder.TryNormalize(input) is not null);
     }
 
+    [Fact]
+    public void CanSend_WithACountryCode_AcceptsALocalNumber()
+    {
+        Assert.True(WhatsAppMessageBuilder.CanSend("0999 123 456", "963"));
+    }
+
     // ------------------------------------------------------ TryBuildUrl
 
     [Fact]
@@ -60,6 +86,15 @@ public class WhatsAppMessageBuilderTests
         Assert.NotNull(url);
         Assert.StartsWith("https://wa.me/963944123456?text=", url);
         Assert.Equal(message, Uri.UnescapeDataString(url["https://wa.me/963944123456?text=".Length..]));
+    }
+
+    [Fact]
+    public void TryBuildUrl_WithTheCountryCode_LinksTheResolvedNumber()
+    {
+        var url = WhatsAppMessageBuilder.TryBuildUrl("0999 123 456", "hello", "963");
+
+        Assert.NotNull(url);
+        Assert.StartsWith("https://wa.me/963999123456?text=", url);
     }
 
     [Fact]
@@ -87,12 +122,16 @@ public class WhatsAppMessageBuilderTests
     {
         var message = WhatsAppMessageBuilder.AppointmentReminderMessage(
             arabic: false, patientName: "Alia Hassan", scheduledDateTime: new DateTime(2026, 11, 2, 10, 0, 0),
-            durationMinutes: 45, doctorName: "Sara Khaled");
+            durationMinutes: 45, doctorName: "Sara Khaled",
+            clinicName: "Smile Studio", clinicNameArabic: "استوديو الابتسامة");
 
         Assert.Contains("Alia Hassan", message);
         Assert.Contains("Dr. Sara Khaled", message);
-        Assert.Contains("Al Noor Dental", message);
+        Assert.Contains("Smile Studio", message);
         Assert.Contains("02 Nov 2026", message);
+
+        // The clinic's own name, never a hardcoded one.
+        Assert.DoesNotContain("Al Noor", message);
     }
 
     [Fact]
@@ -100,11 +139,12 @@ public class WhatsAppMessageBuilderTests
     {
         var message = WhatsAppMessageBuilder.AppointmentReminderMessage(
             arabic: true, patientName: "عليا حسن", scheduledDateTime: new DateTime(2026, 11, 2, 10, 0, 0),
-            durationMinutes: 45, doctorName: "سارة خالد");
+            durationMinutes: 45, doctorName: "سارة خالد",
+            clinicName: "Smile Studio", clinicNameArabic: "استوديو الابتسامة");
 
         Assert.Contains("عليا حسن", message);
         Assert.Contains("د. سارة خالد", message);
-        Assert.Contains("عيادة النور", message);
+        Assert.Contains("استوديو الابتسامة", message);
     }
 
     [Fact]
@@ -112,21 +152,38 @@ public class WhatsAppMessageBuilderTests
     {
         var message = WhatsAppMessageBuilder.AppointmentReminderMessage(
             arabic: false, patientName: "Alia", scheduledDateTime: new DateTime(2026, 11, 2, 10, 0, 0),
-            durationMinutes: 30, doctorName: " ");
+            durationMinutes: 30, doctorName: " ",
+            clinicName: "Smile Studio", clinicNameArabic: "استوديو الابتسامة");
 
         Assert.Contains("with Dr.", message);
         Assert.DoesNotContain("Dr.  ", message); // no doubled space from an empty name
     }
 
     [Fact]
+    public void MessageBodies_WithNoConfiguredClinicName_StayReadable()
+    {
+        // The profile may not have loaded yet; a message must never show a gap
+        // where the clinic name belongs.
+        var english = WhatsAppMessageBuilder.GeneralContactMessage(
+            arabic: false, patientName: "Alia", clinicName: " ", clinicNameArabic: string.Empty);
+        var arabic = WhatsAppMessageBuilder.GeneralContactMessage(
+            arabic: true, patientName: "عليا", clinicName: " ", clinicNameArabic: string.Empty);
+
+        Assert.Contains("the clinic", english);
+        Assert.Contains("العيادة", arabic);
+    }
+
+    [Fact]
     public void GeneralContactMessage_ContainsPatientAndClinicInBothLanguages()
     {
-        var english = WhatsAppMessageBuilder.GeneralContactMessage(arabic: false, patientName: "Alia");
-        var arabic = WhatsAppMessageBuilder.GeneralContactMessage(arabic: true, patientName: "عليا");
+        var english = WhatsAppMessageBuilder.GeneralContactMessage(
+            arabic: false, patientName: "Alia", clinicName: "Smile Studio", clinicNameArabic: "استوديو الابتسامة");
+        var arabic = WhatsAppMessageBuilder.GeneralContactMessage(
+            arabic: true, patientName: "عليا", clinicName: "Smile Studio", clinicNameArabic: "استوديو الابتسامة");
 
         Assert.Contains("Alia", english);
-        Assert.Contains("Al Noor Dental", english);
+        Assert.Contains("Smile Studio", english);
         Assert.Contains("عليا", arabic);
-        Assert.Contains("عيادة النور", arabic);
+        Assert.Contains("استوديو الابتسامة", arabic);
     }
 }

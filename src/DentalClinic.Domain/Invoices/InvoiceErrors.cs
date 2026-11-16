@@ -12,6 +12,10 @@ public static class InvoiceErrors
         "Invoice.InvalidPaymentAmount",
         "Payment amount must be greater than zero.");
 
+    public static readonly Error InvalidPaymentReference = Error.Validation(
+        "Invoice.InvalidPaymentReference",
+        "Payment reference must be at most 64 characters.");
+
     public static readonly Error PaymentExceedsRemainingAmount = Error.Validation(
         "Invoice.PaymentExceedsRemainingAmount",
         "Payment amount exceeds the remaining balance of the invoice.");

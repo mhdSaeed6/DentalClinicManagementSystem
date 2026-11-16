@@ -172,6 +172,18 @@ integration (rejected for MVP).
 **Recommendation.** (a). Design `InvoiceLine`/`Invoice` so tax/discount can be added without a rewrite
 (e.g., a discount field per line and a nullable tax rate), but do not implement tax engines.
 
+**Deferral recorded 2026-11-14 (engineering, not the owner decision).** Phase P1.2 ships payment
+method, voiding an unpaid issued invoice, refunds as compensating payment rows, and per-line fixed
+discounts. **Tax** and **numbered credit notes** are deliberately left out of that phase:
+
+- *Tax* is blocked on the legal/accounting answer this question and `Q9` ask for: the rate, the
+  taxable base, exemption rules and whether tax must appear per line or per invoice are jurisdiction
+  facts. Inventing a percentage would bake a wrong number into issued documents, so no tax field is
+  added until the owner answers.
+- *Credit notes* are a numbered legal artefact in most markets. Void-unpaid + refund-paid covers the
+  pilot's correction needs without inventing a numbering scheme; a credit note waits for the same
+  legal review. `Invoice`/`InvoiceLine` remain shaped so both can be added without a rewrite.
+
 **Decision:** ____ · **Owner:** ____ · **Date:** ____
 
 ---

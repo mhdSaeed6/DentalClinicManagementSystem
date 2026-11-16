@@ -1,5 +1,7 @@
 using DentalClinic.Application.Features.Invoices.Commands.AddInvoicePayment;
 using DentalClinic.Application.SubcutaneousTests.Common;
+using DentalClinic.Domain.Invoices;
+using DentalClinic.Domain.Invoices.Enums;
 using MediatR;
 using Xunit;
 
@@ -44,6 +46,42 @@ public class AddInvoicePaymentCommandValidatorTests(WebAppFactory factory)
         // Arrange
         var longNotes = new string('N', 1001);
         var command = new AddInvoicePaymentCommand(Guid.NewGuid(), 50, longNotes);
+
+        // Act
+        var result = await _mediator.Send(command);
+
+        // Assert
+        Assert.True(result.IsError);
+    }
+
+    [Fact]
+    public async Task AddInvoicePayment_ShouldFailValidation_WhenReferenceExceeds64Chars()
+    {
+        // Arrange
+        var longReference = new string('R', Payment.MaxReferenceLength + 1);
+        var command = new AddInvoicePaymentCommand(
+            Guid.NewGuid(),
+            50,
+            null,
+            PaymentMethod.Card,
+            longReference);
+
+        // Act
+        var result = await _mediator.Send(command);
+
+        // Assert
+        Assert.True(result.IsError);
+    }
+
+    [Fact]
+    public async Task AddInvoicePayment_ShouldFailValidation_WhenMethodIsNotDefined()
+    {
+        // Arrange
+        var command = new AddInvoicePaymentCommand(
+            Guid.NewGuid(),
+            50,
+            null,
+            (PaymentMethod)99);
 
         // Act
         var result = await _mediator.Send(command);
