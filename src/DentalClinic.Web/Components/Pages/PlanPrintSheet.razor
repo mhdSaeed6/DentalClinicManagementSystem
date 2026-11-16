@@ -25,6 +25,10 @@
 
         <header class="print-sheet-header">
             <div>
+                @if (!string.IsNullOrWhiteSpace(Branding.LogoUrl))
+                {
+                    <img class="print-sheet-logo" src="@Branding.LogoUrl" alt="@Branding.DisplayName(Session.IsRtl)" />
+                }
                 <h1>@Branding.DisplayName(Session.IsRtl)</h1>
                 <p>@Session.T("Treatment plan", "خطة العلاج")</p>
             </div>
@@ -102,6 +106,12 @@
     {
         _loading = true;
         _error = null;
+
+        // The sheet prints the clinic's configured name, logo and currency, so
+        // the profile has to be loaded before the markup renders. Without this
+        // the plan sheet always showed the built-in branding.
+        await Branding.EnsureLoadedAsync();
+
         try
         {
             _plan = await Api.GetTreatmentPlanAsync(PlanId);

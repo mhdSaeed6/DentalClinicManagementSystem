@@ -69,6 +69,14 @@
                 <option value="@patient.Id">@FullName(patient.FirstName, patient.LastName)</option>
             }
         </select>
+
+        @if (Session.IsDoctor)
+        {
+            <p class="text-muted fs-xs" style="width:100%;margin:0">
+                @Session.T("Invoices created without a visit are visible to Admin and Receptionist only.",
+                           "الفواتير غير المرتبطة بموعد تظهر للمدير وموظف الاستقبال فقط.")
+            </p>
+        }
     </div>
 
     @if (_loading)
@@ -284,8 +292,11 @@
                     <div class="list-row">
                         <div class="stat-icon green" style="margin:0;width:38px;height:38px"><ClinicIcon Name="check" Class="sm" /></div>
                         <div class="list-body">
-                            <div class="list-title">@Money(payment.Amount)</div>
-                            <div class="list-sub">@ClinicFormatting.DateTimeLabel(payment.PaidAtUtc) @(string.IsNullOrWhiteSpace(payment.TransactionNotes) ? "" : "· " + payment.TransactionNotes)</div>
+                            <div class="list-title flex gap-1" style="align-items:center">
+                                <span>@Money(payment.Amount)</span>
+                                <PaymentMethodBadge Value="payment.Method" />
+                            </div>
+                            <div class="list-sub">@PaymentMeta(payment)</div>
                         </div>
                     </div>
                 }
@@ -374,6 +385,20 @@
                     <input type="number" step="0.01" min="0.01" class="input" @bind="_payment.Amount" />
                 </div>
                 <div class="field">
+                    <label class="label">@Session.T("Payment method", "طريقة الدفع")</label>
+                    <select class="select" @bind="_payment.Method">
+                        @foreach (var method in PaymentMethods)
+                        {
+                            <option value="@method">@ClinicFormatting.PaymentMethodLabel(method, Session.IsRtl)</option>
+                        }
+                    </select>
+                </div>
+                <div class="field">
+                    <label class="label">@Session.T("Reference (optional)", "المرجع (اختياري)")</label>
+                    <input class="input" maxlength="64" @bind="_payment.Reference"
+                           placeholder="@Session.T("Card last 4 digits or transfer number", "آخر 4 أرقام من البطاقة أو رقم الحوالة")" />
+                </div>
+                <div class="field">
                     <label class="label">@Session.T("Notes", "ملاحظات")</label>
                     <input class="input" @bind="_payment.Notes" />
                 </div>
@@ -401,6 +426,38 @@
 
 @code {
     private string Money(decimal amount) => ClinicFormatting.Money(amount, Branding.BaseCurrency);
+
+    /// <summary>
+    /// الخيارات المتاحة لطريقة الدفع. ترتيب العرض مقصود (نقداً أولاً).
+    /// </summary>
+    private static readonly PaymentMethod[] PaymentMethods =
+    [
+        PaymentMethod.Cash,
+        PaymentMethod.Card,
+        PaymentMethod.BankTransfer,
+        PaymentMethod.Other,
+    ];
+
+    /// <summary>
+    /// سطر واحد يجمع وقت الدفعة ومرجعها وملاحظاتها. المرجع بيانات وصفية فقط،
+    /// ولا يُستخدم في أي حساب مالي.
+    /// </summary>
+    private string PaymentMeta(PaymentDto payment)
+    {
+        var parts = new List<string> { ClinicFormatting.DateTimeLabel(payment.PaidAtUtc) };
+
+        if (!string.IsNullOrWhiteSpace(payment.Reference))
+        {
+            parts.Add(Session.T("Ref", "المرجع") + ": " + payment.Reference);
+        }
+
+        if (!string.IsNullOrWhiteSpace(payment.TransactionNotes))
+        {
+            parts.Add(payment.TransactionNotes);
+        }
+
+        return string.Join(" · ", parts);
+    }
 
     /// <summary>
     /// The same amount in the secondary currency, or null when the clinic has

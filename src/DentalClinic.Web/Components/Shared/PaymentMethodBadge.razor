@@ -1,0 +1,11 @@
+@namespace DentalClinic.Web.Components.Shared
+@inject ClinicSessionState Session
+
+@* كيف دُفعت الفاتورة — شارة صغيرة بجانب المبلغ. لا علاقة لها بحساب الأرصدة. *@
+<span class="badge no-dot @ClinicFormatting.PaymentMethodCss(Value)">
+    @ClinicFormatting.PaymentMethodLabel(Value, Session.IsRtl)
+</span>
+
+@code {
+    [Parameter] public PaymentMethod Value { get; set; }
+}

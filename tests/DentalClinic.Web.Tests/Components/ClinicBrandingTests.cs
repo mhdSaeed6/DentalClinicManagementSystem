@@ -110,6 +110,54 @@ public sealed class ClinicBrandingTests
         Assert.Equal("egp", branding.BaseCurrency);
     }
 
+    [Fact]
+    public async Task DefaultCountryCode_ComesFromTheProfile()
+    {
+        var source = new FakeSource(new ClinicSettingsDto
+        {
+            Name = "Server Clinic",
+            NameArabic = "عيادة الخادم",
+            DefaultCountryCode = "963",
+        });
+
+        var branding = Branding(source);
+
+        await branding.EnsureLoadedAsync();
+
+        Assert.Equal("963", branding.DefaultCountryCode);
+    }
+
+    [Fact]
+    public async Task DefaultCountryCode_WithoutAProfile_FallsBackToConfiguration()
+    {
+        var branding = Branding(new FakeSource(null), ("Clinic:DefaultCountryCode", " 20 "));
+
+        Assert.Equal("20", branding.DefaultCountryCode);
+
+        // A profile that cannot be fetched must not blank the configured code.
+        await branding.EnsureLoadedAsync();
+
+        Assert.Equal("20", branding.DefaultCountryCode);
+    }
+
+    [Fact]
+    public async Task LogoUrl_ComesFromTheProfile_AndIsAbsentByDefault()
+    {
+        Assert.Null(Branding().LogoUrl);
+
+        var source = new FakeSource(new ClinicSettingsDto
+        {
+            Name = "Server Clinic",
+            NameArabic = "عيادة الخادم",
+            LogoUrl = "/branding/logo.svg",
+        });
+
+        var branding = Branding(source);
+        await branding.EnsureLoadedAsync();
+
+        Assert.Equal("/branding/logo.svg", branding.LogoUrl);
+    }
+
     private static ClinicBranding Branding(params (string Key, string Value)[] settings)
         => Branding(new FakeSource(null), settings);
 

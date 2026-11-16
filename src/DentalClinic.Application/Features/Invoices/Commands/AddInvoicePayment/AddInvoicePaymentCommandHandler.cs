@@ -60,8 +60,13 @@ public class AddInvoicePaymentCommandHandler(
             return registerResult.Errors;
         }
 
-        // 4. إنشاء كائن الـ Payment المستقل
-        var paymentResult = Payment.Create(invoice.Id, request.Amount, request.Notes);
+        // 4. إنشاء كائن الـ Payment المستقل (الطريقة والمرجع بيانات وصفية فقط)
+        var paymentResult = Payment.Create(
+            invoice.Id,
+            request.Amount,
+            request.Notes,
+            request.Method,
+            request.Reference);
         if (paymentResult.IsError)
         {
             return paymentResult.Errors;

@@ -45,10 +45,19 @@ public sealed class ClinicBranding(IConfiguration configuration, IClinicSettings
     /// <summary>Optional: omitted from the sheet when not configured.</summary>
     public string? Email => _settings is not null ? _settings.Email : Value("Clinic:Email");
 
-    /// <summary>Optional: relative path served by the API, e.g. <c>/branding/logo.svg</c>.</summary>
-    public string? LogoUrl => _settings?.LogoUrl;
+    /// <summary>Optional: relative path served by the app, e.g. <c>/branding/logo.svg</c>.</summary>
+    public string? LogoUrl => _settings is not null ? _settings.LogoUrl : Value("Clinic:LogoUrl");
 
     public string TimeZoneId => _settings?.TimeZoneId ?? "UTC";
+
+    /// <summary>
+    /// The clinic's dialling code, used to turn a locally saved phone number
+    /// (<c>0999…</c>) into a WhatsApp link that resolves. Null when the profile
+    /// has not loaded and the deployment did not configure one.
+    /// </summary>
+    public string? DefaultCountryCode => _settings is not null
+        ? _settings.DefaultCountryCode
+        : Value("Clinic:DefaultCountryCode");
 
     /// <summary>
     /// The clinic's currency code. Empty until the profile loads: money then

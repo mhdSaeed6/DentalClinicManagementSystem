@@ -1,5 +1,6 @@
 @namespace DentalClinic.Web.Components.Shared
 @inject ClinicSessionState Session
+@inject ClinicBranding Branding
 
 @if (Link is not null)
 {
@@ -29,7 +30,7 @@ else
 
     private string? Link =>
         HasWhatsAppOnPrimary && !string.IsNullOrWhiteSpace(Message)
-            ? WhatsAppMessageBuilder.TryBuildUrl(Phone, Message)
+            ? WhatsAppMessageBuilder.TryBuildUrl(Phone, Message, Branding.DefaultCountryCode)
             : null;
 
     private string ResolvedTitle => Title is not null

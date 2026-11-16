@@ -669,8 +669,19 @@ namespace DentalClinic.Infrastructure.Data.Migrations
                     b.Property<DateTimeOffset?>("LastModifiedUtc")
                         .HasColumnType("datetimeoffset");
 
+                    b.Property<string>("Method")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)")
+                        .HasDefaultValue("Cash");
+
                     b.Property<DateTime>("PaidAtUtc")
                         .HasColumnType("datetime2");
+
+                    b.Property<string>("Reference")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
 
                     b.Property<string>("TransactionNotes")
                         .HasColumnType("nvarchar(max)");

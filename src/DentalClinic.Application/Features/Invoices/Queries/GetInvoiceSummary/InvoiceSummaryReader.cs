@@ -30,18 +30,7 @@ internal static class InvoiceSummaryReader
     {
         ArgumentNullException.ThrowIfNull(context);
 
-        var query = context.Invoices.AsNoTracking();
-
-        // Same trusted, server-derived scope as the invoice list, applied
-        // before any client-supplied filter. A standalone invoice has no owning
-        // doctor, so it stays out of a doctor's reach (fail-closed).
-        if (scope.IsRestricted)
-        {
-            var scopeDoctorId = scope.DoctorId;
-            query = query.Where(invoice =>
-                invoice.AppointmentId != null &&
-                context.Appointments.Any(a => a.Id == invoice.AppointmentId && a.DoctorId == scopeDoctorId));
-        }
+        var query = context.Invoices.AsNoTracking().ApplyScope(context, scope);
 
         if (patientId.HasValue)
         {

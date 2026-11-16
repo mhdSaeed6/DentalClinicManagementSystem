@@ -4,6 +4,7 @@ using DentalClinic.Application.SubcutaneousTests.Common;
 using DentalClinic.Domain.Common.Enums;
 using DentalClinic.Domain.Common.ValueObjects;
 using DentalClinic.Domain.Invoices;
+using DentalClinic.Domain.Invoices.Enums;
 using DentalClinic.Domain.Patients;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -71,6 +72,62 @@ public class AddInvoicePaymentCommandHandlerTests(WebAppFactory factory)
 
         // Assert
         Assert.True(result.IsError);
+    }
+
+    [Fact]
+    public async Task Handle_WithPaymentMethodAndReference_ShouldPersistMetadataWithoutChangingBalances()
+    {
+        // Arrange
+        var invoice = await SeedInvoiceAsync(1000);
+        var command = new AddInvoicePaymentCommand(
+            invoice.Id,
+            400,
+            "Bank deposit",
+            PaymentMethod.BankTransfer,
+            "TRF-8891");
+
+        // Act
+        var result = await _mediator.Send(command);
+
+        // Assert
+        Assert.True(result.IsSuccess);
+
+        var dbInvoice = await _context.Invoices
+            .AsNoTracking()
+            .FirstAsync(i => i.Id == invoice.Id);
+
+        var dbPayment = await _context.Payments
+            .AsNoTracking()
+            .SingleAsync(p => p.InvoiceId == invoice.Id);
+
+        Assert.Equal(PaymentMethod.BankTransfer, dbPayment.Method);
+        Assert.Equal("TRF-8891", dbPayment.Reference);
+
+        // الطريقة والمرجع لا يمسّان أي حساب مالي.
+        Assert.Equal(400, dbInvoice.PaidAmount);
+        Assert.Equal(600, dbInvoice.RemainingAmount);
+        Assert.Equal(PaymentStatus.PartiallyPaid, dbInvoice.Status);
+    }
+
+    [Fact]
+    public async Task Handle_WhenMethodIsOmitted_ShouldDefaultToCash()
+    {
+        // Arrange
+        var invoice = await SeedInvoiceAsync(1000);
+        var command = new AddInvoicePaymentCommand(invoice.Id, 100, null);
+
+        // Act
+        var result = await _mediator.Send(command);
+
+        // Assert
+        Assert.True(result.IsSuccess);
+
+        var dbPayment = await _context.Payments
+            .AsNoTracking()
+            .SingleAsync(p => p.InvoiceId == invoice.Id);
+
+        Assert.Equal(PaymentMethod.Cash, dbPayment.Method);
+        Assert.Null(dbPayment.Reference);
     }
 
     private async Task<Invoice> SeedInvoiceAsync(decimal totalAmount)

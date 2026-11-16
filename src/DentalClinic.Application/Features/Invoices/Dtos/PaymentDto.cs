@@ -1,3 +1,5 @@
+using DentalClinic.Domain.Invoices.Enums;
+
 namespace DentalClinic.Application.Features.Invoices.Dtos;
 
 public sealed record PaymentDto(
@@ -5,4 +7,6 @@ public sealed record PaymentDto(
     Guid InvoiceId,
     decimal Amount,
     DateTime PaidAtUtc,
-    string? TransactionNotes);
+    string? TransactionNotes,
+    PaymentMethod Method,
+    string? Reference);

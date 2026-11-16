@@ -257,6 +257,28 @@ public static class ClinicFormatting
         _ => "muted",
     };
 
+    /// <summary>
+    /// How a payment was made. Purely descriptive metadata: it never takes part
+    /// in any balance, outstanding or cash-collected calculation.
+    /// </summary>
+    public static string PaymentMethodLabel(PaymentMethod method, bool arabic) => method switch
+    {
+        PaymentMethod.Cash => arabic ? "نقداً" : "Cash",
+        PaymentMethod.Card => arabic ? "بطاقة" : "Card",
+        PaymentMethod.BankTransfer => arabic ? "حوالة" : "Bank transfer",
+        PaymentMethod.Other => arabic ? "أخرى" : "Other",
+        _ => arabic ? "غير معروف" : "Unknown",
+    };
+
+    public static string PaymentMethodCss(PaymentMethod method) => method switch
+    {
+        PaymentMethod.Cash => "success",
+        PaymentMethod.Card => "info",
+        PaymentMethod.BankTransfer => "brand",
+        PaymentMethod.Other => "muted",
+        _ => "muted",
+    };
+
     /// <summary>Friendly FDI tooth label, e.g. "UR 1" style segmentation.</summary>
     public static string ToothLabel(int toothNumber)
     {

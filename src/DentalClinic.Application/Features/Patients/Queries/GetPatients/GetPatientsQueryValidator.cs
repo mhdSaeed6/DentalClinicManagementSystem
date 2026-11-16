@@ -14,5 +14,14 @@ public sealed class GetPatientsQueryValidator : AbstractValidator<GetPatientsQue
         RuleFor(x => x.PageSize)
             .GreaterThan(0).WithMessage("Page size must be greater than zero.")
             .LessThanOrEqualTo(100).WithMessage("Page size must not exceed 100.");
+
+        // The search term is part of the cache key, so an unbounded value lets a
+        // client mint unlimited distinct keys and crowd the cache. The same cap
+        // as the doctor and service queries keeps the three lists consistent.
+        When(x => x.SearchTerm is not null, () =>
+        {
+            RuleFor(x => x.SearchTerm)
+                .MaximumLength(100).WithMessage("Search term must not exceed 100 characters.");
+        });
     }
 }

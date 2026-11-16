@@ -41,7 +41,9 @@ public static class InvoiceMappingExtensions
             entity.InvoiceId,
             entity.Amount,
             entity.PaidAtUtc,
-            entity.TransactionNotes);
+            entity.TransactionNotes,
+            entity.Method,
+            entity.Reference);
     }
 
     public static List<InvoiceDto> ToDtos(this IEnumerable<Invoice> entities, IReadOnlyDictionary<Guid, string>? patientNames = null)

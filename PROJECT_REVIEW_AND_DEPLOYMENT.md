@@ -307,6 +307,19 @@ Then run `sqlcmd -i /scripts/migrate.sql` in a `migrate` service. This still doe
 7. **Aging buckets** and a proper debt report.
 8. **Fix doctor visibility for standalone invoices** and the `PatientScope` confidentiality decision.
 
+Status as of 2026-11-14 (details in §7.6):
+
+| Item | Status |
+|---|---|
+| 1. Audit log | **DONE** — shipped separately (`86b60a8`, PR #18), documented in `AGENTS.md` |
+| 2. Billing corrections | **IN PROGRESS** — warm-up shipped 2026-11-14; payment method, void, refunds and per-line discounts are the next slices |
+| 3. Dual-currency accounting | Open |
+| 4. Plan logo + WhatsApp country code | **DONE** — see §7.6 |
+| 5. Calendar view | Open |
+| 6. Real notification delivery | Open |
+| 7. Aging buckets / debt report | Open |
+| 8. Standalone-invoice doctor visibility | **Resolved as deliberate, not fixed** — the three scope predicates are now one shared fail-closed helper, the doctor-facing screen says such invoices are Admin/Receptionist-only, and the rule is documented. Attributing a hand-made invoice to a doctor needs a new `Invoice.DoctorId` column (a schema decision), so it is not a warm-up. The `PatientScope` confidentiality decision is still open |
+
 ### Phase P2 — Deliberately deferred
 
 Multi-tenant `ClinicId`, a real permission matrix, online booking/patient portal, e-invoicing, payroll-grade commission, mobile app.
@@ -410,3 +423,30 @@ Verification for D2:
 - No C# changed: no migration, no test-suite impact, `MigrationTests` untouched. `dotnet build DentalClinic.slnx` = 0 errors (warnings are the pre-existing baseline).
 
 Still open from D2: point-in-time recovery (no transaction-log backups, RPO stays 24 h), out-of-band paging, `.bak` files being unencrypted at rest on the host (the offsite repository is encrypted; host access is still data access), and the `-Source offsite` drill has not been run end-to-end against a real bucket yet (its restic commands were verified individually).
+
+### 7.6 Phase P1.2 Step 0 warm-up log (2026-11-14)
+
+Step 0 of the billing-corrections plan (see `C:\Users\USER\.opencode\plan\dentalclinic-phase-p1-billing-corrections.md`) is implemented. It fixes the cheap visible defects and two correctness bugs, and touches no schema: no migration, no backfill, `MigrationTests` unaffected.
+
+| Item | Change | Files |
+|---|---|---|
+| 1. Invoice scope | The three hand-copied doctor-scope predicates became one documented helper. A restricted doctor sees only invoices tied to their own visits; a hand-made invoice without a visit stays invisible **by design** (no column can attribute it), and the billing screen now says so to doctors. | `Application/Common/Security/InvoiceScopeExtensions.cs`, `GetInvoicesQueryHandler`, `InvoiceSummaryReader`, `GetOutstandingDebtsQueryHandler`, `Invoices.razor` |
+| 2. Patient search cap | `GetPatientsQueryValidator` rejects a `SearchTerm` longer than 100 characters (only when supplied), matching the doctor/service validators, so the cache key cannot be flooded with distinct values. | `Features/Patients/Queries/GetPatients/GetPatientsQueryValidator.cs` |
+| 3. Branding on printed output | Plan and invoice print sheets render `Branding.LogoUrl` when configured; the plan sheet now loads the clinic profile (`EnsureLoadedAsync`) instead of always printing the built-in defaults. A default `logo.svg` ships so the settings placeholder resolves. | `PlanPrintSheet.razor`, `InvoicePrintSheet.razor`, `wwwroot/app.css`, `wwwroot/branding/logo.svg` |
+| 4. WhatsApp messages | Clinic names are required parameters (no hardcoded "Al Noor Dental"; blank falls back to "the clinic"/"العيادة") and `ClinicBranding.DefaultCountryCode` turns a local `0…` number into the country-coded form. `ClinicBranding` gained the profile/configuration fallbacks both need. | `WhatsAppMessageBuilder.cs`, `ClinicBranding.cs`, `WhatsAppButton.razor`, `Appointments.razor`, `PatientDetails.razor` |
+| 5. Docs | `AGENTS.md` records the shared invoice predicate, the 100-char cap and the branding rules; `docs/product/OPEN-QUESTIONS.md` Q7 records why tax and credit notes stay deferred. | `AGENTS.md`, `docs/product/OPEN-QUESTIONS.md` |
+
+Verification for Step 0:
+
+- `dotnet build DentalClinic.slnx` → 0 errors; no new warnings from the touched files (the two StyleCop warnings introduced by the new tests were fixed).
+- Domain 292 / Application 112 / Web 80 tests pass; new coverage: the shared invoice scope across list, summary and debts, the search cap boundary, country-code normalisation and clinic-name message bodies, and the new `ClinicBranding` values.
+- Subcutaneous and API integration suites (Docker/Testcontainers) run separately; Step 0 changed no schema, so `MigrationTests` replays the unchanged chain.
+
+| Defect §4.1 / §6 item | Status after this step |
+|---|---|
+| §4.1 #4 plan logo / §6 P1 #4 logo | **Fixed** |
+| §4.1 #5 WhatsApp country code and name / §6 P1 #4 | **Fixed** |
+| §4.1 #12 search term cap | **Fixed** |
+| §6 P1 #8 standalone-invoice visibility | **Documented as deliberate**, not "fixed": the predicate is unified and fail-closed and the UI explains it. Real attribution needs an `Invoice.DoctorId` column. |
+
+Still open after Step 0 (next slices of the same phase): payment method + reference, voiding an unpaid issued invoice (including extending the unique visit index to ignore voided rows), refunds as compensating payments with `CashCollected` netting, per-line discounts, and the tax/credit-note legal answer.

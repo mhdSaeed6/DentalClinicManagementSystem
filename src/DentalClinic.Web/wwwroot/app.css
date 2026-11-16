@@ -1623,6 +1623,17 @@ table.table tbody tr:last-child td { border-bottom: none; }
 .print-sheet-header p { margin: 4px 0 0; color: var(--text-soft); }
 .print-sheet-meta { display: grid; gap: 4px; text-align: end; }
 
+.print-sheet-logo {
+    display: block;
+    height: 48px;
+    width: auto;
+    max-width: 220px;
+    object-fit: contain;
+    margin-bottom: 8px;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+}
+
 .print-sheet-patient {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
@@ -1730,6 +1741,11 @@ table.table tbody tr:last-child td { border-bottom: none; }
     .print-sheet-header h1 {
         margin: 0;
         font-size: 1.5rem;
+    }
+
+    .print-sheet-logo {
+        height: 56px;
+        margin-bottom: .5rem;
     }
 
     .print-sheet-header p {
